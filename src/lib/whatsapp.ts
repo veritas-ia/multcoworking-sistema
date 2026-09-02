@@ -55,6 +55,54 @@ export function modoSimulado(): boolean {
   return !process.env.EVOLUTION_URL?.trim();
 }
 
+/**
+ * Nomes parecidos que ja apareceram escritos no .env no lugar de EVOLUTION_URL.
+ *
+ * Isto e uma armadilha silenciosa: com o nome errado, EVOLUTION_URL fica vazia,
+ * o modo simulado continua ligado para sempre e NENHUMA mensagem sai de verdade
+ * — sem erro nenhum na tela. Quem configurou jura que ligou o WhatsApp.
+ */
+const NOMES_PARECIDOS = [
+  "EVOLUTION_API_URL",
+  "EVOLUTION_BASE_URL",
+  "EVOLUTION_HOST",
+  "EVOLUTION_URL_API",
+];
+
+/** Algum nome parecido esta preenchido? Devolve qual, ou nulo. */
+export function variavelParecidaPreenchida(
+  ambiente: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (ambiente.EVOLUTION_URL?.trim()) {
+    return null;
+  }
+  return NOMES_PARECIDOS.find((nome) => ambiente[nome]?.trim()) ?? null;
+}
+
+/** O aviso e dado uma vez por processo, para nao virar barulho. */
+let avisoDeNomeJaDado = false;
+
+function avisarSeONomeEstiverErrado(): void {
+  if (avisoDeNomeJaDado) {
+    return;
+  }
+
+  const parecido = variavelParecidaPreenchida();
+
+  if (!parecido) {
+    return;
+  }
+
+  avisoDeNomeJaDado = true;
+  process.stdout.write(
+    `\n  ATENÇÃO: o .env tem "${parecido}" preenchida, mas o sistema lê ` +
+      `"EVOLUTION_URL".\n` +
+      `  Enquanto os dois nomes não forem o mesmo, o modo simulado fica ligado ` +
+      `e nenhuma\n  mensagem sai de verdade. Renomeie no .env quando quiser ` +
+      `ligar o WhatsApp real.\n`,
+  );
+}
+
 function esperar(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -107,6 +155,8 @@ function imprimirNoTerminal(
   if (process.env.VITEST) {
     return;
   }
+
+  avisarSeONomeEstiverErrado();
 
   const moldura = "─".repeat(64);
   process.stdout.write(

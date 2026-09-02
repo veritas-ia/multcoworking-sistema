@@ -18,6 +18,7 @@ import {
   embaralhar,
 } from "@/lib/sessao-cliente";
 import { formatarEnquantoDigita, mascararTelefone } from "@/lib/telefone";
+import { variavelParecidaPreenchida } from "@/lib/whatsapp";
 
 import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoDelete, pedidoGet } from "./apoio/requisicao";
@@ -221,5 +222,32 @@ describe("telefone na tela", () => {
 
   it("ignora o que passar de 11 digitos e o que nao for numero", () => {
     expect(formatarEnquantoDigita("(11) 98765-4321999")).toBe("(11) 98765-4321");
+  });
+});
+
+describe("armadilha do nome da variável do WhatsApp", () => {
+  it("avisa quando o .env tem EVOLUTION_API_URL em vez de EVOLUTION_URL", () => {
+    expect(
+      variavelParecidaPreenchida({
+        EVOLUTION_API_URL: "https://evolution.exemplo.com.br",
+      }),
+    ).toBe("EVOLUTION_API_URL");
+  });
+
+  it("fica quieto quando EVOLUTION_URL está preenchida de verdade", () => {
+    expect(
+      variavelParecidaPreenchida({
+        EVOLUTION_URL: "https://evolution.exemplo.com.br",
+        EVOLUTION_API_URL: "https://evolution.exemplo.com.br",
+      }),
+    ).toBeNull();
+  });
+
+  it("fica quieto quando não há nada configurado (modo simulado normal)", () => {
+    expect(variavelParecidaPreenchida({})).toBeNull();
+  });
+
+  it("não se confunde com variável preenchida só de espaços", () => {
+    expect(variavelParecidaPreenchida({ EVOLUTION_API_URL: "   " })).toBeNull();
   });
 });
