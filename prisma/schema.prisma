@@ -1,6 +1,12 @@
-// Schema do banco de dados.
-// Os modelos (Sala, Reserva, etc.) entram na Fase 2 — aqui so a conexao.
-// A URL do banco fica em prisma7.config.ts / .env, nao neste arquivo (regra do Prisma 7).
+// =============================================================================
+// Banco de dados do Sistema de Reservas.
+// Regras de negocio: ver CLAUDE.md (fonte da verdade).
+//
+// Convencoes deste schema:
+//  - Todo instante no tempo e timestamptz (guarda em UTC, mostra em Sao Paulo).
+//  - Horario de funcionamento e "hora de relogio" local, guardada como texto "HH:MM".
+//  - Nomes em portugues; colunas do banco em minusculo_com_underline.
+// =============================================================================
 
 generator client {
   provider = "prisma-client"
@@ -9,4 +15,297 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// Listas fechadas de valores
+// -----------------------------------------------------------------------------
+
+enum StatusReserva {
+  CONFIRMADA
+  REAGENDADA
+  CANCELADA
+  CONCLUIDA
+}
+
+enum OrigemReserva {
+  PUBLICO
+  ADMIN
+}
+
+enum StatusMensagem {
+  ENVIADA
+  FALHOU
+}
+
+/// As seis mensagens de WhatsApp do sistema.
+enum ChaveTemplate {
+  codigo_verificacao
+  reserva_confirmada
+  reserva_cancelada
+  reserva_reagendada
+  lembrete_24h
+  lembrete_2h
+}
+
+/// Usado apenas na tabela tecnica de ocupacao.
+enum TipoOcupacao {
+  RESERVA
+  BLOQUEIO
+}
+
+// -----------------------------------------------------------------------------
+// Cadastros
+// -----------------------------------------------------------------------------
+
+model Sala {
+  id                   String  @id @default(uuid(7))
+  nome                 String  @unique
+  slug                 String  @unique
+  ativa                Boolean @default(true)
+  capacidade           Int?
+  /// Preco por hora, em reais. Usado so para calcular o valor estimado.
+  precoPorHora         Decimal @map("preco_por_hora") @db.Decimal(10, 2)
+  /// Duracao maxima de uma reserva, em minutos. Nulo = ate o fechamento do dia.
+  duracaoMaximaMinutos Int?    @map("duracao_maxima_minutos")
+  /// Ordem de exibicao na tela.
+  ordem                Int
+
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  reservas    Reserva[]
+  bloqueios   Bloqueio[]
+  recorrencias Recorrencia[]
+  ocupacoes   OcupacaoSala[]
+
+  @@map("salas")
+}
+
+model HorarioFuncionamento {
+  id String @id @default(uuid(7))
+  /// 0 = domingo, 1 = segunda ... 6 = sabado.
+  diaDaSemana    Int     @unique @map("dia_da_semana")
+  aberto         Boolean
+  /// "HH:MM" no fuso de Sao Paulo. Nulo quando o dia e fechado.
+  horaAbertura   String? @map("hora_abertura") @db.VarChar(5)
+  horaFechamento String? @map("hora_fechamento") @db.VarChar(5)
+
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  @@map("horarios_funcionamento")
+}
+
+model Usuario {
+  id String @id @default(uuid(7))
+  nome String
+  /// Nome de login do painel. Sem e-mail no MVP (decisao do CLAUDE.md).
+  usuario   String @unique
+  senhaHash String @map("senha_hash")
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  bloqueiosCriados Bloqueio[]
+
+  @@map("usuarios")
+}
+
+/// Parametros gerais do sistema, editaveis no painel (Fase 11).
+model Configuracao {
+  chave String @id
+  valor String
+  /// Explicacao curta, mostrada no painel.
+  descricao String
+
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  @@map("configuracoes")
+}
+
+// -----------------------------------------------------------------------------
+// Agenda
+// -----------------------------------------------------------------------------
+
+model Reserva {
+  id     String @id @default(uuid(7))
+  salaId String @map("sala_id")
+  sala   Sala   @relation(fields: [salaId], references: [id])
+
+  nomeCliente String @map("nome_cliente")
+  /// Formato internacional E.164: +55 + DDD + celular de 9 digitos.
+  telefone    String
+
+  inicio         DateTime @db.Timestamptz(3)
+  fim            DateTime @db.Timestamptz(3)
+  duracaoMinutos Int      @map("duracao_minutos")
+  /// Valor estimado, congelado no momento da criacao da reserva.
+  valor          Decimal  @db.Decimal(10, 2)
+
+  status StatusReserva @default(CONFIRMADA)
+  origem OrigemReserva
+
+  recorrenciaId String?      @map("recorrencia_id")
+  recorrencia   Recorrencia? @relation(fields: [recorrenciaId], references: [id], onDelete: SetNull)
+
+  /// Data/hora de envio de cada lembrete. Nulo = ainda nao enviado.
+  lembrete24hEnviadoEm DateTime? @map("lembrete_24h_enviado_em") @db.Timestamptz(3)
+  lembrete2hEnviadoEm  DateTime? @map("lembrete_2h_enviado_em") @db.Timestamptz(3)
+
+  /// Lista de alteracoes da reserva (reagendamentos, cancelamento).
+  historicoAlteracoes Json @default("[]") @map("historico_alteracoes")
+
+  criadoEm     DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+  canceladoEm  DateTime? @map("cancelado_em") @db.Timestamptz(3)
+
+  mensagens LogMensagem[]
+
+  @@index([salaId, inicio])
+  @@index([telefone, status])
+  @@index([recorrenciaId])
+  @@map("reservas")
+}
+
+model Bloqueio {
+  id     String @id @default(uuid(7))
+  salaId String @map("sala_id")
+  sala   Sala   @relation(fields: [salaId], references: [id])
+
+  inicio DateTime @db.Timestamptz(3)
+  fim    DateTime @db.Timestamptz(3)
+  /// Motivo interno. NUNCA aparece em endpoint publico.
+  motivo String?
+
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: SetNull)
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([salaId, inicio])
+  @@index([criadoPorId])
+  @@map("bloqueios")
+}
+
+/// Reserva que se repete toda semana. As regras entram na Fase 9.
+model Recorrencia {
+  id     String @id @default(uuid(7))
+  salaId String @map("sala_id")
+  sala   Sala   @relation(fields: [salaId], references: [id])
+
+  nomeCliente String @map("nome_cliente")
+  telefone    String
+
+  /// 0 = domingo ... 6 = sabado.
+  diaDaSemana Int    @map("dia_da_semana")
+  /// "HH:MM" no fuso de Sao Paulo.
+  horaInicio  String @map("hora_inicio") @db.VarChar(5)
+  horaFim     String @map("hora_fim") @db.VarChar(5)
+
+  dataInicio DateTime  @map("data_inicio") @db.Date
+  dataFim    DateTime? @map("data_fim") @db.Date
+  ativa      Boolean   @default(true)
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  reservas Reserva[]
+
+  @@index([salaId, diaDaSemana])
+  @@map("recorrencias")
+}
+
+// -----------------------------------------------------------------------------
+// Identificacao do cliente por WhatsApp
+// -----------------------------------------------------------------------------
+
+model CodigoVerificacao {
+  id       String @id @default(uuid(7))
+  telefone String
+  /// Nunca guardamos o codigo em texto puro, so o embaralhado.
+  codigoHash String @map("codigo_hash")
+
+  expiraEm   DateTime  @map("expira_em") @db.Timestamptz(3)
+  tentativas Int       @default(0)
+  usadoEm    DateTime? @map("usado_em") @db.Timestamptz(3)
+  criadoEm   DateTime  @default(now()) @map("criado_em") @db.Timestamptz(3)
+  /// Endereco de rede de quem pediu o codigo, para o limite por IP.
+  ip         String?
+
+  @@index([telefone, criadoEm])
+  @@index([ip, criadoEm])
+  @@map("codigos_verificacao")
+}
+
+model SessaoCliente {
+  id       String @id @default(uuid(7))
+  telefone String
+  /// Valor do cookie httpOnly do cliente.
+  token    String @unique
+
+  expiraEm DateTime @map("expira_em") @db.Timestamptz(3)
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([telefone])
+  @@map("sessoes_cliente")
+}
+
+// -----------------------------------------------------------------------------
+// Mensagens de WhatsApp
+// -----------------------------------------------------------------------------
+
+model TemplateMensagem {
+  id    String        @id @default(uuid(7))
+  chave ChaveTemplate @unique
+  /// Texto com variaveis: {{nome}} {{sala}} {{data}} {{inicio}} {{fim}} {{valor}} {{codigo}}
+  texto String
+  /// Explicacao curta, mostrada no painel.
+  descricao String
+
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  @@map("templates_mensagem")
+}
+
+model LogMensagem {
+  id        String   @id @default(uuid(7))
+  reservaId String?  @map("reserva_id")
+  reserva   Reserva? @relation(fields: [reservaId], references: [id], onDelete: SetNull)
+
+  telefone String
+  tipo     ChaveTemplate
+  status   StatusMensagem
+  /// Mensagem de erro devolvida pela Evolution API, quando falhou.
+  erro     String?
+  tentativas Int @default(1)
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([reservaId])
+  @@index([telefone, criadoEm])
+  @@map("logs_mensagem")
+}
+
+// -----------------------------------------------------------------------------
+// Tabela tecnica: e AQUI que o banco impede sobreposicao de horarios.
+//
+// Nao e escrita pela aplicacao. Gatilhos (triggers) do proprio banco copiam
+// para ca cada reserva ativa e cada bloqueio. As travas vivem nesta tabela:
+//   1. periodo                -> nenhuma sobreposicao na mesma sala.
+//   2. periodo_com_intervalo  -> 30 min de folga entre duas RESERVAS.
+// Ver a migracao "travas_de_horario".
+// -----------------------------------------------------------------------------
+
+model OcupacaoSala {
+  /// Id da reserva ou do bloqueio que originou esta linha.
+  origemId String       @id @map("origem_id")
+  tipo     TipoOcupacao
+  salaId   String       @map("sala_id")
+  sala     Sala         @relation(fields: [salaId], references: [id], onDelete: Cascade)
+
+  /// Intervalo real ocupado. Meio aberto: [inicio, fim).
+  periodo             Unsupported("tstzrange")
+  /// Mesmo intervalo esticado com o tempo de folga, so usado para reservas.
+  periodoComIntervalo Unsupported("tstzrange") @map("periodo_com_intervalo")
+
+  @@index([salaId])
+  @@map("ocupacao_salas")
 }

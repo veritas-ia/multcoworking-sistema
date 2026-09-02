@@ -11,8 +11,13 @@ Precisa de: Node.js 22+, Docker Desktop aberto.
 npm install          # instala tudo (so na primeira vez)
 cp .env.example .env # cria seu arquivo de configuracao (so na primeira vez)
 npm run db:up        # liga o banco de dados
+npm run db:migrate   # cria as tabelas (so na primeira vez e quando o schema mudar)
+npm run db:seed      # carrega salas, horarios, mensagens e o admin
 npm run dev          # liga o site em http://localhost:3000
 ```
+
+Antes do `db:seed`, abra o `.env` e preencha `ADMIN_SENHA` com a senha que voce
+quer usar no painel.
 
 Para desligar o banco: `npm run db:down`.
 
@@ -29,8 +34,13 @@ Para desligar o banco: `npm run db:down`.
 | `npm run typecheck` | Confere os tipos do TypeScript                  |
 | `npm run db:up`     | Liga o banco de dados (Docker)                  |
 | `npm run db:down`   | Desliga o banco de dados                        |
+| `npm run db:migrate`| Aplica as mudancas de estrutura no banco        |
+| `npm run db:seed`   | Carrega os dados iniciais (pode repetir)        |
 
 ## Observacoes
 
 - O banco local usa a porta **5434** (a 5432 ja esta ocupada por outro projeto nesta maquina).
 - O arquivo `.env` guarda senhas e **nunca** vai para o Git. O modelo dele e o `.env.example`.
+- Os testes de banco (`npm test`) precisam do banco ligado (`npm run db:up`).
+- As regras de agenda sao garantidas pelo proprio PostgreSQL, nao so pelo codigo:
+  ver `prisma/migrations/*_travas_de_horario/migration.sql`.
