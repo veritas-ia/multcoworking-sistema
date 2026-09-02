@@ -1,0 +1,12 @@
+// Schema do banco de dados.
+// Os modelos (Sala, Reserva, etc.) entram na Fase 2 — aqui so a conexao.
+// A URL do banco fica em prisma7.config.ts / .env, nao neste arquivo (regra do Prisma 7).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

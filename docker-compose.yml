@@ -1,0 +1,27 @@
+# Banco de dados de DESENVOLVIMENTO local.
+# Em producao (EasyPanel / VPS Hostinger) o Postgres e provisionado pelo painel,
+# este arquivo nao vai para o servidor.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coworking-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: coworking
+      POSTGRES_PASSWORD: coworking_dev
+      POSTGRES_DB: coworking
+      TZ: America/Sao_Paulo
+    ports:
+      # 5434 no computador -> 5432 dentro do container.
+      # A porta 5432 ja esta ocupada por outro projeto nesta maquina.
+      - "5434:5432"
+    volumes:
+      - coworking_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coworking -d coworking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  coworking_postgres_data:
