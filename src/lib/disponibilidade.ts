@@ -149,11 +149,16 @@ async function expedienteDo(data: DataLocal): Promise<ExpedienteDoDia> {
 /**
  * Tudo que ocupa a sala entre dois instantes.
  * Reservas canceladas e concluidas nao entram: elas liberam o horario.
+ *
+ * "ignorarReservaId" existe para o reagendamento (Fase 6): ao remarcar uma
+ * reserva, ela nao pode brigar com o proprio horario atual. Sem esse parametro,
+ * mudar das 09:00 para as 09:30 seria recusado — a reserva bateria nela mesma.
  */
 async function ocupacoesEntre(
   salaId: string,
   de: Date,
   ate: Date,
+  ignorarReservaId?: string,
 ): Promise<Ocupacao[]> {
   const [reservas, bloqueios] = await Promise.all([
     prisma.reserva.findMany({
@@ -162,6 +167,7 @@ async function ocupacoesEntre(
         status: { in: [StatusReserva.CONFIRMADA, StatusReserva.REAGENDADA] },
         inicio: { lt: ate },
         fim: { gt: de },
+        ...(ignorarReservaId ? { id: { not: ignorarReservaId } } : {}),
       },
       select: { inicio: true, fim: true },
     }),
@@ -225,6 +231,7 @@ function estaNaGrade(instante: Date): boolean {
 export async function slotsDoDia(
   salaId: string,
   data: DataLocal,
+  ignorarReservaId?: string,
 ): Promise<Bloco[]> {
   validarDataLocal(data);
 
@@ -242,6 +249,7 @@ export async function slotsDoDia(
     salaId,
     somarMinutos(expediente.abertura, -parametros.intervaloMinutos),
     somarMinutos(expediente.fechamento, parametros.intervaloMinutos),
+    ignorarReservaId,
   );
 
   const agora = new Date();
@@ -280,6 +288,7 @@ export async function horariosDeTerminoValidos(
   salaId: string,
   data: DataLocal,
   horaInicio: HoraLocal,
+  ignorarReservaId?: string,
 ): Promise<HoraLocal[]> {
   validarDataLocal(data);
   validarHoraLocal(horaInicio);
@@ -299,6 +308,7 @@ export async function horariosDeTerminoValidos(
     salaId,
     somarMinutos(expediente.abertura, -parametros.intervaloMinutos),
     somarMinutos(expediente.fechamento, parametros.intervaloMinutos),
+    ignorarReservaId,
   );
 
   const agora = new Date();
@@ -372,6 +382,8 @@ export async function validarReserva(entrada: {
   salaId: string;
   inicio: Date;
   fim: Date;
+  /** Reagendamento: a propria reserva nao conta como horario ocupado. */
+  ignorarReservaId?: string;
 }): Promise<ResultadoValidacao> {
   const sala = await buscarSala(entrada.salaId);
 
@@ -396,6 +408,7 @@ export async function validarReserva(entrada: {
     entrada.salaId,
     somarMinutos(entrada.inicio, -parametros.intervaloMinutos),
     somarMinutos(entrada.fim, parametros.intervaloMinutos),
+    entrada.ignorarReservaId,
   );
 
   return avaliar(

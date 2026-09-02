@@ -71,7 +71,7 @@ const NOMES_PARECIDOS = [
 
 /** Algum nome parecido esta preenchido? Devolve qual, ou nulo. */
 export function variavelParecidaPreenchida(
-  ambiente: NodeJS.ProcessEnv = process.env,
+  ambiente: Record<string, string | undefined> = process.env,
 ): string | null {
   if (ambiente.EVOLUTION_URL?.trim()) {
     return null;

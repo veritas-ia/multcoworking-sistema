@@ -15,6 +15,8 @@ type BaseProps = {
   data: string;
   /** Muda de valor para forcar uma releitura da grade (ex.: depois de um 409). */
   versao: number;
+  /** Reagendamento: a reserva sendo remarcada nao ocupa o proprio horario. */
+  reservaId?: string;
 };
 
 // -----------------------------------------------------------------------------
@@ -25,6 +27,7 @@ export function EtapaInicio({
   salaId,
   data,
   versao,
+  reservaId,
   inicioEscolhido,
   aoEscolher,
   aoTrocarDeData,
@@ -42,7 +45,7 @@ export function EtapaInicio({
     setBlocos(null);
     setErro(null);
 
-    buscarBlocos(salaId, data, controle.signal)
+    buscarBlocos(salaId, data, controle.signal, reservaId)
       .then((resposta) => {
         if (!controle.signal.aborted) {
           setBlocos(resposta.blocos);
@@ -55,7 +58,7 @@ export function EtapaInicio({
       });
 
     return () => controle.abort();
-  }, [salaId, data, versao, tentativa]);
+  }, [salaId, data, versao, reservaId, tentativa]);
 
   const temAlgumLivre = blocos?.some((bloco) => bloco.disponivelParaInicio) ?? false;
 
@@ -115,6 +118,7 @@ export function EtapaFim({
   salaId,
   data,
   versao,
+  reservaId,
   inicio,
   fimEscolhido,
   aoEscolher,
@@ -134,7 +138,7 @@ export function EtapaFim({
     setTerminos(null);
     setErro(null);
 
-    buscarTerminos(salaId, data, inicio, controle.signal)
+    buscarTerminos(salaId, data, inicio, controle.signal, reservaId)
       .then((resposta) => {
         if (!controle.signal.aborted) {
           setTerminos(resposta.terminos);
@@ -147,7 +151,7 @@ export function EtapaFim({
       });
 
     return () => controle.abort();
-  }, [salaId, data, inicio, versao, tentativa]);
+  }, [salaId, data, inicio, versao, reservaId, tentativa]);
 
   return (
     <div className="flex flex-col gap-5">

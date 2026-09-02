@@ -74,8 +74,13 @@ export function buscarBlocos(
   salaId: string,
   data: string,
   sinal?: AbortSignal,
+  /** Reagendamento: a reserva sendo remarcada nao ocupa o proprio horario. */
+  reservaId?: string,
 ): Promise<{ data: string; blocos: Bloco[] }> {
   const busca = new URLSearchParams({ salaId, data });
+  if (reservaId) {
+    busca.set("reservaId", reservaId);
+  }
   return pedir(`/api/publico/disponibilidade?${busca}`, { signal: sinal });
 }
 
@@ -84,8 +89,12 @@ export function buscarTerminos(
   data: string,
   inicio: string,
   sinal?: AbortSignal,
+  reservaId?: string,
 ): Promise<{ inicio: string; terminos: string[] }> {
   const busca = new URLSearchParams({ salaId, data, inicio });
+  if (reservaId) {
+    busca.set("reservaId", reservaId);
+  }
   return pedir(`/api/publico/terminos?${busca}`, { signal: sinal });
 }
 

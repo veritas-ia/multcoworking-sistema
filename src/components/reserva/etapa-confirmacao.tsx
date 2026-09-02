@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Botao } from "@/components/ui/botao";
 
 import { duracaoPorExtenso, emReais, minutosEntreHoras } from "./datas";
@@ -10,10 +12,12 @@ import type { ReservaCriada } from "./tipos";
 export function EtapaConfirmacao({
   reserva,
   telefoneMascarado,
+  janelaCancelamentoHoras,
   aoRecomecar,
 }: {
   reserva: ReservaCriada;
   telefoneMascarado: string | null;
+  janelaCancelamentoHoras: number;
   aoRecomecar: () => void;
 }) {
   const minutos = minutosEntreHoras(reserva.inicio, reserva.fim);
@@ -68,6 +72,23 @@ export function EtapaConfirmacao({
         </p>
         <p className="mt-1.5 text-sm text-text-secondary">
           Guarde este código se precisar falar com a equipe.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-bg-primary p-4">
+        <h2 className="text-sm font-bold text-text-primary">
+          Precisa remarcar ou cancelar?
+        </h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+          É só entrar em{" "}
+          <Link
+            href="/minhas-reservas"
+            className="font-semibold text-text-primary underline underline-offset-4 hover:text-black"
+          >
+            Minhas reservas
+          </Link>
+          . Você pode fazer isso sozinho até {janelaCancelamentoHoras} horas
+          antes do início.
         </p>
       </div>
 

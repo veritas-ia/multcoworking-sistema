@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { respostaErro } from "@/lib/api";
 import { horariosDeTerminoValidos } from "@/lib/disponibilidade";
+import { ehDonoDaReserva } from "@/lib/minhas-reservas";
+import { telefoneDaSessao } from "@/lib/sessao-cliente";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,9 @@ const Parametros = z.object({
 /**
  * GET /api/publico/terminos?salaId=...&data=AAAA-MM-DD&inicio=HH:MM
  * Os horarios de termino permitidos para aquele inicio.
+ *
+ * Aceita "&reservaId=..." no reagendamento, com a mesma regra da grade: so
+ * vale se o identificador for do telefone da sessao.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
   const parametros = Parametros.safeParse({
@@ -32,7 +37,27 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     parametros.data.salaId,
     parametros.data.data,
     parametros.data.inicio,
+    await reservaAIgnorar(requisicao),
   );
 
   return NextResponse.json({ inicio: parametros.data.inicio, terminos });
+}
+
+/** Igual a da grade: so ignora a reserva se quem pediu for o dono dela. */
+async function reservaAIgnorar(
+  requisicao: NextRequest,
+): Promise<string | undefined> {
+  const reservaId = requisicao.nextUrl.searchParams.get("reservaId");
+
+  if (!reservaId) {
+    return undefined;
+  }
+
+  const telefone = await telefoneDaSessao(requisicao);
+
+  if (!telefone || !(await ehDonoDaReserva(reservaId, telefone))) {
+    return undefined;
+  }
+
+  return reservaId;
 }

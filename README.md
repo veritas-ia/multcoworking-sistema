@@ -92,6 +92,37 @@ dentro de uma moldura, incluindo o codigo de verificacao de 6 digitos.
 
 E assim que voce testa o sistema inteiro sem gastar WhatsApp.
 
+## Minhas reservas (Fase 6)
+
+O cliente entra em `http://localhost:3000/minhas-reservas` (tem link no topo da
+tela de reserva e na confirmacao). Se ainda nao tiver sessao, ele confirma o
+telefone pelo WhatsApp — a mesma tela da Fase 5.
+
+La ele ve as proximas reservas e o historico, e pode **remarcar** ou **cancelar**
+enquanto faltarem mais de 12 horas para o inicio. Passou disso, os botoes ficam
+travados com a explicacao e a orientacao de falar com a recepcao.
+
+**Cancelar e remarcar sempre pedem um codigo novo do WhatsApp**, mesmo com a
+sessao de 30 dias valida. E decisao do CLAUDE.md: sao acoes que nao tem volta.
+
+### Testar as duas situacoes (mais de 12h e menos de 12h)
+
+```bash
+npm run reservas-de-teste -- "(11) 91234-5678"
+```
+
+O comando cria duas reservas para esse telefone:
+
+- uma daqui a alguns dias — **mais de 12h**, com os botoes liberados;
+- outra ainda hoje — **menos de 12h**, com os botoes travados.
+
+Ele respeita o horario de funcionamento e nao encosta em horario ja ocupado.
+Se voce rodar num dia fechado ou muito tarde, ele avisa que a de "menos de 12h"
+nao coube e explica por que.
+
+Depois e so abrir `/minhas-reservas`, confirmar aquele telefone e comparar os
+dois cartoes. O codigo de 6 digitos aparece no terminal do `npm run dev`.
+
 ## Quando o site nao abre
 
 Quase sempre e uma destas tres coisas, nesta ordem.

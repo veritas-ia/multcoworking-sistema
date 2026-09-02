@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
@@ -313,6 +314,13 @@ export function FluxoDeReserva({
             <p className="flex-1 truncate text-base font-bold text-text-primary">
               Reservar sala
             </p>
+
+            <Link
+              href="/minhas-reservas"
+              className="shrink-0 rounded-lg px-2 py-2 text-sm font-semibold text-text-primary underline underline-offset-4 hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              Minhas reservas
+            </Link>
           </div>
 
           {etapa === "confirmacao" ? null : (
@@ -431,6 +439,7 @@ export function FluxoDeReserva({
           <EtapaConfirmacao
             reserva={reserva}
             telefoneMascarado={telefoneMascarado}
+            janelaCancelamentoHoras={iniciais.agenda.janelaCancelamentoHoras}
             aoRecomecar={recomecar}
           />
         ) : null}
