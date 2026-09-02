@@ -26,6 +26,7 @@ Para desligar o banco: `npm run db:down`.
 | Comando             | O que faz                                      |
 | ------------------- | ---------------------------------------------- |
 | `npm run dev`       | Liga o site em modo desenvolvimento             |
+| `npm run predev`    | Confere se a porta 3000 esta livre (roda sozinho)|
 | `npm run build`     | Gera a versao de producao                       |
 | `npm start`         | Roda a versao de producao ja gerada             |
 | `npm test`          | Roda os testes automatizados                    |
@@ -90,6 +91,66 @@ de verdade**. O texto aparece no terminal onde o `npm run dev` esta rodando,
 dentro de uma moldura, incluindo o codigo de verificacao de 6 digitos.
 
 E assim que voce testa o sistema inteiro sem gastar WhatsApp.
+
+## Quando o site nao abre
+
+Quase sempre e uma destas tres coisas, nesta ordem.
+
+### 1. Sobrou um servidor antigo aberto
+
+E de longe a causa mais comum. Dois `npm run dev` no mesmo projeto avisam
+"Port 3000 is in use", um deles pula para a porta 3001 — e os dois continuam
+escrevendo na MESMA pasta `.next`, se atrapalhando. O site passa a falhar sem
+motivo aparente: uma hora abre, outra hora a tela fica girando para sempre.
+
+O projeto agora barra isso sozinho: o `npm run dev` para e explica o que fazer.
+Para resolver na mao:
+
+```bash
+lsof -nP -iTCP:3000 -sTCP:LISTEN   # ve quem esta segurando a porta
+pkill -f "next dev"                 # fecha todos os servidores do projeto
+npm run dev                         # sobe um so, limpo
+```
+
+**Regra que evita o problema:** um `npm run dev` de cada vez. Antes de fechar
+o terminal, pare o servidor com `Ctrl+C` — fechar a janela nem sempre mata o
+processo.
+
+### 2. O banco esta desligado
+
+```bash
+npm run db:up          # liga
+docker compose ps      # tem de aparecer "Up ... (healthy)"
+```
+
+### 3. A pasta de build ficou corrompida
+
+Acontece quando um `npm run build` roda com o `npm run dev` aberto, ou depois
+do caso 1. Sintoma tipico: erros estranhos no terminal, como
+`TypeError: a[d] is not a function`.
+
+```bash
+pkill -f "next dev"
+rm -rf .next
+npm run dev
+```
+
+### Erro "Class extends value undefined" ao subir o servidor
+
+Se aparecer algo como
+`TypeError: Class extends value undefined is not a constructor or null`
+apontando para `node_modules/next/dist/bin/next`, a pasta `node_modules` esta
+incompleta. Isso acontece quando ela e apagada ou reinstalada **com o servidor
+rodando**.
+
+```bash
+pkill -f "next dev"                    # PRIMEIRO feche o servidor
+rm -rf node_modules package-lock.json
+npm install
+npm run dev
+```
+
+**Nunca rode `npm install` com o `npm run dev` aberto.**
 
 ## Observacoes
 
