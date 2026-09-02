@@ -1,3 +1,5 @@
+import type { Agenda } from "./tipos";
+
 /**
  * Contas de calendario para a tela, feitas em cima do texto "AAAA-MM-DD".
  *
@@ -8,7 +10,23 @@
  * servidor continua sendo o unico dono do relogio de Sao Paulo.
  */
 
-export const DIAS_CURTOS = ["D", "S", "T", "Q", "Q", "S", "S"] as const;
+/**
+ * Cabecalho do calendario, na ordem domingo -> sabado.
+ *
+ * Nao usar a inicial de uma letra so: "segunda", "sexta" e "sabado" viram
+ * todas "S", e as colunas de sexta e sabado ficam GRUDADAS. Com sexta fechada
+ * e riscada do lado do sabado aberto, quem olha nao tem como saber qual das
+ * duas colunas "S" esta bloqueada.
+ */
+export const DIAS_CURTOS = [
+  "dom",
+  "seg",
+  "ter",
+  "qua",
+  "qui",
+  "sex",
+  "sáb",
+] as const;
 
 const DIAS_POR_EXTENSO = [
   "domingo",
@@ -129,4 +147,118 @@ export function valorEstimadoEmCentavos(
 ): number {
   const centavosDaHora = Math.round(Number(precoPorHora) * 100);
   return Math.round((centavosDaHora * minutos) / 60);
+}
+
+// -----------------------------------------------------------------------------
+// Quais dias podem ser escolhidos
+// -----------------------------------------------------------------------------
+
+/**
+ * Por que aquele dia nao pode ser escolhido. Nulo quando pode.
+ *
+ * A lista de dias fechados vem do banco (tabela HorarioFuncionamento, via
+ * /api/publico/agenda). Nada aqui e chumbado: se a equipe passar a abrir na
+ * sexta, esta funcao acompanha sozinha.
+ */
+export function motivoDoBloqueioDoDia(data: string, agenda: Agenda): string | null {
+  if (data < agenda.primeiraData) {
+    return "cedo demais para reservar";
+  }
+  if (data > agenda.ultimaData) {
+    return `só dá para reservar até ${agenda.antecedenciaMaximaDias} dias à frente`;
+  }
+  if (agenda.diasFechados.includes(diaDaSemanaDe(data))) {
+    return "fechado";
+  }
+  return null;
+}
+
+// -----------------------------------------------------------------------------
+// Resumo do horario de funcionamento
+// -----------------------------------------------------------------------------
+
+/** Ordem em que a gente le a semana no Brasil: segunda primeiro, domingo por ultimo. */
+const ORDEM_DA_SEMANA = [1, 2, 3, 4, 5, 6, 0];
+
+const NOMES_CURTOS: Record<number, string> = {
+  0: "dom",
+  1: "seg",
+  2: "ter",
+  3: "qua",
+  4: "qui",
+  5: "sex",
+  6: "sáb",
+};
+
+/** "08:00" -> "08h"; "13:30" -> "13h30". */
+function emHoras(hora: string): string {
+  const [h, m] = hora.split(":");
+  return m === "00" ? `${h}h` : `${h}h${m}`;
+}
+
+/** ["seg","ter","qua","qui"] -> "Seg a qui"; ["sex","dom"] -> "Sex e dom". */
+function juntarDias(dias: string[], comoIntervalo: boolean): string {
+  const texto =
+    dias.length === 1
+      ? dias[0]
+      : comoIntervalo && dias.length > 2
+        ? `${dias[0]} a ${dias[dias.length - 1]}`
+        : `${dias.slice(0, -1).join(", ")} e ${dias[dias.length - 1]}`;
+
+  return `${(texto ?? "").charAt(0).toUpperCase()}${(texto ?? "").slice(1)}`;
+}
+
+/**
+ * Uma linha so com o horario da casa, juntando os dias iguais:
+ * "Seg a qui: 08h–18h · Sáb: 09h–13h · Sex e dom: fechado."
+ *
+ * Os dias abertos entram em blocos seguidos que compartilham o mesmo horario;
+ * os fechados vao todos juntos no fim, mesmo sem serem seguidos.
+ */
+export function resumoDoFuncionamento(agenda: Agenda): string {
+  const horarioDoDia = new Map(
+    agenda.diasAbertos.map((dia) => [
+      dia.diaDaSemana,
+      `${emHoras(dia.horaAbertura)}–${emHoras(dia.horaFechamento)}`,
+    ]),
+  );
+
+  const partes: string[] = [];
+  let bloco: { horario: string; dias: string[] } | null = null;
+
+  for (const dia of ORDEM_DA_SEMANA) {
+    const horario = horarioDoDia.get(dia);
+
+    if (horario === undefined) {
+      // Dia fechado: fecha o bloco aberto que estava em andamento.
+      if (bloco) {
+        partes.push(`${juntarDias(bloco.dias, true)}: ${bloco.horario}`);
+        bloco = null;
+      }
+      continue;
+    }
+
+    if (bloco && bloco.horario === horario) {
+      bloco.dias.push(NOMES_CURTOS[dia] ?? "");
+    } else {
+      if (bloco) {
+        partes.push(`${juntarDias(bloco.dias, true)}: ${bloco.horario}`);
+      }
+      bloco = { horario, dias: [NOMES_CURTOS[dia] ?? ""] };
+    }
+  }
+
+  if (bloco) {
+    partes.push(`${juntarDias(bloco.dias, true)}: ${bloco.horario}`);
+  }
+
+  const fechados = ORDEM_DA_SEMANA.filter((dia) => !horarioDoDia.has(dia)).map(
+    (dia) => NOMES_CURTOS[dia] ?? "",
+  );
+
+  if (fechados.length > 0) {
+    partes.push(`${juntarDias(fechados, false)}: fechado`);
+  }
+
+  return `${partes.join(" · ")}.`;
 }

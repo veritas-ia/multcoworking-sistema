@@ -11,8 +11,10 @@ import {
   diasNoMes,
   mesDe,
   montarData,
+  motivoDoBloqueioDoDia,
   nomeDoMes,
   partesDe,
+  resumoDoFuncionamento,
   somarMeses,
 } from "./datas";
 import { BotaoDaGrade } from "./pecas";
@@ -23,20 +25,6 @@ type Props = {
   dataEscolhida: string | null;
   aoEscolher: (data: string) => void;
 };
-
-/** Por que aquele dia nao pode ser escolhido. Nulo = pode. */
-function motivoDoBloqueio(data: string, agenda: Agenda): string | null {
-  if (data < agenda.primeiraData) {
-    return "cedo demais para reservar";
-  }
-  if (data > agenda.ultimaData) {
-    return `só dá para reservar até ${agenda.antecedenciaMaximaDias} dias à frente`;
-  }
-  if (agenda.diasFechados.includes(diaDaSemanaDe(data))) {
-    return "fechado";
-  }
-  return null;
-}
 
 export function Calendario({ agenda, dataEscolhida, aoEscolher }: Props) {
   const [mes, setMes] = useState(() => mesDe(dataEscolhida ?? agenda.primeiraData));
@@ -96,7 +84,7 @@ export function Calendario({ agenda, dataEscolhida, aoEscolher }: Props) {
 
         {Array.from({ length: totalDeDias }, (_, indice) => {
           const data = montarData(ano, numeroDoMes, indice + 1);
-          const motivo = motivoDoBloqueio(data, agenda);
+          const motivo = motivoDoBloqueioDoDia(data, agenda);
 
           return (
             <BotaoDaGrade
@@ -117,14 +105,7 @@ export function Calendario({ agenda, dataEscolhida, aoEscolher }: Props) {
 
       {agenda.diasAbertos.length > 0 ? (
         <p className="text-sm leading-relaxed text-text-secondary">
-          Funcionamento:{" "}
-          {agenda.diasAbertos
-            .map(
-              (dia) =>
-                `${["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][dia.diaDaSemana]} ${dia.horaAbertura}–${dia.horaFechamento}`,
-            )
-            .join(" · ")}
-          . Os outros dias aparecem riscados.
+          {resumoDoFuncionamento(agenda)}
         </p>
       ) : null}
     </div>
