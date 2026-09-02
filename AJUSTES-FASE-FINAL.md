@@ -29,6 +29,9 @@ igual à etapa 7.
 
 **Tamanho:** pequeno, uma linha.
 
+**Ver também:** o item 6 tem outros dois pontos com o mesmo problema, na
+área "Minhas reservas". Vale arrumar os três de uma vez.
+
 ---
 
 ## 2. "Código da reserva" mostra o identificador interno
@@ -104,3 +107,60 @@ Os dois contrariam a stack fixada no CLAUDE.md.
 quando fizer sentido decidir sobre atualização de versões.
 
 **Tamanho:** decisão, não código.
+
+---
+
+## 5. Barra de progresso errada no reagendamento (anotado na Fase 6)
+
+**Como está hoje:** ao remarcar uma reserva, a barra diz "Etapa 1 de 7". Mas
+remarcar tem **5 etapas** (sala, dia, início, término, código), não 7. O cliente
+já está identificado, então as etapas de telefone e de nome não existem nesse
+fluxo.
+
+Além do texto errado, a barra enche errado: na primeira etapa ela mostra 1/7 do
+caminho quando já andou 1/5.
+
+**Por que acontece:** o componente da barra usa uma constante fixa,
+`TOTAL_DE_ETAPAS`, que vale 7 — o número de etapas da reserva nova. O fluxo de
+reagendamento reaproveita a mesma barra sem poder dizer que tem outro tamanho.
+
+**O que fazer:** deixar o total ser informado por quem usa a barra, em vez de
+ser uma constante. A tela de reserva nova continua passando 7; o reagendamento
+passa 5.
+
+**Onde:**
+- `src/components/reserva/pecas.tsx` — o componente `BarraDeProgresso`
+- `src/components/reserva/tipos.ts` — a constante `TOTAL_DE_ETAPAS`
+- quem usa: `fluxo-de-reserva.tsx` (7) e
+  `src/components/minhas-reservas/reagendamento.tsx` (5, na lista `ORDEM`)
+
+**Tamanho:** pequeno.
+
+---
+
+## 6. Datas em formato ISO na área "Minhas reservas" (anotado na Fase 6)
+
+**Como está hoje:** dois pontos da área mostram a data crua, como `2026-09-10`,
+em vez de "quinta-feira, 10 de setembro de 2026":
+
+1. a faixa verde de aviso depois de remarcar ("Reserva remarcada para
+   2026-09-10, 14:00 às 15:00...");
+2. a descrição da tela que pede o código para **cancelar** ("Sala CI,
+   2026-09-10, 10:00 às 11:00").
+
+**Correção do que foi relatado:** o **cartão de reserva já está certo** — ele usa
+`dataPorExtenso()` e mostra a data por extenso. Conferi no código antes de
+anotar. O problema está só nos dois pontos acima, que montam o texto na mão.
+
+**O que fazer:** usar `dataPorExtenso()` nos dois, como o cartão e o resumo do
+reagendamento já fazem.
+
+**Onde:**
+- `src/components/minhas-reservas/area-do-cliente.tsx` — a mensagem de sucesso
+  do reagendamento e a descrição passada ao pedido de código do cancelamento
+
+**Ver também:** o item 1 é o mesmo problema na tela de confirmação da Fase 5.
+São três pontos no total; vale arrumar todos juntos e, de quebra, procurar se
+sobrou algum outro.
+
+**Tamanho:** pequeno.
