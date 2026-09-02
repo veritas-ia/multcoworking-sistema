@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
@@ -14,8 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sistema de Reservas",
-  description: "Reserva de salas do coworking.",
+  title: "Reservar sala | Coworking",
+  description:
+    "Reserve a Sala CI, a Sala de Reunião ou a Sala Container em poucos toques.",
+};
+
+// A maior parte do trafego chega pelo navegador de dentro do Instagram e do
+// WhatsApp. "maximumScale" fica de fora de proposito: bloquear o zoom quebra a
+// acessibilidade de quem precisa aumentar o texto.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#FFC700",
 };
 
 export default function RootLayout({

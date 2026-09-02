@@ -37,6 +37,52 @@ Para desligar o banco: `npm run db:down`.
 | `npm run db:migrate`| Aplica as mudancas de estrutura no banco        |
 | `npm run db:seed`   | Carrega os dados iniciais (pode repetir)        |
 
+## A tela de reserva (Fase 5)
+
+O site abre direto no fluxo de reserva, em 8 telas: sala, dia, horario de
+inicio, horario de termino, WhatsApp, nome, conferencia e confirmacao.
+
+### Abrir no computador
+
+Com o `npm run dev` rodando, abra:
+
+    http://localhost:3000
+
+### Abrir ja com uma sala escolhida (QR Code e link do Instagram)
+
+Basta acrescentar `?sala=` com o apelido da sala. O cliente cai direto na
+escolha do dia, com a sala ja marcada:
+
+    http://localhost:3000/?sala=sala-ci
+    http://localhost:3000/?sala=sala-de-reuniao
+    http://localhost:3000/?sala=sala-container
+
+Se o apelido estiver errado, a tela simplesmente comeca do zero, pedindo a sala.
+Em producao troque `http://localhost:3000` pelo endereco do site.
+
+### Testar no celular, pela rede local
+
+1. Deixe o computador e o celular **na mesma rede Wi-Fi**.
+2. Rode `npm run dev`. No terminal aparecem duas linhas:
+
+       - Local:        http://localhost:3000
+       - Network:      http://192.168.x.x:3000
+
+3. No navegador do celular, digite o endereco da linha **Network**
+   (o numero muda a cada rede; use o que aparecer no seu terminal).
+
+Se nao aparecer nada no celular, quase sempre e uma destas tres coisas:
+
+- o celular esta no 4G/5G em vez do Wi-Fi;
+- o Wi-Fi tem "isolamento de clientes" ligado (comum em rede de predio e de
+  cafe) — nesse caso teste com o roteador de casa;
+- o firewall do macOS pediu permissao para o Node e a resposta foi "negar".
+  Ajuste em Ajustes do Sistema > Rede > Firewall.
+
+O codigo de 6 digitos **nao chega no WhatsApp** enquanto o `EVOLUTION_URL`
+estiver vazio: ele aparece no terminal do `npm run dev`. Deixe o terminal
+visivel enquanto testa no celular.
+
 ## WhatsApp em modo simulado
 
 Enquanto `EVOLUTION_URL` estiver vazia no `.env`, **nenhuma mensagem e enviada

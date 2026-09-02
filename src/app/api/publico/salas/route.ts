@@ -11,6 +11,7 @@ export async function GET(): Promise<NextResponse> {
     orderBy: { ordem: "asc" },
     select: {
       id: true,
+      slug: true,
       nome: true,
       capacidade: true,
       precoPorHora: true,
@@ -20,6 +21,7 @@ export async function GET(): Promise<NextResponse> {
   return NextResponse.json({
     salas: salas.map((sala) => ({
       id: sala.id,
+      slug: sala.slug,
       nome: sala.nome,
       capacidade: sala.capacidade,
       precoPorHora: sala.precoPorHora.toFixed(2),

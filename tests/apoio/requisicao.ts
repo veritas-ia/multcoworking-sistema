@@ -25,10 +25,30 @@ export function pedidoPost(
 export function pedidoGet(
   caminho: string,
   parametros: Record<string, string> = {},
+  opcoes: { cookie?: string } = {},
 ): NextRequest {
   const url = new URL(`${BASE}${caminho}`);
   for (const [chave, valor] of Object.entries(parametros)) {
     url.searchParams.set(chave, valor);
   }
-  return new NextRequest(url, { method: "GET" });
+  return new NextRequest(url, { method: "GET", headers: cabecalhos(opcoes) });
+}
+
+/** Monta um pedido DELETE, opcionalmente com cookie de sessao. */
+export function pedidoDelete(
+  caminho: string,
+  opcoes: { cookie?: string } = {},
+): NextRequest {
+  return new NextRequest(`${BASE}${caminho}`, {
+    method: "DELETE",
+    headers: cabecalhos(opcoes),
+  });
+}
+
+function cabecalhos(opcoes: { cookie?: string }): Headers {
+  const lista = new Headers();
+  if (opcoes.cookie) {
+    lista.set("cookie", opcoes.cookie);
+  }
+  return lista;
 }

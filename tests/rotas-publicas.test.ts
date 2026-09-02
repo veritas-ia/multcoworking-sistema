@@ -120,11 +120,15 @@ describe("GET /api/publico/salas", () => {
 
     expect(resposta.status).toBe(200);
     expect(corpo.salas.length).toBeGreaterThanOrEqual(3);
+    // Lista fechada de proposito: se um campo novo aparecer aqui sem passar
+    // por esta linha, e porque alguem expos dado que a area publica nao pode
+    // mostrar. O "slug" entrou na Fase 5, para o link ?sala=... funcionar.
     expect(Object.keys(corpo.salas[0] ?? {}).sort()).toEqual([
       "capacidade",
       "id",
       "nome",
       "precoPorHora",
+      "slug",
     ]);
   });
 });

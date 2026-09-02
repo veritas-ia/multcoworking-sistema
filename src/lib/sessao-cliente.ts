@@ -79,3 +79,22 @@ export function opcoesDoCookie(expiraEm: Date) {
     maxAge: SEGUNDOS_DE_VALIDADE,
   };
 }
+
+/**
+ * Apaga a sessao do banco (o "trocar numero" da tela).
+ * Nao reclama se o cookie ja nao valia mais: o objetivo e sair, e sair sempre da certo.
+ */
+export async function encerrarSessao(requisicao: NextRequest): Promise<void> {
+  const token = requisicao.cookies.get(COOKIE_SESSAO)?.value;
+
+  if (!token) {
+    return;
+  }
+
+  await prisma.sessaoCliente.deleteMany({ where: { tokenHash: embaralhar(token) } });
+}
+
+/** Opcoes que fazem o navegador jogar o cookie fora na hora. */
+export function opcoesParaApagarCookie() {
+  return { ...opcoesDoCookie(new Date(0)), maxAge: 0 };
+}

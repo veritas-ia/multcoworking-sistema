@@ -37,3 +37,37 @@ export function telefoneValido(telefone: string): boolean {
 export function apenasDigitos(telefone: string): string {
   return telefone.replace(/\D/g, "");
 }
+
+/**
+ * Telefone escondido para mostrar na tela: "(11) 9****-4321".
+ *
+ * Serve so para a pessoa reconhecer o proprio numero sem que ele apareca
+ * inteiro para quem estiver olhando a tela por cima do ombro.
+ * Devolve string vazia quando o telefone nao esta no formato esperado.
+ */
+export function mascararTelefone(telefone: string): string {
+  const digitos = apenasDigitos(telefone);
+  const semPais = digitos.startsWith("55") ? digitos.slice(2) : digitos;
+
+  if (semPais.length !== 11) {
+    return "";
+  }
+
+  return `(${semPais.slice(0, 2)}) ${semPais.slice(2, 3)}****-${semPais.slice(-4)}`;
+}
+
+/**
+ * Vai formatando o que a pessoa digita: "11987654321" -> "(11) 98765-4321".
+ * Aceita numero incompleto, porque roda a cada tecla.
+ */
+export function formatarEnquantoDigita(bruto: string): string {
+  const digitos = bruto.replace(/\D/g, "").slice(0, 11);
+
+  if (digitos.length <= 2) {
+    return digitos;
+  }
+  if (digitos.length <= 7) {
+    return `(${digitos.slice(0, 2)}) ${digitos.slice(2)}`;
+  }
+  return `(${digitos.slice(0, 2)}) ${digitos.slice(2, 7)}-${digitos.slice(7)}`;
+}
