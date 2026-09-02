@@ -37,10 +37,20 @@ Para desligar o banco: `npm run db:down`.
 | `npm run db:migrate`| Aplica as mudancas de estrutura no banco        |
 | `npm run db:seed`   | Carrega os dados iniciais (pode repetir)        |
 
+## WhatsApp em modo simulado
+
+Enquanto `EVOLUTION_URL` estiver vazia no `.env`, **nenhuma mensagem e enviada
+de verdade**. O texto aparece no terminal onde o `npm run dev` esta rodando,
+dentro de uma moldura, incluindo o codigo de verificacao de 6 digitos.
+
+E assim que voce testa o sistema inteiro sem gastar WhatsApp.
+
 ## Observacoes
 
 - O banco local usa a porta **5434** (a 5432 ja esta ocupada por outro projeto nesta maquina).
 - O arquivo `.env` guarda senhas e **nunca** vai para o Git. O modelo dele e o `.env.example`.
-- Os testes de banco (`npm test`) precisam do banco ligado (`npm run db:up`).
+- Os testes (`npm test`) precisam do banco ligado (`npm run db:up`).
+- O banco roda em **UTC**, sempre. Nao coloque fuso local no container:
+  o driver grava os horarios adiantados e o erro fica invisivel.
 - As regras de agenda sao garantidas pelo proprio PostgreSQL, nao so pelo codigo:
   ver `prisma/migrations/*_travas_de_horario/migration.sql`.

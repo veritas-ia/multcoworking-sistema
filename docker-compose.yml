@@ -10,7 +10,12 @@ services:
       POSTGRES_USER: coworking
       POSTGRES_PASSWORD: coworking_dev
       POSTGRES_DB: coworking
-      TZ: America/Sao_Paulo
+      # O BANCO RODA EM UTC, sempre. Nao coloque TZ aqui.
+      # Com um fuso local, o driver grava os horarios 3 horas adiantados:
+      # ele manda a data sem fuso e o Postgres interpreta como hora local.
+      # Quem converte para o horario de Sao Paulo e a aplicacao (src/lib/tempo.ts).
+      TZ: UTC
+      PGTZ: UTC
     ports:
       # 5434 no computador -> 5432 dentro do container.
       # A porta 5432 ja esta ocupada por outro projeto nesta maquina.

@@ -23,3 +23,14 @@ export function emUtc(texto: string): Date {
 export function maisMinutos(base: Date, minutos: number): Date {
   return new Date(base.getTime() + minutos * 60_000);
 }
+
+/**
+ * Abre a conexao antes dos testes comecarem.
+ *
+ * Sem isto, o PRIMEIRO teste do arquivo paga o custo de abrir a conexao com
+ * o Postgres do Docker e, de vez em quando, estoura o limite de tempo —
+ * uma falha que nao tem nada a ver com a regra sendo testada.
+ */
+export async function aquecerConexao(): Promise<void> {
+  await bancoDeTeste.$queryRaw`SELECT 1`;
+}

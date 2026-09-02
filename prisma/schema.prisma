@@ -238,8 +238,9 @@ model CodigoVerificacao {
 model SessaoCliente {
   id       String @id @default(uuid(7))
   telefone String
-  /// Valor do cookie httpOnly do cliente.
-  token    String @unique
+  /// Embaralhado (SHA-256) do valor que vai no cookie httpOnly.
+  /// O valor puro so existe no navegador do cliente; o banco nunca o ve.
+  tokenHash String @unique @map("token_hash")
 
   expiraEm DateTime @map("expira_em") @db.Timestamptz(3)
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)

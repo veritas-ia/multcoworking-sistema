@@ -28,7 +28,7 @@ import {
 import { OrigemReserva } from "@/generated/prisma/enums";
 import { instanteDe } from "@/lib/tempo";
 
-import { bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
 const AGORA = new Date("2026-10-05T12:00:00.000Z");
@@ -95,6 +95,8 @@ async function iniciosDisponiveis(salaId: string, data: string): Promise<string[
 }
 
 beforeAll(async () => {
+  await aquecerConexao();
+
   const salas = await bancoDeTeste.sala.findMany({
     where: { slug: { in: ["sala-ci", "sala-de-reuniao", "sala-container"] } },
   });

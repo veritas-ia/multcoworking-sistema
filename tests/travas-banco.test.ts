@@ -11,7 +11,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
 
-import { bancoDeTeste, emUtc, maisMinutos } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, emUtc, maisMinutos } from "./apoio/banco";
 
 const TELEFONE = "+5511987654321";
 
@@ -60,6 +60,8 @@ async function criarBloqueio(opcoes: {
 }
 
 beforeAll(async () => {
+  await aquecerConexao();
+
   const a = await bancoDeTeste.sala.upsert({
     where: { slug: "teste-sala-a" },
     create: {
@@ -407,5 +409,55 @@ describe("folga configuravel no painel", () => {
         data: { valor: "30" },
       });
     }
+  });
+});
+
+describe("o banco grava horários no instante certo", () => {
+  /**
+   * Teste de regressao de um bug real: com o container do Postgres em
+   * America/Sao_Paulo, o driver gravava tudo 3 HORAS ADIANTADO. O erro era
+   * invisivel comparando Node com Node, porque leitura e escrita passavam
+   * pelo mesmo caminho torto. So o epoch calculado DENTRO do banco denuncia.
+   */
+  it("grava o mesmo instante que o relógio do Node, sem desvio de fuso", async () => {
+    const agoraNode = Date.now();
+
+    const reserva = await bancoDeTeste.reserva.create({
+      data: {
+        salaId: salaA,
+        nomeCliente: "Cliente de Teste",
+        telefone: TELEFONE,
+        inicio: new Date(agoraNode + 86_400_000),
+        fim: new Date(agoraNode + 86_400_000 + 3_600_000),
+        duracaoMinutos: 60,
+        valor: "100.00",
+        origem: OrigemReserva.PUBLICO,
+      },
+    });
+
+    const [linha] = await bancoDeTeste.$queryRaw<{ desvio: string }[]>`
+      SELECT (extract(epoch from criado_em) - ${agoraNode / 1000}::float8)::text AS desvio
+      FROM reservas WHERE id = ${reserva.id}
+    `;
+
+    // Tolerancia de 5 segundos para o tempo da propria gravacao.
+    expect(Math.abs(Number(linha?.desvio ?? 99999))).toBeLessThan(5);
+  });
+
+  it("o relógio do banco bate com o relógio do Node", async () => {
+    const agoraNode = Date.now();
+
+    const [linha] = await bancoDeTeste.$queryRaw<{ desvio: string }[]>`
+      SELECT (extract(epoch from now()) - ${agoraNode / 1000}::float8)::text AS desvio
+    `;
+
+    expect(Math.abs(Number(linha?.desvio ?? 99999))).toBeLessThan(5);
+  });
+
+  it("o fuso da sessão do banco é UTC", async () => {
+    const [linha] = await bancoDeTeste.$queryRaw<{ fuso: string }[]>`
+      SELECT current_setting('TimeZone') AS fuso
+    `;
+    expect(linha?.fuso).toBe("UTC");
   });
 });
