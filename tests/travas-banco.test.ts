@@ -304,16 +304,21 @@ describe("mudanca de status libera ou ocupa o horario", () => {
 });
 
 describe("coerencia dos dados", () => {
-  it("recusa reserva com menos de 60 minutos", async () => {
-    await expect(
-      criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 30 }),
-    ).rejects.toThrow(/reserva_duracao_minima_e_grade/);
-  });
-
   it("recusa reserva fora da grade de 30 em 30 minutos", async () => {
     await expect(
       criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 75 }),
-    ).rejects.toThrow(/reserva_duracao_minima_e_grade/);
+    ).rejects.toThrow(/reserva_duracao_na_grade/);
+  });
+
+  it("ACEITA 30 minutos: o minimo de 1 hora saiu do banco na Fase 8", async () => {
+    // A trava antiga misturava a grade de 30 min (integridade) com o minimo
+    // de 1 hora (politica comercial). A politica passou para a aplicacao, que
+    // sabe QUEM esta marcando: o cliente do site continua preso a 1 hora
+    // (ver tests/disponibilidade.test.ts), a recepcao nao.
+    const id = await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 30 });
+
+    expect(id).toBeTruthy();
+    await bancoDeTeste.reserva.delete({ where: { id } });
   });
 
   it("recusa telefone fora do formato internacional", async () => {

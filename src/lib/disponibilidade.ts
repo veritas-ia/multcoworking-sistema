@@ -63,6 +63,17 @@ export type Bloco = {
   disponivelParaInicio: boolean;
 };
 
+/**
+ * Quem esta marcando.
+ *
+ * CLIENTE: todas as regras do site valem.
+ * ADMIN: a recepcao nao tem as travas COMERCIAIS — pode lancar no passado,
+ *        sem antecedencia minima e com qualquer duracao. As travas de
+ *        INTEGRIDADE da agenda continuam valendo para os dois: nao sobrepor
+ *        e respeitar os 30 min entre reservas.
+ */
+export type Modo = "CLIENTE" | "ADMIN";
+
 export type Parametros = {
   intervaloMinutos: number;
   duracaoMinimaMinutos: number;
@@ -384,6 +395,8 @@ export async function validarReserva(entrada: {
   fim: Date;
   /** Reagendamento: a propria reserva nao conta como horario ocupado. */
   ignorarReservaId?: string;
+  /** Quem esta marcando. Padrao: CLIENTE, com todas as regras. */
+  modo?: Modo;
 }): Promise<ResultadoValidacao> {
   const sala = await buscarSala(entrada.salaId);
 
@@ -419,6 +432,7 @@ export async function validarReserva(entrada: {
     ocupacoes,
     parametros,
     new Date(),
+    entrada.modo ?? "CLIENTE",
   );
 }
 
@@ -430,6 +444,7 @@ function avaliar(
   ocupacoes: Ocupacao[],
   parametros: Parametros,
   agora: Date,
+  modo: Modo = "CLIENTE",
 ): ResultadoValidacao {
   if (fim <= inicio) {
     return recusar(
@@ -461,7 +476,7 @@ function avaliar(
     );
   }
 
-  if (duracao < parametros.duracaoMinimaMinutos) {
+  if (modo === "CLIENTE" && duracao < parametros.duracaoMinimaMinutos) {
     return recusar(
       "DURACAO_MINIMA",
       `A reserva mínima é de ${parametros.duracaoMinimaMinutos} minutos.`,
@@ -469,6 +484,7 @@ function avaliar(
   }
 
   if (
+    modo === "CLIENTE" &&
     sala.duracaoMaximaMinutos !== null &&
     duracao > sala.duracaoMaximaMinutos
   ) {
@@ -478,11 +494,14 @@ function avaliar(
     );
   }
 
-  if (inicio < agora) {
+  if (modo === "CLIENTE" && inicio < agora) {
     return recusar("NO_PASSADO", "Este horário já passou.");
   }
 
-  if (inicio < somarMinutos(agora, parametros.antecedenciaMinimaMinutos)) {
+  if (
+    modo === "CLIENTE" &&
+    inicio < somarMinutos(agora, parametros.antecedenciaMinimaMinutos)
+  ) {
     return recusar(
       "ANTECEDENCIA_MINIMA",
       `É preciso reservar com pelo menos ${parametros.antecedenciaMinimaMinutos} minutos de antecedência.`,
@@ -493,7 +512,7 @@ function avaliar(
     agora,
     parametros.antecedenciaMaximaDias * 24 * 60,
   );
-  if (inicio > limiteFuturo) {
+  if (modo === "CLIENTE" && inicio > limiteFuturo) {
     return recusar(
       "ANTECEDENCIA_MAXIMA",
       `Só é possível reservar com até ${parametros.antecedenciaMaximaDias} dias de antecedência.`,

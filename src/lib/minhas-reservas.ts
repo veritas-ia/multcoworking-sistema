@@ -14,6 +14,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
 import { calcularValor, carregarParametros, validarReserva } from "@/lib/disponibilidade";
+import { historicoCom } from "@/lib/historico-reserva";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
 import { minutosEntre } from "@/lib/tempo";
@@ -188,23 +189,6 @@ async function reservaAlteravel(
   }
 
   return { ok: true, dados: { reserva, janelaHoras } };
-}
-
-type EntradaDeHistorico = {
-  em: string;
-  acao: "REAGENDADA" | "CANCELADA";
-  por: "CLIENTE";
-  de?: { salaId: string; inicio: string; fim: string; valor: string };
-  para?: { salaId: string; inicio: string; fim: string; valor: string };
-};
-
-/** Acrescenta uma linha ao historico sem perder o que ja estava la. */
-function historicoCom(
-  atual: Prisma.JsonValue,
-  nova: EntradaDeHistorico,
-): Prisma.InputJsonValue {
-  const anterior = Array.isArray(atual) ? atual : [];
-  return [...anterior, nova] as Prisma.InputJsonValue;
 }
 
 // -----------------------------------------------------------------------------

@@ -262,3 +262,44 @@ export function resumoDoFuncionamento(agenda: Agenda): string {
 
   return `${partes.join(" · ")}.`;
 }
+
+/** Soma (ou subtrai) dias a uma data "AAAA-MM-DD". */
+export function somarDias(data: string, dias: number): string {
+  const { ano, mes, dia } = partesDe(data);
+  const base = new Date(Date.UTC(ano, mes - 1, dia));
+  base.setUTCDate(base.getUTCDate() + dias);
+  return base.toISOString().slice(0, 10);
+}
+
+/** O domingo da semana daquela data — como nos calendarios brasileiros. */
+export function inicioDaSemana(data: string): string {
+  return somarDias(data, -diaDaSemanaDe(data));
+}
+
+/** Os sete dias da semana daquela data, de domingo a sabado. */
+export function semanaDe(data: string): string[] {
+  const domingo = inicioDaSemana(data);
+  return Array.from({ length: 7 }, (_, indice) => somarDias(domingo, indice));
+}
+
+/** "HH:MM" -> minutos desde a meia-noite. */
+export function minutosDaHora(hora: string): number {
+  const [h, m] = hora.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/** Minutos desde a meia-noite -> "HH:MM". */
+export function horaDosMinutos(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Todos os blocos de 30 min entre duas horas, incluindo o inicial. */
+export function blocosEntre(de: string, ate: string): string[] {
+  const blocos: string[] = [];
+  for (let m = minutosDaHora(de); m < minutosDaHora(ate); m += 30) {
+    blocos.push(horaDosMinutos(m));
+  }
+  return blocos;
+}

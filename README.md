@@ -181,6 +181,63 @@ logado como cliente nao abre o painel, e estar logado no painel nao da acesso as
 reservas de nenhum cliente. Ha teste automatizado garantindo isso nos dois
 sentidos.
 
+## Agenda do painel (Fase 8)
+
+`http://localhost:3000/admin/agenda` (o botao "Abrir a agenda" esta no painel).
+
+### As tres visualizacoes
+
+No alto da tela ha tres abas: **Dia**, **Semana** e **Mes**. As setas `<` e `>`
+andam no tempo e o botao **Hoje** volta para o dia atual. A caixa **Sala** filtra
+para uma sala so ou mostra todas.
+
+- **Dia** — uma coluna por sala, uma linha a cada 30 minutos. As reservas e os
+  bloqueios aparecem no horario certo. O que esta fora do expediente do dia fica
+  sombreado.
+- **Semana** — uma linha por sala, uma coluna por dia, com quantas reservas e uma
+  barrinha de quanto do dia esta tomado.
+- **Mes** — o calendario com a ocupacao de cada dia.
+
+### O caminho do dia a dia: mes -> dia -> reserva -> acao
+
+1. Na visao **Mes**, clique num dia. Voce cai na visao **Dia** daquele dia.
+2. Clique numa reserva. Abre a gaveta lateral com **tudo**: nome, telefone
+   completo, sala, horario, duracao, valor, status, se veio do site ou da
+   recepcao, e o historico de alteracoes.
+3. Na gaveta ha tres botoes: **Reagendar**, **Editar cadastro** e
+   **Cancelar reserva**.
+
+Na visao **Semana** clicar numa celula tambem leva para o dia daquela sala.
+
+Tudo isso fica na URL, entao o botao "voltar" do navegador funciona e da para
+guardar um dia nos favoritos.
+
+### Criar uma reserva pela recepcao
+
+Botao **+ Nova reserva**, no alto a direita. Preencha sala, nome, telefone, dia
+e horario.
+
+A recepcao **nao** tem as travas do site: pode marcar para daqui a pouco, para
+tras (acertar a agenda depois do fato), com qualquer duracao e sem limite de
+reservas por telefone. O cliente recebe a mesma confirmacao no WhatsApp.
+
+O que a recepcao **nao** consegue furar: sobrepor duas reservas na mesma sala e
+comer o intervalo de 30 minutos entre elas. Quem impede e o proprio banco de
+dados. Se tentar, aparece "Este horario ja esta ocupado nesta sala".
+
+### Diferenca entre "Editar cadastro" e "Reagendar"
+
+- **Editar cadastro** conserta o nome e o telefone. Nao mexe no horario e **nao**
+  manda mensagem — arrumar um nome escrito errado nao e novidade para o cliente.
+- **Reagendar** muda sala e horario, recalcula o valor pelo preco atual e manda o
+  WhatsApp de remarcacao.
+
+### Cores da agenda
+
+Confirmada (amarelo cheio), remarcada (amarelo com borda tracejada), cancelada
+(riscada, borda vermelha), concluida (cinza) e bloqueio (listrado). As situacoes
+tambem se distinguem por textura e texto, nunca so por cor.
+
 ## Quando o site nao abre
 
 Quase sempre e uma destas tres coisas, nesta ordem.

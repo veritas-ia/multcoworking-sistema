@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import Link from "next/link";
+
 import { BotaoSair } from "@/components/admin/botao-sair";
 import { adminDoToken } from "@/lib/admin";
 import { COOKIE_ADMIN } from "@/lib/sessao-admin";
@@ -38,14 +40,20 @@ export default async function PaginaDoPainel() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 px-4 py-16 text-center">
         <h2 className="text-2xl font-bold tracking-tight text-text-primary">
           Painel — em construção
         </h2>
         <p className="max-w-md text-sm text-text-secondary">
-          O login e a proteção das rotas já estão funcionando. A agenda
-          administrativa chega na próxima fase.
+          A agenda já está pronta. Bloqueios, recorrências e configurações
+          chegam nas próximas fases.
         </p>
+        <Link
+          href="/admin/agenda"
+          className="inline-flex min-h-12 items-center justify-center rounded-lg bg-brand px-6 text-base font-semibold text-brand-foreground hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+        >
+          Abrir a agenda
+        </Link>
       </main>
     </div>
   );
