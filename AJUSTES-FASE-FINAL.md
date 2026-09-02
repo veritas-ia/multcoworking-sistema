@@ -164,3 +164,48 @@ São três pontos no total; vale arrumar todos juntos e, de quebra, procurar se
 sobrou algum outro.
 
 **Tamanho:** pequeno.
+
+---
+
+## 7. Por que o painel NÃO usa Auth.js (decidido na Fase 7)
+
+**Não é uma pendência — é o registro de uma decisão**, para ninguém "corrigir"
+isso mais tarde achando que foi esquecimento.
+
+**O que aconteceu:** o CLAUDE.md original mandava usar Auth.js (NextAuth) no
+painel. Na hora de instalar, os dois caminhos possíveis eram ruins:
+
+- `next-auth@4` (estável) é da era do Pages Router. Com Next 15 + App Router
+  funciona mal, principalmente no middleware — que é exatamente onde a proteção
+  das rotas precisa acontecer.
+- `next-auth@5` (o Auth.js de verdade para App Router) **só existe em beta**, e
+  há bastante tempo. Seria uma dependência beta no alicerce do painel.
+
+**O que foi feito:** sessão própria, com cookie httpOnly assinado — a mesma
+mecânica da sessão de cliente da Fase 4, que já estava aprovada e funcionando.
+Zero dependência nova. O CLAUDE.md foi atualizado para refletir isso.
+
+**Como funciona, em uma linha:** o cookie do painel guarda um bilhete assinado
+com uma chave secreta; o porteiro (middleware) confere a assinatura sem precisar
+do banco, e cada página do painel confere de novo, aí sim no banco, se o usuário
+ainda existe.
+
+**O que revisar na Fase 13 (deploy):**
+
+- gerar um `ADMIN_SESSAO_SEGREDO` **diferente** do usado em desenvolvimento e
+  guardá-lo no EasyPanel — trocar essa chave desloga todo mundo na hora, o que é
+  a ferramenta de emergência caso ela vaze;
+- decidir se vale reavaliar o Auth.js quando a v5 sair de beta. Hoje **não há
+  motivo prático** para trocar: o que existe funciona, tem teste e não depende
+  de ninguém.
+
+**Uma limitação conhecida, e por que ela é aceitável:** como o bilhete é
+assinado em vez de guardado no banco, não dá para "cancelar" um cookie
+específico antes de ele vencer. Na prática: sair do painel apaga o cookie do
+navegador, um usuário apagado perde o acesso na tela seguinte (a conferência no
+banco pega isso), e o bilhete vence sozinho em 12 horas. Para um painel de
+equipe pequena, é troca justa. Se um dia precisar derrubar todas as sessões de
+uma vez, basta trocar o `ADMIN_SESSAO_SEGREDO`.
+
+**Tamanho:** decisão registrada, nada a fazer agora.
+

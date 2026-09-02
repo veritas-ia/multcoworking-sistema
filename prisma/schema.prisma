@@ -110,6 +110,24 @@ model Usuario {
   @@map("usuarios")
 }
 
+/// Tentativas de login no painel, para travar ataque de forca bruta (Fase 7).
+/// Guardadas no banco, e nao na memoria, para o limite sobreviver a um
+/// reinicio do servidor.
+model TentativaLogin {
+  id String @id @default(uuid(7))
+  /// Nome de usuario TENTADO. Pode nem existir — e isso que se quer medir.
+  usuario String
+  /// Endereco de rede de quem tentou, para o limite por IP.
+  ip      String?
+  sucesso Boolean
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([usuario, criadoEm])
+  @@index([ip, criadoEm])
+  @@map("tentativas_login")
+}
+
 /// Parametros gerais do sistema, editaveis no painel (Fase 11).
 model Configuracao {
   chave String @id

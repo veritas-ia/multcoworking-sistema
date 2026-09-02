@@ -8,7 +8,8 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Next.js 15 (App Router) + TypeScript (strict)
 - PostgreSQL + Prisma
 - Tailwind CSS + shadcn/ui
-- Auth.js (credentials provider) para o painel
+- Sessão própria com cookie httpOnly assinado para o painel (mesma mecânica da
+  sessão de cliente da Fase 4), sem NextAuth
 - date-fns-tz para datas
 - node-cron para rotinas agendadas (dentro do mesmo processo)
 - Evolution API para WhatsApp (chamada direta, sem intermediário)
@@ -111,7 +112,7 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - Fase 4 — API pública + cliente Evolution + verificação por código.
 - Fase 5 — Interface pública de reserva (mobile-first, verificação embutida na etapa 5).
 - Fase 6 — Área "Minhas reservas" (cancelar/reagendar com código novo).
-- Fase 7 — Login do painel admin (Auth.js).
+- Fase 7 — Login do painel admin (sessão própria assinada, sem NextAuth).
 - Fase 8 — Agenda administrativa (dia/semana/mês, criar/editar/cancelar).
 - Fase 9 — Bloqueios administrativos e reservas recorrentes.
 - Fase 10 — Rotinas internas com node-cron: lembretes 24h e 2h, marcar concluídas, limpeza. Idempotência obrigatória.

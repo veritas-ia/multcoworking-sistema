@@ -237,7 +237,8 @@ async function criarTemplates(): Promise<void> {
 
 async function criarAdmin(): Promise<void> {
   const senha = process.env.ADMIN_SENHA;
-  const login = process.env.ADMIN_USUARIO ?? "admin";
+  // Sempre em minusculas: e assim que o login do painel procura (Fase 7).
+  const login = (process.env.ADMIN_USUARIO ?? "admin").trim().toLowerCase();
   const nome = process.env.ADMIN_NOME ?? "Administrador";
 
   if (!senha) {

@@ -123,6 +123,64 @@ nao coube e explica por que.
 Depois e so abrir `/minhas-reservas`, confirmar aquele telefone e comparar os
 dois cartoes. O codigo de 6 digitos aparece no terminal do `npm run dev`.
 
+## Painel administrativo (Fase 7)
+
+O painel fica em `http://localhost:3000/admin` e e protegido por login.
+
+### Criar seu primeiro usuario
+
+```bash
+npm run criar-admin
+```
+
+Ele pergunta o nome completo, o **nome de usuario** (e por ele que voce entra,
+nao por e-mail) e a senha, duas vezes. A senha nao aparece na tela enquanto voce
+digita. Minimo de 8 caracteres.
+
+Rode o mesmo comando quantas vezes quiser para criar outros usuarios da equipe.
+Todos tem o mesmo nivel de acesso.
+
+**Nao ha recuperacao de senha por e-mail.** Se alguem esquecer a senha, outro
+administrador cria um usuario novo para essa pessoa.
+
+### A chave que assina o login
+
+O painel precisa de `ADMIN_SESSAO_SEGREDO` no `.env`, com no minimo 32
+caracteres. Sem ela o painel nao sobe. Para gerar a sua:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+Em producao use uma chave **diferente**. Trocar essa chave desloga todo mundo do
+painel na hora — e a ferramenta de emergencia caso ela vaze.
+
+### Testar o login e a protecao
+
+1. **Sem estar logado**, abra `http://localhost:3000/admin`.
+   Voce deve cair na tela de login.
+2. Tente entrar com a **senha errada**: aparece "Usuario ou senha incorretos".
+   Errando 5 vezes, o usuario fica travado por 15 minutos.
+3. Entre com a **senha certa**: voce vai para o painel, com seu nome no topo.
+4. Clique em **Sair** e tente `/admin` de novo: volta para o login.
+
+Para conferir que a API tambem esta protegida, com o servidor no ar:
+
+```bash
+curl -i http://localhost:3000/api/admin/eu | head -1
+```
+
+Sem login isso responde `401`, e nao a pagina de login — porque redirecionar uma
+chamada de programa so atrapalharia.
+
+### As duas sessoes nao se misturam
+
+A sessao do **cliente** (area publica, 30 dias) e a do **admin** (painel, 12
+horas) usam cookies com nomes diferentes e verificadores diferentes. Estar
+logado como cliente nao abre o painel, e estar logado no painel nao da acesso as
+reservas de nenhum cliente. Ha teste automatizado garantindo isso nos dois
+sentidos.
+
 ## Quando o site nao abre
 
 Quase sempre e uma destas tres coisas, nesta ordem.
