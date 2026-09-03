@@ -209,3 +209,37 @@ uma vez, basta trocar o `ADMIN_SESSAO_SEGREDO`.
 
 **Tamanho:** decisão registrada, nada a fazer agora.
 
+---
+
+## 8. Volume de WhatsApp numa série longa (anotado na Fase 9)
+
+**Como está hoje:** cada ocorrência de uma série dispara a mensagem de
+confirmação, como o texto da Fase 9 pediu. Uma série de terça e quarta por dois
+meses cria ~17 reservas — e manda **~17 WhatsApps seguidos** para a mesma pessoa,
+em poucos segundos.
+
+**Por que isso preocupa:**
+
+- para o cliente parece defeito do sistema, não capricho;
+- a Evolution API (e o próprio WhatsApp) costuma limitar rajadas de mensagens
+  para o mesmo número; parte pode falhar ou o número pode ser penalizado;
+- o custo por mensagem, se houver, multiplica.
+
+**Implementei como estava escrito** — a instrução era explícita — mas vale
+decidir na revisão. Três saídas possíveis:
+
+- **(a) Uma mensagem só, resumindo a série:** "sua reserva de terça e quarta,
+  das 9h às 10h, está confirmada de 06/10 a 30/11 (17 datas)". Exigiria um
+  template novo no painel.
+- **(b) Mensagem por ocorrência, mas espaçadas** (uma a cada X segundos, em fila).
+  Não resolve o incômodo do cliente, só o risco técnico.
+- **(c) Deixar como está**, se as séries forem raras e curtas.
+
+Minha sugestão é **(a)**, mas depende de como a equipe usa recorrência no dia a
+dia — se for uma série por mês, (c) resolve.
+
+**Onde:** `src/app/api/admin/recorrencias/route.ts`, no laço que chama
+`dispararMensagem`.
+
+**Tamanho:** (a) médio, precisa de template novo. (b) pequeno. (c) nada.
+

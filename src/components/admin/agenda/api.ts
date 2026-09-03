@@ -1,7 +1,7 @@
 /** Conversa da agenda do painel com o servidor. */
 import { ErroDaApi } from "@/components/reserva/api";
 
-import type { ItemDaAgenda, ReservaDetalhada } from "./tipos";
+import type { ItemDaAgenda, ReservaDetalhada, ResumoDaSerie } from "./tipos";
 
 type CorpoDeErro = { erro?: string; codigo?: string };
 
@@ -183,4 +183,53 @@ export function removerBloqueio(
   return pedir(`/api/admin/bloqueios/${id}${oGrupoInteiro ? "?grupo=1" : ""}`, {
     method: "DELETE",
   });
+}
+
+// -----------------------------------------------------------------------------
+// Recorrencias (Fase 9, parte 2)
+// -----------------------------------------------------------------------------
+
+export type OcorrenciaPulada = {
+  data: string;
+  tipo: "DIA_FECHADO" | "CONFLITO";
+  motivo: string;
+};
+
+export type RelatorioDaSerie = {
+  recorrenciaId: string;
+  /** "toda terça e quarta", "a última sexta de cada mês"... */
+  resumo: string;
+  criadas: { id: string; data: string }[];
+  puladas: OcorrenciaPulada[];
+};
+
+export type DadosDaSerie = {
+  salaId: string;
+  telefone: string;
+  nome: string;
+  inicio: string;
+  fim: string;
+  diasDaSemana: number[];
+  frequencia: "SEMANAL" | "QUINZENAL" | "MENSAL";
+  semanaDoMes?: number | null;
+  dataInicio: string;
+  dataFim: string;
+};
+
+export function criarSerie(entrada: DadosDaSerie): Promise<RelatorioDaSerie> {
+  return pedir("/api/admin/recorrencias", {
+    method: "POST",
+    body: JSON.stringify(entrada),
+  });
+}
+
+export function buscarSerie(
+  id: string,
+  sinal?: AbortSignal,
+): Promise<ResumoDaSerie> {
+  return pedir(`/api/admin/recorrencias/${id}`, { signal: sinal });
+}
+
+export function cancelarSerie(id: string): Promise<{ canceladas: number }> {
+  return pedir(`/api/admin/recorrencias/${id}/cancelar`, { method: "POST" });
 }

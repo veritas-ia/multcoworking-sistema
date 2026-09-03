@@ -260,6 +260,47 @@ site continua sem poder**.
 O que a recepcao **nunca** consegue furar: sobrepor duas reservas na mesma sala e
 comer o intervalo de 30 minutos entre elas.
 
+### Reservas recorrentes (Fase 9)
+
+Nao ha tela separada: a repeticao mora dentro do **+ Nova reserva**.
+
+**Criar uma serie de terca e quarta por 2 meses:**
+
+1. Na agenda, **+ Nova reserva**.
+2. Preencha sala, nome, telefone, o horario e o **primeiro dia** (o campo "Dia"
+   vira "Comeca em" quando voce marca a repeticao).
+3. Marque **Repetir esta reserva**.
+4. Em "Em quais dias", toque em **ter** e **qua** (da para escolher varios).
+5. Em "Com que frequencia", deixe **Toda semana**.
+6. Em **Repetir ate**, ponha a data de 2 meses a frente.
+7. Confira a frase que aparece — "toda terca e quarta, das 09:00 as 10:00" — e
+   clique em **Lancar serie**.
+
+**As tres frequencias:** toda semana, a cada 2 semanas, ou uma vez por mes. Na
+mensal voce escolhe **primeira / segunda / terceira / ultima** — a conta e sempre
+por dia da semana, **nunca** por dia do numero do mes. "A ultima terca" num mes
+com cinco tercas cai na quinta, nao na quarta.
+
+**O relatorio** aparece na hora, assim que a serie e criada, numa tela propria:
+
+- quantas reservas foram criadas, com a lista das datas;
+- quantas foram **puladas por conflito**, com a data e o motivo de cada uma;
+- quantas foram **puladas por dia fechado**, com as datas.
+
+Uma ocorrencia que esbarra em horario ocupado nunca derruba a serie inteira: ela
+e pulada e reportada. Dias fechados (sexta e domingo, feriados bloqueados) sao
+pulados de proposito — uma serie de meses nao pode criar reservas em dia de porta
+trancada. Se for um evento especial, lance como reserva avulsa: a recepcao pode
+marcar em dia fechado.
+
+**Na agenda**, as ocorrencias de uma serie aparecem com o simbolo **⟳** ao lado
+do nome.
+
+**Cancelar:** clique na reserva e em **Cancelar reserva**. Se ela fizer parte de
+uma serie, o sistema pergunta se voce quer cancelar **so aquela data** ou **a
+serie inteira**, dizendo quantas reservas futuras seriam afetadas. O que ja
+passou nunca e mexido.
+
 ### Diferenca entre "Editar cadastro" e "Reagendar"
 
 - **Editar cadastro** conserta o nome e o telefone. Nao mexe no horario e **nao**

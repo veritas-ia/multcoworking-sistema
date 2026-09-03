@@ -152,10 +152,19 @@ export function VisaoDiaria({
                       <span className="font-semibold tabular-nums">
                         {item.inicio}–{item.fim}
                       </span>
-                      <span className="truncate">
-                        {item.tipo === "BLOQUEIO"
-                          ? (item.motivo ?? "Bloqueio")
-                          : item.nomeCliente}
+                      <span className="flex w-full items-center gap-1 truncate">
+                        {item.recorrenciaId ? (
+                          // Simbolo de repeticao: diz que esta reserva faz parte
+                          // de uma serie, sem depender so de cor.
+                          <span aria-label="parte de uma série" title="parte de uma série">
+                            ⟳
+                          </span>
+                        ) : null}
+                        <span className="truncate">
+                          {item.tipo === "BLOQUEIO"
+                            ? (item.motivo ?? "Bloqueio")
+                            : item.nomeCliente}
+                        </span>
                       </span>
                     </button>
                   );

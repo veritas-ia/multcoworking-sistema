@@ -18,9 +18,10 @@ import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
 import { cn } from "@/lib/utils";
 
-import { buscarAgendaAdmin } from "./api";
+import { buscarAgendaAdmin, type RelatorioDaSerie } from "./api";
 import { NovaReserva } from "./nova-reserva";
 import { NovoBloqueio } from "./novo-bloqueio";
+import { RelatorioDaSerieCriada } from "./relatorio-da-serie";
 import { PainelDaReserva } from "./painel-da-reserva";
 import { VISOES, type ItemDaAgenda, type Visao } from "./tipos";
 import { VisaoDiaria } from "./visao-diaria";
@@ -52,6 +53,7 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
   const [criandoReserva, setCriandoReserva] = useState(false);
   const [criandoBloqueio, setCriandoBloqueio] = useState(false);
   const [recado, setRecado] = useState<string | null>(null);
+  const [relatorio, setRelatorio] = useState<RelatorioDaSerie | null>(null);
 
   const periodo = useMemo(() => faixaDaVisao(visao, data), [visao, data]);
 
@@ -302,6 +304,11 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
             setRecado("Reserva lançada. O cliente recebeu a confirmação no WhatsApp.");
             recarregar();
           }}
+          aoCriarSerie={(dados) => {
+            setCriandoReserva(false);
+            setRelatorio(dados);
+            recarregar();
+          }}
           aoFechar={() => setCriandoReserva(false)}
         />
       ) : null}
@@ -321,6 +328,13 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
             recarregar();
           }}
           aoFechar={() => setCriandoBloqueio(false)}
+        />
+      ) : null}
+
+      {relatorio ? (
+        <RelatorioDaSerieCriada
+          relatorio={relatorio}
+          aoFechar={() => setRelatorio(null)}
         />
       ) : null}
     </div>

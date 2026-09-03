@@ -96,6 +96,8 @@ export type ReservaNaAgenda = {
   /** Telefone COMPLETO. Isto e area protegida — o CLAUDE.md permite aqui. */
   telefone: string;
   valor: string;
+  /** Preenchido quando a reserva veio de uma serie recorrente. */
+  recorrenciaId: string | null;
 };
 
 export type BloqueioNaAgenda = {
@@ -153,6 +155,7 @@ export async function itensDaAgenda(entrada: {
         nomeCliente: reserva.nomeCliente,
         telefone: reserva.telefone,
         valor: reserva.valor.toFixed(2),
+        recorrenciaId: reserva.recorrenciaId,
       }),
     ),
     ...bloqueios.map(

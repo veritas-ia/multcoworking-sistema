@@ -17,6 +17,8 @@ export type ItemDaAgenda = {
   nomeCliente?: string;
   telefone?: string;
   valor?: string;
+  /** Preenchido quando a reserva faz parte de uma serie recorrente. */
+  recorrenciaId?: string | null;
   /** So em BLOQUEIO. */
   motivo?: string | null;
 };
@@ -29,6 +31,21 @@ export type EntradaDeHistorico = {
   de?: { salaId: string; inicio: string; fim: string; valor: string };
   para?: { salaId: string; inicio: string; fim: string; valor: string };
   camposEditados?: string[];
+};
+
+export type ResumoDaSerie = {
+  id: string;
+  sala: string;
+  nomeCliente: string;
+  inicio: string;
+  fim: string;
+  dataInicio: string;
+  dataFim: string;
+  ativa: boolean;
+  /** "toda terça e quarta", "a última sexta de cada mês"... */
+  resumo: string;
+  total: number;
+  futurasAtivas: number;
 };
 
 export type ReservaDetalhada = {
@@ -46,6 +63,7 @@ export type ReservaDetalhada = {
   origem: string;
   criadoEm: string;
   canceladoEm: string | null;
+  recorrenciaId: string | null;
   historico: EntradaDeHistorico[];
 };
 

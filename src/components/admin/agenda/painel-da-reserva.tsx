@@ -18,14 +18,16 @@ import { cn } from "@/lib/utils";
 
 import {
   buscarReserva,
+  buscarSerie,
   cancelarComoAdmin,
+  cancelarSerie,
   editarCadastroDaReserva,
   reagendarComoAdmin,
 } from "./api";
 import { rotuloDoStatus } from "./cores";
 import { Historico } from "./historico";
 import { PainelDoBloqueio } from "./painel-do-bloqueio";
-import type { ItemDaAgenda, ReservaDetalhada } from "./tipos";
+import type { ItemDaAgenda, ReservaDetalhada, ResumoDaSerie } from "./tipos";
 
 /** Blocos oferecidos no reagendamento pela recepcao. Faixa larga de proposito:
  *  a recepcao pode lancar fora do horario comum. O servidor da a palavra final. */
@@ -86,6 +88,7 @@ function DetalheDaReserva({
   const [enviando, setEnviando] = useState(false);
   const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  const [serie, setSerie] = useState<ResumoDaSerie | null>(null);
 
   useEffect(() => {
     const controle = new AbortController();
@@ -106,6 +109,32 @@ function DetalheDaReserva({
 
     return () => controle.abort();
   }, [reservaId, tentativa]);
+
+  // Quando a reserva faz parte de uma serie, a tela precisa saber quantas
+  // outras seriam afetadas para poder perguntar "so esta ou a serie inteira?".
+  useEffect(() => {
+    if (!reserva?.recorrenciaId) {
+      setSerie(null);
+      return;
+    }
+
+    const controle = new AbortController();
+
+    buscarSerie(reserva.recorrenciaId, controle.signal)
+      .then((dados) => {
+        if (!controle.signal.aborted) {
+          setSerie(dados);
+        }
+      })
+      .catch(() => {
+        // Sem o resumo a tela ainda funciona: so nao oferece cancelar a serie.
+        if (!controle.signal.aborted) {
+          setSerie(null);
+        }
+      });
+
+    return () => controle.abort();
+  }, [reserva?.recorrenciaId, tentativa]);
 
   function recarregar(): void {
     setTentativa((numero) => numero + 1);
@@ -144,6 +173,23 @@ function DetalheDaReserva({
     }
   }
 
+  async function cancelarASerieInteira(): Promise<void> {
+    if (!reserva?.recorrenciaId) {
+      return;
+    }
+    setEnviando(true);
+    setErroDaAcao(null);
+    try {
+      await cancelarSerie(reserva.recorrenciaId);
+      setConfirmandoCancelamento(false);
+      recarregar();
+    } catch (problema: unknown) {
+      setErroDaAcao(mensagemDoErro(problema));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   return (
     <Gaveta titulo="Reserva" aoFechar={aoFechar}>
       <div className="flex flex-col gap-5">
@@ -159,6 +205,12 @@ function DetalheDaReserva({
           <span className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary">
             {reserva.origem === "ADMIN" ? "Lançada na recepção" : "Feita pelo site"}
           </span>
+
+          {serie ? (
+            <span className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary">
+              ⟳ {serie.resumo}
+            </span>
+          ) : null}
         </div>
 
         {modo === "detalhe" ? (
@@ -184,28 +236,66 @@ function DetalheDaReserva({
             {ativa ? (
               confirmandoCancelamento ? (
                 <div className="flex flex-col gap-3 rounded-lg border border-destructive bg-bg-primary p-4">
-                  <p className="text-sm font-medium text-text-primary">
-                    Cancelar esta reserva? O horário volta para a agenda e o
-                    cliente recebe um WhatsApp avisando.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Botao
-                      aparencia="primario"
-                      largura="conteudo"
-                      disabled={enviando}
-                      onClick={() => void cancelar()}
-                    >
-                      {enviando ? "Cancelando…" : "Sim, cancelar"}
-                    </Botao>
-                    <Botao
-                      aparencia="secundario"
-                      largura="conteudo"
-                      disabled={enviando}
-                      onClick={() => setConfirmandoCancelamento(false)}
-                    >
-                      Voltar
-                    </Botao>
-                  </div>
+                  {serie && serie.futurasAtivas > 1 ? (
+                    <>
+                      <p className="text-sm font-medium text-text-primary">
+                        Esta reserva faz parte de uma série ({serie.resumo}). O que
+                        você quer cancelar?
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        <Botao
+                          aparencia="primario"
+                          disabled={enviando}
+                          onClick={() => void cancelar()}
+                        >
+                          {enviando ? "Cancelando…" : "Só esta data"}
+                        </Botao>
+                        <Botao
+                          aparencia="secundario"
+                          disabled={enviando}
+                          onClick={() => void cancelarASerieInteira()}
+                        >
+                          A série inteira ({serie.futurasAtivas} reservas futuras)
+                        </Botao>
+                        <Botao
+                          aparencia="secundario"
+                          disabled={enviando}
+                          onClick={() => setConfirmandoCancelamento(false)}
+                        >
+                          Voltar
+                        </Botao>
+                      </div>
+                      <p className="text-sm text-text-secondary">
+                        O cliente recebe um WhatsApp de cada reserva cancelada.
+                        Datas que já passaram não são afetadas.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-text-primary">
+                        Cancelar esta reserva? O horário volta para a agenda e o
+                        cliente recebe um WhatsApp avisando.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Botao
+                          aparencia="primario"
+                          largura="conteudo"
+                          disabled={enviando}
+                          onClick={() => void cancelar()}
+                        >
+                          {enviando ? "Cancelando…" : "Sim, cancelar"}
+                        </Botao>
+                        <Botao
+                          aparencia="secundario"
+                          largura="conteudo"
+                          disabled={enviando}
+                          onClick={() => setConfirmandoCancelamento(false)}
+                        >
+                          Voltar
+                        </Botao>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">

@@ -48,6 +48,7 @@ export async function GET(
     origem: reserva.origem,
     criadoEm: reserva.criadoEm.toISOString(),
     canceladoEm: reserva.canceladoEm?.toISOString() ?? null,
+    recorrenciaId: reserva.recorrenciaId,
     historico: lerHistorico(reserva.historicoAlteracoes),
   });
 }
