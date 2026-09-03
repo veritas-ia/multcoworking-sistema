@@ -225,6 +225,41 @@ O que a recepcao **nao** consegue furar: sobrepor duas reservas na mesma sala e
 comer o intervalo de 30 minutos entre elas. Quem impede e o proprio banco de
 dados. Se tentar, aparece "Este horario ja esta ocupado nesta sala".
 
+### Bloqueios (Fase 9)
+
+Servem para tirar um horario da agenda sem que seja uma reserva: manutencao,
+feriado, evento interno, reforma.
+
+**Criar:** na agenda, botao **+ Bloqueio**. Escolha uma ou mais salas, o dia, o
+horario (ou marque **Bloquear o dia inteiro**) e um motivo.
+
+**Feriado:** o botao **Todas as salas (feriado)** marca as tres de uma vez. Elas
+ficam ligadas entre si — na hora de remover, o sistema pergunta se voce quer tirar
+**so daquela sala** ou **o feriado inteiro**.
+
+**O cliente nunca ve o motivo.** Na area publica o horario aparece apenas como
+indisponivel. O motivo existe so para a equipe, dentro do painel.
+
+**Se houver reserva no periodo**, o bloqueio **nao e criado** e a tela mostra a
+lista de quem esta no caminho, com nome e horario. Cancele ou remarque cada uma na
+agenda e volte. E tudo ou nada: bloquear metade de um feriado seria pior do que
+nao bloquear. O botao **Conferir antes** mostra o problema sem precisar tentar.
+
+**Editar e remover:** clique no bloqueio na agenda (ele aparece listrado) e use
+**Editar** ou **Remover**.
+
+**Bloqueio nao exige os 30 minutos de folga.** Uma reserva pode comecar no minuto
+exato em que o bloqueio termina — diferente do que acontece entre duas reservas.
+
+### Reserva em dia fechado ou fora do horario
+
+A recepcao **pode** lancar uma reserva avulsa numa sexta (dia fechado) ou as 19h
+numa quarta. E para evento pontual que a equipe sabe que vai abrir. O **cliente no
+site continua sem poder**.
+
+O que a recepcao **nunca** consegue furar: sobrepor duas reservas na mesma sala e
+comer o intervalo de 30 minutos entre elas.
+
 ### Diferenca entre "Editar cadastro" e "Reagendar"
 
 - **Editar cadastro** conserta o nome e o telefone. Nao mexe no horario e **nao**

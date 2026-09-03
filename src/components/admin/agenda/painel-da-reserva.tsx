@@ -24,6 +24,7 @@ import {
 } from "./api";
 import { rotuloDoStatus } from "./cores";
 import { Historico } from "./historico";
+import { PainelDoBloqueio } from "./painel-do-bloqueio";
 import type { ItemDaAgenda, ReservaDetalhada } from "./tipos";
 
 /** Blocos oferecidos no reagendamento pela recepcao. Faixa larga de proposito:
@@ -46,16 +47,13 @@ export function PainelDaReserva({
   if (item.tipo === "BLOQUEIO") {
     return (
       <Gaveta titulo="Bloqueio" aoFechar={aoFechar}>
-        <dl className="flex flex-col gap-3">
-          <Linha rotulo="Sala" valor={item.sala} />
-          <Linha rotulo="Dia" valor={dataPorExtenso(item.data)} />
-          <Linha rotulo="Horário" valor={`${item.inicio} às ${item.fim}`} />
-          <Linha rotulo="Motivo" valor={item.motivo ?? "sem motivo registrado"} />
-        </dl>
-        <p className="mt-4 rounded-lg border border-border bg-bg-secondary p-3 text-sm text-text-secondary">
-          Criar e apagar bloqueios chega na próxima fase. Por enquanto a agenda
-          apenas mostra os que existirem.
-        </p>
+        <PainelDoBloqueio
+          bloqueioId={item.id}
+          aoMudarAgenda={() => {
+            aoMudarAgenda();
+            aoFechar();
+          }}
+        />
       </Gaveta>
     );
   }

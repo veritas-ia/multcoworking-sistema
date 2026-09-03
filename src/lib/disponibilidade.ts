@@ -68,9 +68,15 @@ export type Bloco = {
  *
  * CLIENTE: todas as regras do site valem.
  * ADMIN: a recepcao nao tem as travas COMERCIAIS — pode lancar no passado,
- *        sem antecedencia minima e com qualquer duracao. As travas de
- *        INTEGRIDADE da agenda continuam valendo para os dois: nao sobrepor
- *        e respeitar os 30 min entre reservas.
+ *        sem antecedencia minima, com qualquer duracao e ATE FORA DO
+ *        EXPEDIENTE (dia fechado ou fora do horario), para o caso de um
+ *        evento pontual que a equipe sabe que vai abrir.
+ *
+ *        As travas de INTEGRIDADE da agenda continuam valendo para os dois:
+ *        nao sobrepor e respeitar os 30 min entre reservas.
+ *
+ * Atencao: a liberacao do expediente vale para lancamento AVULSO. A geracao
+ * de uma RECORRENCIA pula os dias fechados de proposito — ver "recorrencias.ts".
  */
 export type Modo = "CLIENTE" | "ADMIN";
 
@@ -413,9 +419,18 @@ export async function validarReserva(entrada: {
     carregarParametros(),
   ]);
 
-  if (!expediente) {
+  const modo = entrada.modo ?? "CLIENTE";
+
+  if (!expediente && modo === "CLIENTE") {
     return recusar("DIA_FECHADO", "O coworking não abre neste dia.");
   }
+
+  // Recepcao em dia fechado: a janela passa a ser o dia inteiro, para as
+  // outras regras (grade, sobreposicao, intervalo) continuarem sendo aplicadas.
+  const janela = expediente ?? {
+    abertura: instanteDe(data, "00:00"),
+    fechamento: somarMinutos(instanteDe(data, "00:00"), 24 * 60),
+  };
 
   const ocupacoes = await ocupacoesEntre(
     entrada.salaId,
@@ -428,11 +443,11 @@ export async function validarReserva(entrada: {
     entrada.inicio,
     entrada.fim,
     sala,
-    expediente,
+    janela,
     ocupacoes,
     parametros,
     new Date(),
-    entrada.modo ?? "CLIENTE",
+    modo,
   );
 }
 
@@ -462,14 +477,14 @@ function avaliar(
     );
   }
 
-  if (inicio < expediente.abertura) {
+  if (modo === "CLIENTE" && inicio < expediente.abertura) {
     return recusar(
       "ANTES_DA_ABERTURA",
       `O coworking abre às ${horaLocalDe(expediente.abertura)} neste dia.`,
     );
   }
 
-  if (fim > expediente.fechamento) {
+  if (modo === "CLIENTE" && fim > expediente.fechamento) {
     return recusar(
       "DEPOIS_DO_FECHAMENTO",
       `O coworking fecha às ${horaLocalDe(expediente.fechamento)} neste dia.`,

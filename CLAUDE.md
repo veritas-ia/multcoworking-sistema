@@ -25,6 +25,11 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Intervalo obrigatório de 30 min entre reservas da MESMA sala, simétrico (antes e depois).
 - O intervalo NÃO se aplica contra abertura/fechamento: reserva pode terminar no horário de fechamento.
 - Bloqueios administrativos NÃO exigem intervalo de 30 min.
+- A recepção (origem ADMIN) pode lançar reserva AVULSA em dia fechado e fora do
+  horário de funcionamento — é para evento pontual que a equipe sabe que vai abrir.
+  O CLIENTE na área pública continua sem poder. Uma RECORRÊNCIA, porém, PULA os dias
+  fechados e informa quantos pulou: uma série de meses não pode criar reservas em
+  feriados e domingos sozinha.
 - Proibido sobrepor reservas na mesma sala. Trava no banco, não só na aplicação.
 - Cliente pode cancelar/reagendar apenas com mais de 12h de antecedência.
 - Admin pode cancelar/reagendar sempre, inclusive dentro das 12h.
@@ -98,6 +103,24 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Lembrete cujo horário já passou no momento da criação não é enviado; fica registrado como "não aplicável".
 - Ao reagendar, os campos de lembrete são zerados e os lembretes valem para o novo horário. A regra "uma vez só" passa a valer por horário agendado, não por reserva na vida toda.
 - Seis templates de mensagem editáveis no painel: código de verificação, reserva confirmada, reserva cancelada, reserva reagendada, lembrete 24h, lembrete 2h. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}}. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+
+### Bloqueios e recorrências (Fase 9)
+- Bloquear várias salas de uma vez (feriado) cria um bloqueio por sala, todos no mesmo
+  grupo. Na hora de remover, a equipe escolhe "só desta sala" ou "o feriado inteiro".
+- Bloqueio sobre reserva ativa é recusado: o sistema mostra as reservas afetadas e
+  exige que cada uma seja cancelada ou remarcada antes. É tudo ou nada — não existe
+  bloquear metade do feriado.
+- Recorrência é sempre por DIA DA SEMANA, nunca por dia do número do mês. Frequências:
+  toda semana, a cada 2 semanas, ou uma vez por mês escolhendo "primeira/segunda/
+  terceira/última [dia da semana]". Data de início e de fim são obrigatórias.
+- Uma série pode ter VÁRIOS dias da semana ao mesmo tempo (ex.: terça e quarta).
+- Ocorrência que esbarra em horário ocupado é pulada, nunca derruba a série. No fim
+  sai um relatório do que entrou e do que ficou de fora, com o motivo.
+- Cada ocorrência é uma reserva normal ligada à série. Dá para cancelar uma só ou a
+  série inteira — o sistema pergunta qual.
+- O que a recepção NUNCA contorna, nem avulso nem em série: sobreposição de horário e
+  o intervalo de 30 min entre reservas. Isso é integridade da agenda, garantida pelo
+  próprio PostgreSQL.
 
 ### Painel
 - Um único nível de acesso (admin). Vários usuários possíveis. O primeiro é criado por um comando de instalação. Sem recuperação de senha por e-mail no MVP: a troca é feita por outro admin.

@@ -48,6 +48,17 @@ enum ChaveTemplate {
   lembrete_2h
 }
 
+/// De quanto em quanto tempo uma serie se repete (Fase 9).
+/// A base e SEMPRE dia da semana, nunca dia do numero do mes.
+enum FrequenciaRecorrencia {
+  /// Toda semana, nos dias escolhidos.
+  SEMANAL
+  /// A cada duas semanas, contadas a partir da data de inicio.
+  QUINZENAL
+  /// Uma vez por mes: "a primeira terca", "a ultima sexta"...
+  MENSAL
+}
+
 /// Usado apenas na tabela tecnica de ocupacao.
 enum TipoOcupacao {
   RESERVA
@@ -105,7 +116,8 @@ model Usuario {
 
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
 
-  bloqueiosCriados Bloqueio[]
+  bloqueiosCriados    Bloqueio[]
+  recorrenciasCriadas Recorrencia[]
 
   @@map("usuarios")
 }
@@ -194,6 +206,10 @@ model Bloqueio {
   /// Motivo interno. NUNCA aparece em endpoint publico.
   motivo String?
 
+  /// Bloqueios criados juntos (ex.: um feriado em todas as salas) compartilham
+  /// este identificador, para poderem ser removidos de uma vez so.
+  grupoId String? @map("grupo_id")
+
   criadoPorId String?  @map("criado_por_id")
   criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: SetNull)
 
@@ -201,6 +217,7 @@ model Bloqueio {
 
   @@index([salaId, inicio])
   @@index([criadoPorId])
+  @@index([grupoId])
   @@map("bloqueios")
 }
 
@@ -213,21 +230,32 @@ model Recorrencia {
   nomeCliente String @map("nome_cliente")
   telefone    String
 
-  /// 0 = domingo ... 6 = sabado.
-  diaDaSemana Int    @map("dia_da_semana")
+  /// Um ou mais dias da semana: 0 = domingo ... 6 = sabado.
+  /// Uma serie pode ser "terca E quarta" — dai ser lista, e nao um numero so.
+  diasDaSemana Int[]  @map("dias_da_semana")
   /// "HH:MM" no fuso de Sao Paulo.
-  horaInicio  String @map("hora_inicio") @db.VarChar(5)
-  horaFim     String @map("hora_fim") @db.VarChar(5)
+  horaInicio   String @map("hora_inicio") @db.VarChar(5)
+  horaFim      String @map("hora_fim") @db.VarChar(5)
 
-  dataInicio DateTime  @map("data_inicio") @db.Date
-  dataFim    DateTime? @map("data_fim") @db.Date
-  ativa      Boolean   @default(true)
+  frequencia FrequenciaRecorrencia
+  /// So na frequencia MENSAL: 1, 2, 3 = primeira/segunda/terceira do mes;
+  /// -1 = ultima. Nulo nas outras frequencias.
+  semanaDoMes Int? @map("semana_do_mes")
+
+  dataInicio DateTime @map("data_inicio") @db.Date
+  /// Obrigatoria: toda serie tem fim (decisao da Fase 9).
+  dataFim    DateTime @map("data_fim") @db.Date
+  ativa      Boolean  @default(true)
+
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: SetNull)
 
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
 
   reservas Reserva[]
 
-  @@index([salaId, diaDaSemana])
+  @@index([salaId])
+  @@index([criadoPorId])
   @@map("recorrencias")
 }
 

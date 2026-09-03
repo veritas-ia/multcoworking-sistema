@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { buscarAgendaAdmin } from "./api";
 import { NovaReserva } from "./nova-reserva";
+import { NovoBloqueio } from "./novo-bloqueio";
 import { PainelDaReserva } from "./painel-da-reserva";
 import { VISOES, type ItemDaAgenda, type Visao } from "./tipos";
 import { VisaoDiaria } from "./visao-diaria";
@@ -49,6 +50,8 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
 
   const [itemAberto, setItemAberto] = useState<ItemDaAgenda | null>(null);
   const [criandoReserva, setCriandoReserva] = useState(false);
+  const [criandoBloqueio, setCriandoBloqueio] = useState(false);
+  const [recado, setRecado] = useState<string | null>(null);
 
   const periodo = useMemo(() => faixaDaVisao(visao, data), [visao, data]);
 
@@ -159,13 +162,22 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
             ))}
           </div>
 
-          <Botao
-            aparencia="primario"
-            largura="conteudo"
-            onClick={() => setCriandoReserva(true)}
-          >
-            + Nova reserva
-          </Botao>
+          <div className="flex flex-wrap gap-2">
+            <Botao
+              aparencia="primario"
+              largura="conteudo"
+              onClick={() => setCriandoReserva(true)}
+            >
+              + Nova reserva
+            </Botao>
+            <Botao
+              aparencia="secundario"
+              largura="conteudo"
+              onClick={() => setCriandoBloqueio(true)}
+            >
+              + Bloqueio
+            </Botao>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -224,6 +236,14 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
       </div>
 
       {/* --- conteudo --- */}
+      <div role="status" aria-live="polite">
+        {recado ? (
+          <p className="rounded-lg border border-border bg-brand/20 p-3 text-sm font-medium text-text-primary">
+            {recado}
+          </p>
+        ) : null}
+      </div>
+
       {erro ? <AvisoDeErro mensagem={erro} aoTentarDeNovo={recarregar} /> : null}
 
       {itens === null ? (
@@ -279,9 +299,28 @@ export function AgendaDoPainel({ hoje }: { hoje: string }) {
           salaInicial={salaId || undefined}
           aoCriar={() => {
             setCriandoReserva(false);
+            setRecado("Reserva lançada. O cliente recebeu a confirmação no WhatsApp.");
             recarregar();
           }}
           aoFechar={() => setCriandoReserva(false)}
+        />
+      ) : null}
+
+      {criandoBloqueio ? (
+        <NovoBloqueio
+          salas={salas}
+          dataInicial={visao === "mes" ? `${mesDe(data)}-01` : data}
+          salaInicial={salaId || undefined}
+          aoCriar={(quantas) => {
+            setCriandoBloqueio(false);
+            setRecado(
+              quantas === 1
+                ? "Bloqueio criado."
+                : `Bloqueio criado em ${quantas} salas.`,
+            );
+            recarregar();
+          }}
+          aoFechar={() => setCriandoBloqueio(false)}
         />
       ) : null}
     </div>

@@ -356,15 +356,19 @@ describe("criar reserva pela recepcao", () => {
     expect(comFolga.status).toBe(201);
   });
 
-  it("NAO deixa marcar em dia fechado", async () => {
+  it("DEIXA marcar em dia fechado (regra mudou na Fase 9)", async () => {
     // 2026-10-09 e uma sexta, e sexta o coworking nao abre.
+    //
+    // Ate a Fase 8 isto era recusado. Na Fase 9 o dono do projeto liberou o
+    // expediente para a recepcao: e o caso do evento pontual que a equipe
+    // sabe que vai abrir. O CLIENTE continua barrado — ver tests/bloqueios.test.ts.
     const resposta = await criarPelaRecepcao({
       data: "2026-10-09",
       inicio: "10:00",
       fim: "11:00",
     });
 
-    expect(resposta.status).toBe(422);
+    expect(resposta.status).toBe(201);
   });
 
   it("recusa telefone mal digitado", async () => {

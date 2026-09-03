@@ -91,3 +91,96 @@ export function reagendarComoAdmin(
     body: JSON.stringify(entrada),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Bloqueios (Fase 9)
+// -----------------------------------------------------------------------------
+
+export type ReservaNoCaminho = {
+  id: string;
+  sala: string;
+  nomeCliente: string;
+  telefone?: string;
+  data: string;
+  inicio: string;
+  fim: string;
+  status?: string;
+};
+
+export type BloqueioDetalhado = {
+  id: string;
+  salaId: string;
+  sala: string;
+  data: string;
+  dataFim: string;
+  inicio: string;
+  fim: string;
+  motivo: string | null;
+  grupoId: string | null;
+  /** Quantas salas o feriado cobre. 1 = bloqueio de uma sala so. */
+  salasNoGrupo: number;
+};
+
+export type DadosDoBloqueio = {
+  salaIds: string[];
+  data: string;
+  dataFim?: string;
+  inicio: string;
+  fim: string;
+  motivo?: string;
+};
+
+/** Quais reservas atrapalhariam este bloqueio. Consultado ANTES de tentar. */
+export function conferirBloqueio(
+  entrada: Omit<DadosDoBloqueio, "motivo">,
+  sinal?: AbortSignal,
+): Promise<{ reservas: ReservaNoCaminho[] }> {
+  const busca = new URLSearchParams({
+    data: entrada.data,
+    inicio: entrada.inicio,
+    fim: entrada.fim,
+  });
+  if (entrada.dataFim) {
+    busca.set("dataFim", entrada.dataFim);
+  }
+  for (const salaId of entrada.salaIds) {
+    busca.append("salaId", salaId);
+  }
+  return pedir(`/api/admin/bloqueios?${busca}`, { signal: sinal });
+}
+
+export function criarBloqueio(
+  entrada: DadosDoBloqueio,
+): Promise<{ grupoId: string; ids: string[]; salas: string[] }> {
+  return pedir("/api/admin/bloqueios", {
+    method: "POST",
+    body: JSON.stringify(entrada),
+  });
+}
+
+export function buscarBloqueio(
+  id: string,
+  sinal?: AbortSignal,
+): Promise<BloqueioDetalhado> {
+  return pedir(`/api/admin/bloqueios/${id}`, { signal: sinal });
+}
+
+export function editarBloqueio(
+  id: string,
+  entrada: { data: string; dataFim?: string; inicio: string; fim: string; motivo?: string },
+): Promise<{ id: string }> {
+  return pedir(`/api/admin/bloqueios/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(entrada),
+  });
+}
+
+/** "oGrupoInteiro" apaga o feriado em todas as salas de uma vez. */
+export function removerBloqueio(
+  id: string,
+  oGrupoInteiro = false,
+): Promise<{ removidos: number }> {
+  return pedir(`/api/admin/bloqueios/${id}${oGrupoInteiro ? "?grupo=1" : ""}`, {
+    method: "DELETE",
+  });
+}
