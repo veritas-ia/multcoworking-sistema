@@ -38,10 +38,13 @@ enum StatusMensagem {
   FALHOU
 }
 
-/// As seis mensagens de WhatsApp do sistema.
+/// As sete mensagens de WhatsApp do sistema.
 enum ChaveTemplate {
   codigo_verificacao
   reserva_confirmada
+  /// Confirmacao de uma SERIE inteira, numa mensagem so (Fase 9).
+  /// Sem ela, uma serie de dois meses mandaria ~17 mensagens seguidas.
+  serie_confirmada
   reserva_cancelada
   reserva_reagendada
   lembrete_24h

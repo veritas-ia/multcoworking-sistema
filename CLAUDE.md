@@ -102,7 +102,12 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Preço é informativo no MVP ("valor estimado"), sem pagamento online. O valor fica congelado na reserva no momento da criação; aumento futuro de preço não altera reservas antigas.
 - Lembrete cujo horário já passou no momento da criação não é enviado; fica registrado como "não aplicável".
 - Ao reagendar, os campos de lembrete são zerados e os lembretes valem para o novo horário. A regra "uma vez só" passa a valer por horário agendado, não por reserva na vida toda.
-- Seis templates de mensagem editáveis no painel: código de verificação, reserva confirmada, reserva cancelada, reserva reagendada, lembrete 24h, lembrete 2h. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}}. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+- Sete templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 24h, lembrete 2h. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+- Criar uma série recorrente manda UMA mensagem só, resumindo a série (sala, dias da
+  semana, horário, período e quantas datas) — não uma por ocorrência. Uma série de dois
+  meses mandaria ~17 mensagens seguidas, que parece defeito para o cliente e arrisca o
+  limite de rajada do WhatsApp. Os LEMBRETES (24h e 2h) continuam individuais, um por
+  ocorrência.
 
 ### Bloqueios e recorrências (Fase 9)
 - Bloquear várias salas de uma vez (feriado) cria um bloqueio por sala, todos no mesmo

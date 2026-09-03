@@ -211,10 +211,16 @@ uma vez, basta trocar o `ADMIN_SESSAO_SEGREDO`.
 
 ---
 
-## 8. Volume de WhatsApp numa série longa (anotado na Fase 9)
+## 8. ~~Volume de WhatsApp numa série longa~~ — RESOLVIDO na Fase 9
 
-**Como está hoje:** cada ocorrência de uma série dispara a mensagem de
-confirmação, como o texto da Fase 9 pediu. Uma série de terça e quarta por dois
+> **RESOLVIDO.** O dono do projeto escolheu a opção (a): uma mensagem só,
+> resumindo a série. Implementado com um template novo (`serie_confirmada`) e as
+> variáveis {{dias}}, {{periodo}} e {{quantidade}}. Os lembretes de 24h e 2h
+> continuam individuais por ocorrência. Há teste garantindo que 8 reservas geram
+> exatamente 1 mensagem. O registro abaixo fica como histórico da decisão.
+
+**Como era antes:** cada ocorrência de uma série disparava a mensagem de
+confirmação, como o texto original da Fase 9 pedia. Uma série de terça e quarta por dois
 meses cria ~17 reservas — e manda **~17 WhatsApps seguidos** para a mesma pessoa,
 em poucos segundos.
 
@@ -225,8 +231,8 @@ em poucos segundos.
   para o mesmo número; parte pode falhar ou o número pode ser penalizado;
 - o custo por mensagem, se houver, multiplica.
 
-**Implementei como estava escrito** — a instrução era explícita — mas vale
-decidir na revisão. Três saídas possíveis:
+**Foi implementado como estava escrito** — a instrução era explícita — e depois
+corrigido pela decisão do dono. As três saídas consideradas eram:
 
 - **(a) Uma mensagem só, resumindo a série:** "sua reserva de terça e quarta,
   das 9h às 10h, está confirmada de 06/10 a 30/11 (17 datas)". Exigiria um
@@ -235,11 +241,8 @@ decidir na revisão. Três saídas possíveis:
   Não resolve o incômodo do cliente, só o risco técnico.
 - **(c) Deixar como está**, se as séries forem raras e curtas.
 
-Minha sugestão é **(a)**, mas depende de como a equipe usa recorrência no dia a
-dia — se for uma série por mês, (c) resolve.
+**Escolhida: (a).** O CLAUDE.md foi atualizado — passou de seis para sete
+templates, e a regra da mensagem única ficou registrada junto.
 
-**Onde:** `src/app/api/admin/recorrencias/route.ts`, no laço que chama
-`dispararMensagem`.
-
-**Tamanho:** (a) médio, precisa de template novo. (b) pequeno. (c) nada.
+**Onde ficou:** `src/app/api/admin/recorrencias/route.ts`.
 

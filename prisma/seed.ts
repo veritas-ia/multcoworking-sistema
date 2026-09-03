@@ -177,6 +177,19 @@ const TEMPLATES = [
       "O pagamento é feito no local. Até lá!",
   },
   {
+    chave: ChaveTemplate.serie_confirmada,
+    descricao:
+      "Enviada UMA vez quando a equipe cria uma série de reservas repetidas.",
+    texto:
+      "Oi, {{nome}}! Suas reservas estão confirmadas. ✅\n\n" +
+      "📍 {{sala}}\n" +
+      "🔁 {{dias}}\n" +
+      "🕐 {{inicio}} às {{fim}}\n" +
+      "📅 De {{periodo}} — {{quantidade}} datas\n\n" +
+      "Você recebe um lembrete antes de cada uma. " +
+      "O pagamento é feito no local. Até lá!",
+  },
+  {
     chave: ChaveTemplate.reserva_cancelada,
     descricao:
       "Enviada quando a reserva é cancelada, seja pelo cliente ou pela equipe.",

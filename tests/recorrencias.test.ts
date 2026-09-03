@@ -29,7 +29,7 @@ import {
 } from "@/lib/datas-recorrencia";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { dataLocalDe, instanteDe } from "@/lib/tempo";
-import { aguardarEnviosPendentes } from "@/lib/whatsapp";
+import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
 import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
@@ -588,5 +588,87 @@ describe("cancelar uma ocorrência ou a série", () => {
     expect(resumo.total).toBe(4);
     expect(resumo.futurasAtivas).toBe(4);
     expect(resumo.resumo).toBe("toda terça");
+  });
+});
+
+// =============================================================================
+// 5. UMA mensagem para a serie inteira
+// =============================================================================
+
+describe("WhatsApp da série", () => {
+  it("manda UMA mensagem só, não uma por ocorrência", async () => {
+    const corpo = await (
+      await criarSeriePelaRota({
+        diasDaSemana: [2, 3],
+        frequencia: "SEMANAL",
+        dataInicio: "2026-10-06",
+        dataFim: "2026-10-31",
+      })
+    ).json();
+
+    expect(corpo.criadas).toHaveLength(8);
+
+    await aguardarEnviosPendentes();
+
+    const enviadas = await bancoDeTeste.logMensagem.findMany({
+      where: { telefone: CLIENTE },
+    });
+
+    // Oito reservas, UMA mensagem.
+    expect(enviadas).toHaveLength(1);
+    expect(enviadas[0]?.tipo).toBe("serie_confirmada");
+  });
+
+  it("o texto da mensagem resume a série: dias, horário, período e quantidade", async () => {
+    // O LogMensagem guarda quem/qual/quando, mas NAO o texto enviado. Entao
+    // aqui a gente monta a mensagem com o modelo real do banco e as mesmas
+    // variaveis que a rota usa, e confere o que o cliente leria.
+    const modelo = await bancoDeTeste.templateMensagem.findUniqueOrThrow({
+      where: { chave: "serie_confirmada" },
+    });
+
+    const texto = renderizarTemplate(modelo.texto, {
+      nome: "Cliente Recorrente",
+      sala: "Sala CI",
+      dias: serieporExtenso({
+        diasDaSemana: [2, 3],
+        frequencia: "SEMANAL",
+        dataInicio: "2026-10-06",
+        dataFim: "2026-10-31",
+      }),
+      inicio: "09:00",
+      fim: "10:00",
+      periodo: "06/10 a 28/10",
+      quantidade: "8",
+    });
+
+    expect(texto).toContain("Sala CI");
+    expect(texto).toContain("terça e quarta");
+    expect(texto).toContain("09:00");
+    expect(texto).toContain("06/10 a 28/10");
+    expect(texto).toContain("8 datas");
+    // Nenhuma variavel ficou por trocar.
+    expect(texto).not.toContain("{{");
+  });
+
+  it("série sem nenhuma ocorrência criada não manda mensagem nenhuma", async () => {
+    // So sextas: o coworking nao abre, entao nada e criado.
+    const corpo = await (
+      await criarSeriePelaRota({
+        diasDaSemana: [5],
+        frequencia: "SEMANAL",
+        dataInicio: "2026-10-06",
+        dataFim: "2026-10-31",
+      })
+    ).json();
+
+    expect(corpo.criadas).toHaveLength(0);
+
+    await aguardarEnviosPendentes();
+
+    const enviadas = await bancoDeTeste.logMensagem.count({
+      where: { telefone: CLIENTE },
+    });
+    expect(enviadas).toBe(0);
   });
 });

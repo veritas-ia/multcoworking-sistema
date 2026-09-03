@@ -293,6 +293,10 @@ pulados de proposito — uma serie de meses nao pode criar reservas em dia de po
 trancada. Se for um evento especial, lance como reserva avulsa: a recepcao pode
 marcar em dia fechado.
 
+**O WhatsApp da serie e UMA mensagem so**, resumindo tudo: sala, dias da semana,
+horario, periodo e quantas datas. Nao sao 17 mensagens seguidas. Os **lembretes**
+de 24h e 2h continuam individuais, um antes de cada data.
+
 **Na agenda**, as ocorrencias de uma serie aparecem com o simbolo **⟳** ao lado
 do nome.
 

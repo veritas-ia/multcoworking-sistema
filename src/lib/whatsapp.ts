@@ -24,6 +24,13 @@ export type VariaveisMensagem = {
   fim?: string;
   valor?: string;
   codigo?: string;
+  // --- so na mensagem de serie (Fase 9) ---
+  /** "terça e quarta" — os dias da semana da serie, por extenso. */
+  dias?: string;
+  /** "06/10 a 30/11" — o periodo da serie. */
+  periodo?: string;
+  /** "17" — quantas datas entraram de verdade. */
+  quantidade?: string;
 };
 
 export type ResultadoEnvio = {

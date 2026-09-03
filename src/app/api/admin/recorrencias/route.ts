@@ -4,11 +4,11 @@ import { z } from "zod";
 
 import { ChaveTemplate } from "@/generated/prisma/enums";
 import { lerCorpo, respostaErro } from "@/lib/api";
-import { serieporExtenso } from "@/lib/datas-recorrencia";
+import { serieporExtenso, type Frequencia, type SemanaDoMes } from "@/lib/datas-recorrencia";
 import { prisma } from "@/lib/prisma";
 import { criarSerie } from "@/lib/recorrencias";
 import { normalizarTelefone } from "@/lib/telefone";
-import { dataLocalDe, horaLocalDe } from "@/lib/tempo";
+
 import { dispararMensagem } from "@/lib/whatsapp";
 
 import { operadorDaRequisicao } from "../operador";
@@ -85,29 +85,30 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     select: { nome: true },
   });
 
-  // Cada ocorrencia avisa o cliente, como manda a Fase 9. Os envios saem em
-  // fila, sem segurar a resposta desta rota.
-  for (const ocorrencia of resultado.dados.criadas) {
-    const reserva = await prisma.reserva.findUnique({
-      where: { id: ocorrencia.id },
-      select: { inicio: true, fim: true, valor: true },
-    });
-
-    if (!reserva) {
-      continue;
-    }
+  // UMA mensagem para a serie inteira, nao uma por ocorrencia.
+  //
+  // Mandar 17 confirmacoes seguidas para a mesma pessoa parecia defeito do
+  // sistema e arriscava o limite de rajada do WhatsApp. Os LEMBRETES (24h e 2h)
+  // continuam individuais, um por ocorrencia — esses fazem sentido separados.
+  if (resultado.dados.criadas.length > 0) {
+    const datas = resultado.dados.criadas.map((ocorrencia) => ocorrencia.data);
+    const primeira = datas[0] ?? corpo.data.dataInicio;
+    const ultima = datas[datas.length - 1] ?? corpo.data.dataFim;
 
     dispararMensagem({
-      chave: ChaveTemplate.reserva_confirmada,
+      chave: ChaveTemplate.serie_confirmada,
       telefone,
-      reservaId: ocorrencia.id,
+      // A serie inteira fica registrada na primeira ocorrencia: o LogMensagem
+      // aponta para uma reserva de verdade, e nao para lugar nenhum.
+      reservaId: resultado.dados.criadas[0]?.id ?? null,
       variaveis: {
         nome: corpo.data.nome,
         sala: sala?.nome ?? "",
-        data: dataLocalDe(reserva.inicio),
-        inicio: horaLocalDe(reserva.inicio),
-        fim: horaLocalDe(reserva.fim),
-        valor: `R$ ${reserva.valor.toFixed(2).replace(".", ",")}`,
+        dias: diasPorExtenso(corpo.data.diasDaSemana, corpo.data.frequencia, corpo.data.semanaDoMes ?? null),
+        inicio: corpo.data.inicio,
+        fim: corpo.data.fim,
+        periodo: `${emDiaEMes(primeira)} a ${emDiaEMes(ultima)}`,
+        quantidade: String(resultado.dados.criadas.length),
       },
     });
   }
@@ -127,4 +128,25 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     },
     { status: 201 },
   );
+}
+
+/** "2026-10-06" -> "06/10". */
+function emDiaEMes(data: string): string {
+  const [, mes, dia] = data.split("-");
+  return `${dia}/${mes}`;
+}
+
+/** "toda terça e quarta" -> "terça e quarta"; a frequência entra junto. */
+function diasPorExtenso(
+  diasDaSemana: number[],
+  frequencia: Frequencia,
+  semanaDoMes: SemanaDoMes | null,
+): string {
+  return serieporExtenso({
+    diasDaSemana,
+    frequencia,
+    semanaDoMes,
+    dataInicio: "",
+    dataFim: "",
+  });
 }
