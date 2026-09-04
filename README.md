@@ -378,6 +378,34 @@ npm run dev
 
 **Nunca rode `npm install` com o `npm run dev` aberto.**
 
+## Colocar no ar
+
+O passo a passo completo esta em **[docs/deploy.md](./docs/deploy.md)**, escrito
+para ser seguido por quem nao programa: criar o banco e o app no EasyPanel,
+preencher as variaveis, apontar o subdominio com HTTPS, rodar a carga inicial e
+fazer backup.
+
+Resumo tecnico:
+
+| Peca | Como e |
+| --- | --- |
+| Imagem | `Dockerfile` na raiz, tres etapas, ~520 MB, roda sem privilegios |
+| Porta | 3000 |
+| Saude | `GET /api/saude` — confere tambem se o banco responde |
+| Migracoes | Aplicadas pelo `docker-entrypoint.sh` quando o container sobe |
+| Carga inicial | `npx prisma db seed --config prisma7.config.ts`, uma vez so |
+
+Para experimentar a imagem no seu computador:
+
+```bash
+docker build -t mult-coworking .
+docker run --rm -p 3000:3000 \
+  -e DATABASE_URL="postgresql://..." \
+  -e APP_URL="http://localhost:3000" \
+  -e ADMIN_SESSAO_SEGREDO="pelo-menos-32-caracteres-aqui" \
+  mult-coworking
+```
+
 ## Observacoes
 
 - O banco local usa a porta **5434** (a 5432 ja esta ocupada por outro projeto nesta maquina).
