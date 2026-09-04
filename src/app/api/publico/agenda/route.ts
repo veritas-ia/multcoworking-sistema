@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { carregarParametros } from "@/lib/disponibilidade";
 import { prisma } from "@/lib/prisma";
+import { textosParaOSite } from "@/lib/politicas";
 import { dataLocalDe, somarMinutos } from "@/lib/tempo";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ export type RespostaAgenda = {
   duracaoMinimaMinutos: number;
   /** Horas de antecedencia para o cliente cancelar sozinho (a regra das 12h). */
   janelaCancelamentoHoras: number;
+  /** Textos de politica editaveis no painel, com {{horas}} ja trocado. */
+  textos: { politicaCancelamento: string; avisoDoValor: string };
 };
 
 /**
@@ -45,6 +48,8 @@ export async function GET(): Promise<NextResponse<RespostaAgenda>> {
     prisma.horarioFuncionamento.findMany({ orderBy: { diaDaSemana: "asc" } }),
     carregarParametros(),
   ]);
+
+  const textos = await textosParaOSite(parametros.janelaCancelamentoHoras);
 
   const agora = new Date();
 
@@ -72,5 +77,6 @@ export async function GET(): Promise<NextResponse<RespostaAgenda>> {
     antecedenciaMaximaDias: parametros.antecedenciaMaximaDias,
     duracaoMinimaMinutos: parametros.duracaoMinimaMinutos,
     janelaCancelamentoHoras: parametros.janelaCancelamentoHoras,
+    textos,
   });
 }

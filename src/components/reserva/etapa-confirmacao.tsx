@@ -61,7 +61,7 @@ export function EtapaConfirmacao({
         <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
           Enviamos a confirmação com todos os detalhes
           {telefoneMascarado ? ` para ${telefoneMascarado}` : ""}. Você também
-          recebe lembretes 24 horas e 2 horas antes do horário.
+          recebe lembretes 13 horas e 3 horas antes do horário.
         </p>
       </div>
 

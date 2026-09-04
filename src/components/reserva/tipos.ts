@@ -24,6 +24,13 @@ export type Agenda = {
   antecedenciaMaximaDias: number;
   duracaoMinimaMinutos: number;
   janelaCancelamentoHoras: number;
+  /** Textos de politica editaveis no painel, ja com as variaveis trocadas. */
+  textos: TextosDePolitica;
+};
+
+export type TextosDePolitica = {
+  politicaCancelamento: string;
+  avisoDoValor: string;
 };
 
 export type Bloco = {

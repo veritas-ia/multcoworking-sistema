@@ -130,20 +130,20 @@ export function LinhaDeResumo({
   );
 }
 
-/** O texto da regra de 12h, mostrado antes de confirmar. */
-export function PoliticaDeCancelamento({ horas }: { horas: number }) {
+/**
+ * A politica de cancelamento, mostrada antes de confirmar.
+ *
+ * O texto vem pronto do servidor (editavel no painel, Fase 11) — esta tela nao
+ * sabe qual e o prazo nem precisa saber.
+ */
+export function PoliticaDeCancelamento({ texto }: { texto: string }) {
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-4">
       <h2 className="text-sm font-bold text-text-primary">
         Política de cancelamento
       </h2>
-      <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-        Você pode cancelar ou remarcar sozinho até{" "}
-        <strong className="font-semibold text-text-primary">
-          {horas} horas antes
-        </strong>{" "}
-        do início da reserva. Depois disso, é só falar com a equipe pelo
-        WhatsApp. O pagamento é feito no local — não há cobrança online.
+      <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-line text-text-secondary">
+        {texto}
       </p>
     </div>
   );

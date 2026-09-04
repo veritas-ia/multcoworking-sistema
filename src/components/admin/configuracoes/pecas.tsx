@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import type { ReactNode } from "react";
 
 import { Botao } from "@/components/ui/botao";
@@ -113,6 +114,51 @@ export function BarraDeSalvar({
       >
         {situacao.tipo === "salvando" ? "Salvando…" : rotulo}
       </Botao>
+    </div>
+  );
+}
+
+/** Campo de varias linhas, com etiqueta, contador e explicacao. */
+export function AreaDeTexto({
+  etiqueta,
+  valor,
+  aoMudar,
+  ajuda,
+  maximo,
+  linhas = 4,
+}: {
+  etiqueta: string;
+  valor: string;
+  aoMudar: (texto: string) => void;
+  ajuda?: ReactNode;
+  maximo: number;
+  linhas?: number;
+}) {
+  const id = useId();
+  const idAjuda = `${id}-ajuda`;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-sm font-semibold text-text-primary">
+        {etiqueta}
+      </label>
+
+      <textarea
+        id={id}
+        rows={linhas}
+        value={valor}
+        maxLength={maximo}
+        aria-describedby={ajuda ? idAjuda : undefined}
+        onChange={(evento) => aoMudar(evento.target.value)}
+        className="w-full rounded-lg border border-border bg-bg-primary px-4 py-3 text-base leading-relaxed text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+      />
+
+      <div className="flex flex-wrap justify-between gap-2 text-sm text-text-secondary">
+        {ajuda ? <p id={idAjuda}>{ajuda}</p> : <span />}
+        <span className="shrink-0 tabular-nums">
+          {valor.length}/{maximo}
+        </span>
+      </div>
     </div>
   );
 }

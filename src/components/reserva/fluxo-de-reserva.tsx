@@ -429,6 +429,7 @@ export function FluxoDeReserva({
             nome={nome.trim()}
             telefoneMascarado={telefoneMascarado}
             janelaCancelamentoHoras={iniciais.agenda.janelaCancelamentoHoras}
+            textos={iniciais.agenda.textos}
             enviando={confirmando}
             erro={erroDoResumo}
             aoConfirmar={() => void confirmar()}

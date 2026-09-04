@@ -172,3 +172,31 @@ export function salvarHorarios(
     body: JSON.stringify({ horarios }),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Politicas (textos que o cliente le no site)
+// -----------------------------------------------------------------------------
+
+export type DefinicaoPolitica = {
+  chave: string;
+  rotulo: string;
+  ajuda: string;
+  variaveis: string[];
+  padrao: string;
+  maximo: number;
+};
+
+export type RespostaDePoliticas = {
+  definicoes: DefinicaoPolitica[];
+  textos: Record<string, string>;
+};
+
+export function buscarPoliticas(sinal?: AbortSignal): Promise<RespostaDePoliticas> {
+  return pedir("/api/admin/politicas", { signal: sinal });
+}
+
+export function salvarPoliticas(
+  textos: Record<string, string>,
+): Promise<RespostaDePoliticas> {
+  return pedir("/api/admin/politicas", { method: "PATCH", body: JSON.stringify(textos) });
+}

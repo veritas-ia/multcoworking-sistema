@@ -1,5 +1,6 @@
 /** Conversa da area "Minhas reservas" com o servidor. */
 import { ErroDaApi } from "@/components/reserva/api";
+import type { TextosDePolitica } from "@/components/reserva/tipos";
 
 export type ReservaDoCliente = {
   id: string;
@@ -18,6 +19,7 @@ export type ListaDeReservas = {
   futuras: ReservaDoCliente[];
   historico: ReservaDoCliente[];
   janelaCancelamentoHoras: number;
+  textos: TextosDePolitica;
 };
 
 type CorpoDeErro = { erro?: string; codigo?: string };

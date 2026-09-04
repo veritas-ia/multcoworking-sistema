@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { respostaErro } from "@/lib/api";
+import { textosParaOSite } from "@/lib/politicas";
 import { listarDoTelefone, type ReservaNaLista } from "@/lib/minhas-reservas";
 import { telefoneDaSessao } from "@/lib/sessao-cliente";
 import { dataLocalDe, horaLocalDe } from "@/lib/tempo";
@@ -44,6 +45,7 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     futuras: futuras.map(paraTela),
     historico: historico.map(paraTela),
     janelaCancelamentoHoras: janelaHoras,
+    textos: await textosParaOSite(janelaHoras),
   });
 }
 

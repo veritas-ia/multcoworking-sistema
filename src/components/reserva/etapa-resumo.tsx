@@ -13,7 +13,7 @@ import {
   valorEstimadoEmCentavos,
 } from "./datas";
 import { LinhaDeResumo, PoliticaDeCancelamento, TituloDaEtapa } from "./pecas";
-import type { Sala } from "./tipos";
+import type { Sala, TextosDePolitica } from "./tipos";
 
 type Props = {
   sala: Sala;
@@ -23,6 +23,7 @@ type Props = {
   nome: string;
   telefoneMascarado: string | null;
   janelaCancelamentoHoras: number;
+  textos: TextosDePolitica;
   enviando: boolean;
   erro: string | null;
   aoConfirmar: () => void;
@@ -37,6 +38,7 @@ export function EtapaResumo({
   nome,
   telefoneMascarado,
   janelaCancelamentoHoras,
+  textos,
   enviando,
   erro,
   aoConfirmar,
@@ -79,12 +81,11 @@ export function EtapaResumo({
         />
       </dl>
 
-      <p className="text-sm text-text-secondary">
-        O valor é uma estimativa e o pagamento é feito no local. Não há cobrança
-        pelo site.
+      <p className="text-sm whitespace-pre-line text-text-secondary">
+        {textos.avisoDoValor}
       </p>
 
-      <PoliticaDeCancelamento horas={janelaCancelamentoHoras} />
+      <PoliticaDeCancelamento texto={textos.politicaCancelamento} />
 
       <div className="flex items-start gap-3 rounded-lg border border-border bg-bg-primary p-4">
         <input

@@ -283,7 +283,7 @@ export function AreaDoCliente() {
           )}
         </section>
 
-        <PoliticaDeCancelamento horas={lista.janelaCancelamentoHoras} />
+        <PoliticaDeCancelamento texto={lista.textos.politicaCancelamento} />
 
         {lista.historico.length > 0 ? (
           <section className="flex flex-col gap-3">
