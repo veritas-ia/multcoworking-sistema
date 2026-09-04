@@ -21,6 +21,22 @@ export function pedidoPost(
   });
 }
 
+/** Monta um pedido PATCH com corpo JSON. */
+export function pedidoPatch(
+  caminho: string,
+  corpo: unknown,
+  opcoes: { cookie?: string } = {},
+): NextRequest {
+  const lista = cabecalhos(opcoes);
+  lista.set("Content-Type", "application/json");
+
+  return new NextRequest(`${BASE}${caminho}`, {
+    method: "PATCH",
+    headers: lista,
+    body: JSON.stringify(corpo),
+  });
+}
+
 /** Monta um pedido GET com parametros de busca. */
 export function pedidoGet(
   caminho: string,

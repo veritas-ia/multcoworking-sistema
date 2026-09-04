@@ -40,21 +40,45 @@ export default async function PaginaDoPainel() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-5 px-4 py-16 text-center">
-        <h2 className="text-2xl font-bold tracking-tight text-text-primary">
-          Painel — em construção
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 py-8">
+        <h2 className="text-xl font-bold tracking-tight text-text-primary">
+          O que você quer fazer?
         </h2>
-        <p className="max-w-md text-sm text-text-secondary">
-          A agenda já está pronta. Bloqueios, recorrências e configurações
-          chegam nas próximas fases.
-        </p>
-        <Link
-          href="/admin/agenda"
-          className="inline-flex min-h-12 items-center justify-center rounded-lg bg-brand px-6 text-base font-semibold text-brand-foreground hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-        >
-          Abrir a agenda
-        </Link>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Atalho
+            href="/admin/agenda"
+            titulo="Agenda"
+            descricao="Ver o dia, a semana ou o mês. Lançar reserva, bloquear horário e criar série."
+          />
+          <Atalho
+            href="/admin/configuracoes"
+            titulo="Configurações"
+            descricao="Salas e preços, horário de funcionamento, regras de reserva, mensagens do WhatsApp e usuários do painel."
+          />
+        </div>
       </main>
     </div>
+  );
+}
+
+/** Cartao de atalho da tela inicial do painel. */
+function Atalho({
+  href,
+  titulo,
+  descricao,
+}: {
+  href: string;
+  titulo: string;
+  descricao: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col gap-1.5 rounded-lg border border-border bg-bg-primary p-4 hover:border-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+    >
+      <span className="text-base font-bold text-text-primary">{titulo}</span>
+      <span className="text-sm leading-relaxed text-text-secondary">{descricao}</span>
+    </Link>
   );
 }
