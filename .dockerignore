@@ -1,0 +1,25 @@
+# O que NAO entra na imagem.
+#
+# Alem de deixar a construcao mais rapida, isto e uma protecao: o .env tem
+# senha de banco e a chave que assina o login do painel. Um .env copiado para
+# dentro da imagem viaja junto com ela para onde a imagem for.
+.env
+.env.*
+!.env.example
+
+node_modules
+.next
+.git
+.github
+
+# Cliente do Prisma: e gerado dentro da imagem, na versao certa para o Linux
+# do container. O da sua maquina nao serve.
+src/generated
+
+coverage
+*.log
+.DS_Store
+
+# Documentacao e notas nao mudam o que o site faz.
+*.md
+!docs/**

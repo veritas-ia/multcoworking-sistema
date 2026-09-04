@@ -44,6 +44,10 @@ const CABECALHOS_COMUNS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Gera um pacote que se basta: o Next copia para dentro dele so o codigo
+  // que o site realmente usa. E o que permite a imagem de producao dispensar
+  // as centenas de megabytes de node_modules (ver o Dockerfile).
+  output: "standalone",
   serverExternalPackages: ["pg", "@prisma/adapter-pg"],
   // Esconde o "X-Powered-By: Next.js", que so serve para contar a quem estiver
   // procurando alvo qual e a tecnologia e a versao do site.

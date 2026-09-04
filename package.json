@@ -2,6 +2,9 @@
   "name": "coworking-reservas",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "predev": "node scripts/checar-porta.mjs",
     "dev": "next dev",
@@ -19,7 +22,8 @@
     "db:reset": "prisma migrate reset",
     "reservas-de-teste": "tsx scripts/reservas-de-teste.ts",
     "criar-admin": "tsx scripts/criar-admin.ts",
-    "db:teste": "sh scripts/preparar-banco-de-teste.sh"
+    "db:teste": "sh scripts/preparar-banco-de-teste.sh",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

@@ -12,6 +12,15 @@ import { enderecoDoSite } from "@/lib/marca";
  *
  * As rotas de API tambem ficam de fora: nao ha nada ali para uma pessoa ler.
  */
+/**
+ * Gerado a cada pedido, e nao uma vez na construcao da imagem.
+ *
+ * O endereco do site vem do APP_URL, que no EasyPanel so existe quando o
+ * container SOBE — na hora de construir a imagem ele ainda nao foi definido.
+ * Sem isto, o robots.txt sairia congelado com "localhost" dentro.
+ */
+export const dynamic = "force-dynamic";
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: {
