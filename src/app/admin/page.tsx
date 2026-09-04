@@ -6,12 +6,13 @@ import Link from "next/link";
 
 import { BotaoSair } from "@/components/admin/botao-sair";
 import { adminDoToken } from "@/lib/admin";
+import { NOME_DA_MARCA } from "@/lib/marca";
 import { COOKIE_ADMIN } from "@/lib/sessao-admin";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Painel | Coworking",
+  title: `Painel | ${NOME_DA_MARCA}`,
   robots: { index: false, follow: false },
 };
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
+import { NOME_DA_MARCA } from "@/lib/marca";
 
 import {
   buscarAgenda,
@@ -311,8 +312,10 @@ export function FluxoDeReserva({
               <span aria-hidden className="size-11 shrink-0" />
             )}
 
+            {/* Quem chega pelo Instagram precisa ver de cara ONDE esta. A etapa
+                atual ja aparece logo abaixo, na barra de progresso. */}
             <p className="flex-1 truncate text-base font-bold text-text-primary">
-              Reservar sala
+              {NOME_DA_MARCA}
             </p>
 
             <Link

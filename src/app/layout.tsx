@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { NOME_DA_MARCA } from "@/lib/marca";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Reservar sala | Coworking",
+  title: `Reservar sala | ${NOME_DA_MARCA}`,
   description:
     "Reserve a Sala CI, a Sala de Reunião ou a Sala Container em poucos toques.",
 };
