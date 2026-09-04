@@ -125,3 +125,50 @@ export function ligarOuDesligarSala(
     body: JSON.stringify({ ativa }),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Horario de funcionamento
+// -----------------------------------------------------------------------------
+
+export type DiaDeFuncionamento = {
+  diaDaSemana: number;
+  aberto: boolean;
+  horaAbertura: string | null;
+  horaFechamento: string | null;
+};
+
+export type ReservaForaDoHorario = {
+  id: string;
+  sala: string;
+  nomeCliente: string;
+  telefone: string;
+  data: string;
+  inicio: string;
+  fim: string;
+  status: string;
+  motivo: string;
+};
+
+export function buscarHorarios(
+  sinal?: AbortSignal,
+): Promise<{ horarios: DiaDeFuncionamento[] }> {
+  return pedir("/api/admin/horarios", { signal: sinal });
+}
+
+export function conferirHorarios(
+  horarios: DiaDeFuncionamento[],
+): Promise<{ reservas: ReservaForaDoHorario[] }> {
+  return pedir("/api/admin/horarios/conferir", {
+    method: "POST",
+    body: JSON.stringify({ horarios }),
+  });
+}
+
+export function salvarHorarios(
+  horarios: DiaDeFuncionamento[],
+): Promise<{ horarios: DiaDeFuncionamento[]; reservasForaDoHorario: ReservaForaDoHorario[] }> {
+  return pedir("/api/admin/horarios", {
+    method: "PUT",
+    body: JSON.stringify({ horarios }),
+  });
+}

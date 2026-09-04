@@ -100,7 +100,10 @@ async function criarHorarios(): Promise<void> {
     await prisma.horarioFuncionamento.upsert({
       where: { diaDaSemana: horario.diaDaSemana },
       create: { ...horario },
-      update: { ...horario },
+      // Dia que ja existe NAO e tocado: a partir da Fase 11 o horario de
+      // funcionamento e editavel no painel, e rodar o seed de novo nao pode
+      // desfazer o que a equipe ajustou.
+      update: {},
     });
   }
   anotar("7 dias de horário de funcionamento");

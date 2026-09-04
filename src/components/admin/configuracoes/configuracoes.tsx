@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 import { AbaDeParametros } from "./aba-parametros";
+import { AbaDeHorarios } from "./aba-horarios";
 import { AbaDeSalas } from "./aba-salas";
 
 type Aba = {
@@ -23,6 +24,7 @@ type Aba = {
  */
 const ABAS: readonly Aba[] = [
   { id: "salas", rotulo: "Salas", conteudo: () => <AbaDeSalas /> },
+  { id: "horarios", rotulo: "Horários", conteudo: () => <AbaDeHorarios /> },
   { id: "parametros", rotulo: "Parâmetros", conteudo: () => <AbaDeParametros /> },
 ];
 
