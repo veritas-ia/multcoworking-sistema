@@ -213,23 +213,23 @@ const TEMPLATES = [
       "Te esperamos!",
   },
   {
-    chave: ChaveTemplate.lembrete_24h,
-    descricao: "Lembrete automático enviado 24 horas antes da reserva.",
+    chave: ChaveTemplate.lembrete_13h,
+    descricao: "Lembrete automático enviado 13 horas antes da reserva.",
     texto:
-      "Oi, {{nome}}! Passando para lembrar da sua reserva de amanhã. 😊\n\n" +
+      "Oi, {{nome}}! Passando para lembrar da sua reserva. 😊\n\n" +
       "📍 {{sala}}\n" +
       "📅 {{data}}\n" +
       "🕐 {{inicio}} às {{fim}}\n\n" +
-      "Se precisar remarcar, é só acessar o site.",
+      "Precisa cancelar ou remarcar? É só acessar:\n{{link}}",
   },
   {
-    chave: ChaveTemplate.lembrete_2h,
-    descricao: "Lembrete automático enviado 2 horas antes da reserva.",
+    chave: ChaveTemplate.lembrete_3h,
+    descricao: "Lembrete automático enviado 3 horas antes da reserva.",
     texto:
       "Oi, {{nome}}! Sua reserva começa em breve. ⏰\n\n" +
       "📍 {{sala}}\n" +
       "🕐 Hoje, {{inicio}} às {{fim}}\n\n" +
-      "Até já!",
+      "Precisa cancelar ou remarcar? É só acessar:\n{{link}}",
   },
 ] as const;
 

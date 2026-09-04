@@ -246,3 +246,35 @@ templates, e a regra da mensagem única ficou registrada junto.
 
 **Onde ficou:** `src/app/api/admin/recorrencias/route.ts`.
 
+---
+
+## 9. O LogMensagem não guarda o texto enviado (anotado na Fase 9)
+
+**Como está hoje:** cada envio de WhatsApp vira uma linha em `LogMensagem` com
+**quem** recebeu, **qual template** foi usado, **quando**, se deu certo e o erro
+em caso de falha. O **texto exato** que o cliente leu não é guardado.
+
+**Por que isso incomoda:** os templates são editáveis no painel (Fase 11). Se a
+equipe mudar o texto de "reserva confirmada" hoje, não há como saber depois o que
+foi enviado na semana passada. Num atrito com cliente — "vocês me mandaram outro
+horário" — não existe prova.
+
+**Descoberto onde:** escrevendo o teste da mensagem única da série. Para conferir
+o conteúdo, o teste precisou remontar a mensagem a partir do modelo do banco, em
+vez de simplesmente ler o que foi enviado.
+
+**O que fazer, se for o caso:** uma coluna `texto` em `LogMensagem`, preenchida
+no envio. Custa uma migração e um campo a mais por mensagem — barato em espaço,
+já que as mensagens são curtas.
+
+**A decidir:** vale guardar? Se sim, por quanto tempo — a rotina de limpeza da
+Fase 10 poderia apagar logs antigos depois de X meses, para a tabela não crescer
+para sempre.
+
+**Onde:** `prisma/schema.prisma` (modelo `LogMensagem`) e `src/lib/whatsapp.ts`
+(a função que grava o log).
+
+**Tamanho:** pequeno.
+
+**NÃO implementar agora** — decisão adiada para a revisão, a pedido do dono.
+

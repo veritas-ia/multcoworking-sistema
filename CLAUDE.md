@@ -39,8 +39,10 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Identificação do cliente: telefone + código de 6 dígitos via WhatsApp (válido 10 min,
   uso único, máx. 5 tentativas). Exigido para reservar e para gerenciar reservas.
 - Máx. 3 reservas ativas por telefone. Limite de envio de códigos por número e por IP.
-- Lembretes automáticos: 24h antes e 2h antes. Cada um enviado NO MÁXIMO uma vez
-  por reserva (registrar data/hora de envio e nunca reenviar).
+- Lembretes automáticos: 13h antes e 3h antes (mudado na Fase 10 — eram 24h e 2h).
+  Cada um enviado NO MÁXIMO uma vez por reserva (registrar data/hora de envio e nunca
+  reenviar). As DUAS mensagens levam o link da área "Minhas reservas", para o cliente
+  cancelar ou remarcar sozinho.
 - Toda mensagem de WhatsApp usa template editável no painel.
 
 ## Privacidade
@@ -102,11 +104,11 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Preço é informativo no MVP ("valor estimado"), sem pagamento online. O valor fica congelado na reserva no momento da criação; aumento futuro de preço não altera reservas antigas.
 - Lembrete cujo horário já passou no momento da criação não é enviado; fica registrado como "não aplicável".
 - Ao reagendar, os campos de lembrete são zerados e os lembretes valem para o novo horário. A regra "uma vez só" passa a valer por horário agendado, não por reserva na vida toda.
-- Sete templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 24h, lembrete 2h. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+- Sete templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes, {{link}}. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
 - Criar uma série recorrente manda UMA mensagem só, resumindo a série (sala, dias da
   semana, horário, período e quantas datas) — não uma por ocorrência. Uma série de dois
   meses mandaria ~17 mensagens seguidas, que parece defeito para o cliente e arrisca o
-  limite de rajada do WhatsApp. Os LEMBRETES (24h e 2h) continuam individuais, um por
+  limite de rajada do WhatsApp. Os LEMBRETES (13h e 3h) continuam individuais, um por
   ocorrência.
 
 ### Bloqueios e recorrências (Fase 9)
@@ -127,6 +129,20 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   o intervalo de 30 min entre reservas. Isso é integridade da agenda, garantida pelo
   próprio PostgreSQL.
 
+### Rotinas automáticas (Fase 10)
+- Lembretes de 13h e 3h, com janela de tolerância de 15 minutos para cada lado. A
+  rotina roda de 5 em 5 minutos; a faxina diária, às 4h de São Paulo.
+- Idempotência é MARCAR PRIMEIRO, MANDAR DEPOIS: a marcação é um UPDATE condicional
+  que só o primeiro consegue aplicar. Se o envio falhar depois disso, o lembrete não
+  sai — na dúvida é melhor faltar do que mandar duas vezes.
+- Três estados por lembrete: enviado (data preenchida), não aplicável (o horário já
+  tinha passado quando a reserva foi criada) e pendente.
+- A faxina apaga códigos de verificação e tentativas de login com mais de 24h, e
+  sessões de cliente vencidas. NÃO apaga LogMensagem — está em aberto se o texto das
+  mensagens será guardado para auditoria.
+- node-cron roda no mesmo processo do site, ligado pelo `instrumentation.ts`. Fica
+  desligado por padrão; só liga com CRON_ATIVO="true".
+
 ### Painel
 - Um único nível de acesso (admin). Vários usuários possíveis. O primeiro é criado por um comando de instalação. Sem recuperação de senha por e-mail no MVP: a troca é feita por outro admin.
 
@@ -143,7 +159,7 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - Fase 7 — Login do painel admin (sessão própria assinada, sem NextAuth).
 - Fase 8 — Agenda administrativa (dia/semana/mês, criar/editar/cancelar).
 - Fase 9 — Bloqueios administrativos e reservas recorrentes.
-- Fase 10 — Rotinas internas com node-cron: lembretes 24h e 2h, marcar concluídas, limpeza. Idempotência obrigatória.
+- Fase 10 — Rotinas internas com node-cron: lembretes 13h e 3h, marcar concluídas, limpeza. Idempotência obrigatória.
 - Fase 11 — Configurações no painel (preços, salas, horários, parâmetros, políticas, templates).
 - Fase 12 — Revisão, polimento, responsividade, Open Graph, build de produção.
 - Fase 13 — Deploy no EasyPanel: Dockerfile standalone, migração, healthcheck, backup, docs/deploy.md.

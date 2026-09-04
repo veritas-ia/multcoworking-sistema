@@ -442,11 +442,11 @@ describe("reagendamento", () => {
     expect(reserva?.valor.toFixed(2)).toBe("100.00");
   });
 
-  it("zera os lembretes ja enviados, para valerem no horario novo", async () => {
+  it("zera os lembretes já enviados, para valerem no horário novo", async () => {
     const id = await criarReserva({ telefone: EU, data: QUARTA, inicio: "10:00", fim: "11:00" });
     await bancoDeTeste.reserva.update({
       where: { id },
-      data: { lembrete24hEnviadoEm: AGORA, lembrete2hEnviadoEm: AGORA },
+      data: { lembrete13hEnviadoEm: AGORA, lembrete3hEnviadoEm: AGORA },
     });
     await codigoValidoPara(EU);
 
@@ -460,8 +460,8 @@ describe("reagendamento", () => {
     );
 
     const reserva = await bancoDeTeste.reserva.findUnique({ where: { id } });
-    expect(reserva?.lembrete24hEnviadoEm).toBeNull();
-    expect(reserva?.lembrete2hEnviadoEm).toBeNull();
+    expect(reserva?.lembrete13hEnviadoEm).toBeNull();
+    expect(reserva?.lembrete3hEnviadoEm).toBeNull();
   });
 
   it("deixa trocar de sala", async () => {

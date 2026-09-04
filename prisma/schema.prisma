@@ -47,8 +47,8 @@ enum ChaveTemplate {
   serie_confirmada
   reserva_cancelada
   reserva_reagendada
-  lembrete_24h
-  lembrete_2h
+  lembrete_13h
+  lembrete_3h
 }
 
 /// De quanto em quanto tempo uma serie se repete (Fase 9).
@@ -180,9 +180,16 @@ model Reserva {
   recorrenciaId String?      @map("recorrencia_id")
   recorrencia   Recorrencia? @relation(fields: [recorrenciaId], references: [id], onDelete: SetNull)
 
-  /// Data/hora de envio de cada lembrete. Nulo = ainda nao enviado.
-  lembrete24hEnviadoEm DateTime? @map("lembrete_24h_enviado_em") @db.Timestamptz(3)
-  lembrete2hEnviadoEm  DateTime? @map("lembrete_2h_enviado_em") @db.Timestamptz(3)
+  /// Lembretes: 13 horas antes e 3 horas antes (decisao do dono na Fase 10).
+  ///
+  /// Tres estados por lembrete:
+  ///   data preenchida        -> ja foi enviado
+  ///   nulo + naoAplicavel    -> nunca vai sair (o horario ja tinha passado)
+  ///   nulo + nao aplicavel false -> ainda vai sair
+  lembrete13hEnviadoEm DateTime? @map("lembrete_13h_enviado_em") @db.Timestamptz(3)
+  lembrete3hEnviadoEm  DateTime? @map("lembrete_3h_enviado_em") @db.Timestamptz(3)
+  lembrete13hNaoAplicavel Boolean @default(false) @map("lembrete_13h_nao_aplicavel")
+  lembrete3hNaoAplicavel  Boolean @default(false) @map("lembrete_3h_nao_aplicavel")
 
   /// Lista de alteracoes da reserva (reagendamentos, cancelamento).
   historicoAlteracoes Json @default("[]") @map("historico_alteracoes")

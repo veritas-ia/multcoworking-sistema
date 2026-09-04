@@ -336,8 +336,10 @@ export async function reagendarReserva(entrada: {
         valor,
         status: StatusReserva.REAGENDADA,
         // Lembretes zerados: eles passam a valer para o horario novo.
-        lembrete24hEnviadoEm: null,
-        lembrete2hEnviadoEm: null,
+        lembrete13hEnviadoEm: null,
+        lembrete3hEnviadoEm: null,
+        lembrete13hNaoAplicavel: false,
+        lembrete3hNaoAplicavel: false,
         historicoAlteracoes: historicoCom(reserva.historicoAlteracoes, {
           em: agora.toISOString(),
           acao: "REAGENDADA",

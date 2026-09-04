@@ -424,8 +424,10 @@ export async function reagendarComoAdmin(entrada: {
         duracaoMinutos: minutosEntre(entrada.inicio, entrada.fim),
         valor,
         status: StatusReserva.REAGENDADA,
-        lembrete24hEnviadoEm: null,
-        lembrete2hEnviadoEm: null,
+        lembrete13hEnviadoEm: null,
+        lembrete3hEnviadoEm: null,
+        lembrete13hNaoAplicavel: false,
+        lembrete3hNaoAplicavel: false,
         historicoAlteracoes: historicoCom(reserva.historicoAlteracoes, {
           em: agora.toISOString(),
           acao: "REAGENDADA",

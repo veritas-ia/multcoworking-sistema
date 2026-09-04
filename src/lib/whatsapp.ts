@@ -31,6 +31,8 @@ export type VariaveisMensagem = {
   periodo?: string;
   /** "17" — quantas datas entraram de verdade. */
   quantidade?: string;
+  /** Endereco da area "Minhas reservas". So nos lembretes (Fase 10). */
+  link?: string;
 };
 
 export type ResultadoEnvio = {

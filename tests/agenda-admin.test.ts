@@ -457,8 +457,8 @@ describe("admin nao tem a trava de 12h", () => {
     const reserva = await bancoDeTeste.reserva.findUniqueOrThrow({ where: { id } });
     expect(reserva.status).toBe(StatusReserva.REAGENDADA);
     expect(reserva.inicio).toEqual(instanteDe(SEGUNDA, "14:00"));
-    // Lembretes zerados, como manda o CLAUDE.md.
-    expect(reserva.lembrete24hEnviadoEm).toBeNull();
+    // Lembretes zerados, como manda o CLAUDE.md (agora 13h e 3h).
+    expect(reserva.lembrete13hEnviadoEm).toBeNull();
   });
 
   it("remarcar recalcula o valor pelo preco atual da sala", async () => {
