@@ -27,7 +27,7 @@ export const MINUTOS_DA_JANELA = 15;
 /** O IP tem folga maior: um escritorio inteiro pode sair pelo mesmo endereco. */
 export const MAXIMO_POR_IP = 20;
 
-export type MotivoRecusa = "CREDENCIAL_INVALIDA" | "BLOQUEADO";
+export type MotivoRecusa = "CREDENCIAL_INVALIDA" | "BLOQUEADO" | "DESLIGADO";
 
 export type ResultadoLogin =
   | { autenticado: true; usuarioId: string; nome: string }
@@ -106,6 +106,18 @@ export async function autenticar(entrada: {
     };
   }
 
+  // A senha estava CERTA: quem chegou aqui e a pessoa dona da conta, e nao
+  // alguem tentando descobrir nomes de usuario. Por isso este aviso pode ser
+  // especifico — dizer "usuário ou senha incorretos" para quem digitou tudo
+  // certo so faria a equipe procurar defeito onde nao tem.
+  if (!encontrado.ativo) {
+    return {
+      autenticado: false,
+      codigo: "DESLIGADO",
+      motivo: "Este acesso foi desligado. Peça a outro admin para ligar de novo.",
+    };
+  }
+
   return { autenticado: true, usuarioId: encontrado.id, nome: encontrado.nome };
 }
 
@@ -131,8 +143,10 @@ export async function adminDoToken(token: string | undefined): Promise<AdminDaSe
     return null;
   }
 
-  const usuario = await prisma.usuario.findUnique({
-    where: { id: conteudo.sub },
+  // "ativo: true" e o que faz um acesso desligado cair na hora, sem esperar o
+  // cookie vencer: toda pagina e rota do painel passa por aqui.
+  const usuario = await prisma.usuario.findFirst({
+    where: { id: conteudo.sub, ativo: true },
     select: { id: true, nome: true, usuario: true },
   });
 

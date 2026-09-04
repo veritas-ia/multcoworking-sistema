@@ -229,3 +229,54 @@ export function salvarTemplate(
     body: JSON.stringify({ texto }),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Usuarios do painel
+// -----------------------------------------------------------------------------
+
+export type UsuarioDoPainel = {
+  id: string;
+  nome: string;
+  usuario: string;
+  ativo: boolean;
+  criadoEm: string;
+  souEu: boolean;
+};
+
+export function buscarUsuarios(
+  sinal?: AbortSignal,
+): Promise<{ usuarios: UsuarioDoPainel[] }> {
+  return pedir("/api/admin/usuarios", { signal: sinal });
+}
+
+export function criarUsuario(dados: {
+  nome: string;
+  usuario: string;
+  senha: string;
+}): Promise<{ usuario: UsuarioDoPainel }> {
+  return pedir("/api/admin/usuarios", { method: "POST", body: JSON.stringify(dados) });
+}
+
+export function ligarOuDesligarUsuario(
+  id: string,
+  ativo: boolean,
+): Promise<{ usuario: UsuarioDoPainel }> {
+  return pedir(`/api/admin/usuarios/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ativo }),
+  });
+}
+
+export function redefinirSenha(id: string, novaSenha: string): Promise<{ trocada: true }> {
+  return pedir(`/api/admin/usuarios/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ novaSenha }),
+  });
+}
+
+export function trocarMinhaSenha(dados: {
+  senhaAtual: string;
+  novaSenha: string;
+}): Promise<{ trocada: true }> {
+  return pedir("/api/admin/eu/senha", { method: "PATCH", body: JSON.stringify(dados) });
+}

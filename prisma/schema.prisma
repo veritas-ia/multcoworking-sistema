@@ -116,6 +116,9 @@ model Usuario {
   /// Nome de login do painel. Sem e-mail no MVP (decisao do CLAUDE.md).
   usuario   String @unique
   senhaHash String @map("senha_hash")
+  /// Desligado nao entra mais no painel, mas continua aparecendo como autor
+  /// dos bloqueios e feriados que criou (Fase 11).
+  ativo     Boolean @default(true)
 
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
 
