@@ -146,6 +146,30 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 ### Painel
 - Um único nível de acesso (admin). Vários usuários possíveis. O primeiro é criado por um comando de instalação. Sem recuperação de senha por e-mail no MVP: a troca é feita por outro admin.
 
+### Decisões da Fase 11 (configurações no painel)
+- Salas podem ser CRIADAS no painel, nunca EXCLUÍDAS. Editar (nome, capacidade,
+  preço, duração máxima, ordem) e ligar/desligar valem para todas. Excluir uma sala
+  deixaria as reservas antigas sem sentido. Desligar tira a sala do site sem tocar
+  nas reservas já marcadas, e a última sala ativa não pode ser desligada.
+  O endereço da sala no site (slug) nasce do nome na criação e NUNCA muda depois:
+  é ele que está nos QR codes impressos.
+- O intervalo de 30 min entre reservas NÃO é editável no painel: aparece só para
+  leitura. É integridade da agenda, garantida por uma trava do próprio Postgres, e
+  o banco lê esse número no momento de gravar cada reserva — mudá-lo deixaria as
+  reservas antigas com a folga velha e as novas com a folga nova. Trocar exige
+  alteração no sistema, recalculando as reservas futuras junto.
+- Os limites de envio do código de WhatsApp (1/min e 5/h por número, 20/h por IP,
+  5 tentativas, bloqueio de 15 min, validade de 10 min) ficam no código e aparecem
+  no painel apenas para leitura. São freios contra abuso, não preferência
+  comercial: afrouxá-los por engano abriria a porta para alguém torrar a conta de
+  WhatsApp do coworking. Ficam visíveis para a equipe entender o que aconteceu
+  quando um cliente diz que o código não chega.
+- Usuários do painel: listar, criar, trocar a própria senha (exigindo a senha
+  atual), redefinir a senha de OUTRO admin (sem a senha antiga — é o caso de quem
+  esqueceu a dela) e ligar/desligar acesso. Desligar em vez de excluir, porque
+  bloqueios e feriados guardam quem os criou. Quem é desligado perde o acesso na
+  hora, mesmo com o cookie ainda no prazo. Ninguém desliga o próprio acesso.
+
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.
 
