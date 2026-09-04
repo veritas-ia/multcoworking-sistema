@@ -4,22 +4,28 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { TOTAL_DE_ETAPAS } from "./tipos";
-
-/** Barra de progresso do fluxo, com o numero da etapa escrito ao lado. */
+/**
+ * Barra de progresso do fluxo, com o numero da etapa escrito ao lado.
+ *
+ * O TOTAL vem de quem usa a barra, e nao de uma constante fixa. Antes valia
+ * sempre 7 — o tamanho da reserva nova — e o reagendamento, que tem 5 etapas,
+ * dizia "Etapa 1 de 7" e enchia a barra errado.
+ */
 export function BarraDeProgresso({
   numero,
   titulo,
+  total,
 }: {
   numero: number;
   titulo: string;
+  total: number;
 }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-sm font-semibold text-text-primary">{titulo}</span>
         <span className="shrink-0 text-xs text-text-secondary">
-          Etapa {numero} de {TOTAL_DE_ETAPAS}
+          Etapa {numero} de {total}
         </span>
       </div>
 
@@ -27,13 +33,13 @@ export function BarraDeProgresso({
         role="progressbar"
         aria-valuenow={numero}
         aria-valuemin={1}
-        aria-valuemax={TOTAL_DE_ETAPAS}
-        aria-label={`Etapa ${numero} de ${TOTAL_DE_ETAPAS}: ${titulo}`}
+        aria-valuemax={total}
+        aria-label={`Etapa ${numero} de ${total}: ${titulo}`}
         className="h-1.5 w-full overflow-hidden rounded-full bg-border"
       >
         <div
           className="h-full rounded-full bg-brand transition-[width] duration-300"
-          style={{ width: `${(numero / TOTAL_DE_ETAPAS) * 100}%` }}
+          style={{ width: `${(numero / total) * 100}%` }}
         />
       </div>
     </div>

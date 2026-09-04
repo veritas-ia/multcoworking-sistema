@@ -7,9 +7,19 @@ build de produção**.
 Nada aqui é erro que impeça o uso: são acabamentos. Cada item fica registrado
 com o que está acontecendo hoje, onde mexer e o que decidir.
 
+**Estado em setembro de 2026:** os itens 1, 5, 6 e 8 estão resolvidos. Seguem
+em aberto o 2 e o 3 (dependem de decisão/dado do dono), o 4 (decisão sobre
+versões) e o 9 (adiado a pedido do dono). O 7 é registro de decisão, não tem
+nada a fazer.
+
 ---
 
-## 1. Data em formato ISO na tela de confirmação (etapa 8)
+## 1. ~~Data em formato ISO na tela de confirmação (etapa 8)~~ — RESOLVIDO na Fase 13
+
+**Resolvido:** a etapa 8 passou a usar `dataPorExtenso()`, igual à etapa 7.
+Corrigido junto com o item 6, que era o mesmo problema em outros dois pontos.
+
+<details><summary>Registro do que era</summary>
 
 **Como está hoje:** a tela de confirmação mostra a data como `2026-09-10`,
 o formato que o sistema usa por dentro. A tela de conferência (etapa 7),
@@ -31,6 +41,8 @@ igual à etapa 7.
 
 **Ver também:** o item 6 tem outros dois pontos com o mesmo problema, na
 área "Minhas reservas". Vale arrumar os três de uma vez.
+
+</details>
 
 ---
 
@@ -110,7 +122,14 @@ quando fizer sentido decidir sobre atualização de versões.
 
 ---
 
-## 5. Barra de progresso errada no reagendamento (anotado na Fase 6)
+## 5. ~~Barra de progresso errada no reagendamento~~ — RESOLVIDO na Fase 13
+
+**Resolvido:** `BarraDeProgresso` passou a receber o total de etapas de quem a
+usa. A reserva nova passa 7; o reagendamento passa 5. O total virou campo
+obrigatório do componente, então uma tela nova não consegue mais esquecer de
+informá-lo — o TypeScript recusa.
+
+<details><summary>Registro do que era</summary>
 
 **Como está hoje:** ao remarcar uma reserva, a barra diz "Etapa 1 de 7". Mas
 remarcar tem **5 etapas** (sala, dia, início, término, código), não 7. O cliente
@@ -136,9 +155,17 @@ passa 5.
 
 **Tamanho:** pequeno.
 
+</details>
+
 ---
 
-## 6. Datas em formato ISO na área "Minhas reservas" (anotado na Fase 6)
+## 6. ~~Datas em formato ISO na área "Minhas reservas"~~ — RESOLVIDO na Fase 13
+
+**Resolvido:** os dois pontos passaram a usar `dataPorExtenso()`. Varri também
+o resto da área pública atrás de outros lugares montando data na mão: não
+sobrou nenhum.
+
+<details><summary>Registro do que era</summary>
 
 **Como está hoje:** dois pontos da área mostram a data crua, como `2026-09-10`,
 em vez de "quinta-feira, 10 de setembro de 2026":
@@ -164,6 +191,8 @@ São três pontos no total; vale arrumar todos juntos e, de quebra, procurar se
 sobrou algum outro.
 
 **Tamanho:** pequeno.
+
+</details>
 
 ---
 

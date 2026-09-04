@@ -23,7 +23,14 @@ import { EtapaResumo } from "./etapa-resumo";
 import { EtapaSala } from "./etapa-sala";
 import { EtapaTelefone } from "./etapa-telefone";
 import { BarraDeProgresso } from "./pecas";
-import { ETAPAS, type Agenda, type Etapa, type ReservaCriada, type Sala } from "./tipos";
+import {
+  ETAPAS,
+  TOTAL_DE_ETAPAS,
+  type Agenda,
+  type Etapa,
+  type ReservaCriada,
+  type Sala,
+} from "./tipos";
 
 const TITULOS: Record<Etapa, string> = {
   sala: "Sala",
@@ -327,7 +334,11 @@ export function FluxoDeReserva({
           </div>
 
           {etapa === "confirmacao" ? null : (
-            <BarraDeProgresso numero={numeroDaEtapa} titulo={TITULOS[etapa]} />
+            <BarraDeProgresso
+              numero={numeroDaEtapa}
+              titulo={TITULOS[etapa]}
+              total={TOTAL_DE_ETAPAS}
+            />
           )}
         </div>
       </header>

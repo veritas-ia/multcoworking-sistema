@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { Botao } from "@/components/ui/botao";
 
-import { duracaoPorExtenso, emReais, minutosEntreHoras } from "./datas";
+import { dataPorExtenso, duracaoPorExtenso, emReais, minutosEntreHoras } from "./datas";
 import { LinhaDeResumo } from "./pecas";
 import type { ReservaCriada } from "./tipos";
 
@@ -41,7 +41,7 @@ export function EtapaConfirmacao({
 
       <dl className="divide-y divide-border rounded-xl border border-border bg-bg-primary px-4 py-1">
         <LinhaDeResumo rotulo="Sala" valor={reserva.sala} />
-        <LinhaDeResumo rotulo="Dia" valor={reserva.data} />
+        <LinhaDeResumo rotulo="Dia" valor={dataPorExtenso(reserva.data)} />
         <LinhaDeResumo
           rotulo="Horário"
           valor={`${reserva.inicio} às ${reserva.fim}`}

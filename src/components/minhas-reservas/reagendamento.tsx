@@ -138,7 +138,7 @@ export function Reagendamento({
           <span aria-hidden>‹</span>
         </button>
         <div className="flex-1">
-          <BarraDeProgresso numero={numero} titulo={TITULOS[passo]} />
+          <BarraDeProgresso numero={numero} titulo={TITULOS[passo]} total={ORDEM.length} />
         </div>
       </div>
 

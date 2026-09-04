@@ -10,6 +10,7 @@ import {
   mensagemDoErro,
 } from "@/components/reserva/api";
 import { EtapaTelefone } from "@/components/reserva/etapa-telefone";
+import { dataPorExtenso } from "@/components/reserva/datas";
 import { PoliticaDeCancelamento } from "@/components/reserva/pecas";
 import { AvisoDeErro, AvisoVazio, Carregando } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
@@ -129,7 +130,7 @@ export function AreaDoCliente() {
       const nova = await reagendar(reservaId, escolha);
       setModo({ tela: "lista" });
       setRecado(
-        `Reserva remarcada para ${nova.data}, ${nova.inicio} às ${nova.fim}, na ${nova.sala}. Valor estimado: R$ ${nova.valorEstimado.replace(".", ",")}.`,
+        `Reserva remarcada para ${dataPorExtenso(nova.data)}, ${nova.inicio} às ${nova.fim}, na ${nova.sala}. Valor estimado: R$ ${nova.valorEstimado.replace(".", ",")}.`,
       );
       recarregar();
     } catch (problema: unknown) {
@@ -189,7 +190,7 @@ export function AreaDoCliente() {
       <Moldura>
         <PedirCodigo
           titulo="Cancelar esta reserva"
-          descricao={`${modo.reserva.sala}, ${modo.reserva.data}, ${modo.reserva.inicio} às ${modo.reserva.fim}.`}
+          descricao={`${modo.reserva.sala}, ${dataPorExtenso(modo.reserva.data)}, ${modo.reserva.inicio} às ${modo.reserva.fim}.`}
           rotuloDoBotao="Confirmar cancelamento"
           telefoneMascarado={telefoneMascarado}
           enviando={enviando}
