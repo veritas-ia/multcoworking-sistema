@@ -71,12 +71,10 @@ async function criarSalas(): Promise<void> {
         ordem: sala.ordem,
         ativa: true,
       },
-      update: {
-        nome: sala.nome,
-        precoPorHora: sala.precoPorHora,
-        duracaoMaximaMinutos: sala.duracaoMaximaMinutos,
-        ordem: sala.ordem,
-      },
+      // Sala que ja existe NAO e tocada: a partir da Fase 11 nome, preco,
+      // duracao maxima e ordem sao editaveis no painel, e rodar o seed de novo
+      // nao pode desfazer o que a equipe ajustou.
+      update: {},
     });
   }
   anotar(`${SALAS.length} salas`);

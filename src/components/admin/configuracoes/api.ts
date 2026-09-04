@@ -76,3 +76,52 @@ export function salvarParametros(
     body: JSON.stringify(valores),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Salas
+// -----------------------------------------------------------------------------
+
+export type SalaDoPainel = {
+  id: string;
+  nome: string;
+  slug: string;
+  ativa: boolean;
+  capacidade: number | null;
+  precoPorHora: string;
+  duracaoMaximaMinutos: number | null;
+  ordem: number;
+  reservasFuturas: number;
+};
+
+export type DadosDeSala = {
+  nome: string;
+  capacidade: number | null;
+  precoPorHora: number;
+  duracaoMaximaMinutos: number | null;
+  ordem: number;
+};
+
+export function buscarSalas(sinal?: AbortSignal): Promise<{ salas: SalaDoPainel[] }> {
+  return pedir("/api/admin/salas", { signal: sinal });
+}
+
+export function criarSala(dados: DadosDeSala): Promise<{ sala: SalaDoPainel }> {
+  return pedir("/api/admin/salas", { method: "POST", body: JSON.stringify(dados) });
+}
+
+export function salvarSala(
+  id: string,
+  dados: DadosDeSala,
+): Promise<{ sala: SalaDoPainel }> {
+  return pedir(`/api/admin/salas/${id}`, { method: "PATCH", body: JSON.stringify(dados) });
+}
+
+export function ligarOuDesligarSala(
+  id: string,
+  ativa: boolean,
+): Promise<{ sala: SalaDoPainel }> {
+  return pedir(`/api/admin/salas/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ativa }),
+  });
+}
