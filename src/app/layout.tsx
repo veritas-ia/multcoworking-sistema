@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { NOME_DA_MARCA } from "@/lib/marca";
+import { DESCRICAO_DO_SITE, metadadosPublicos } from "@/lib/metadados";
 
 import "./globals.css";
 
@@ -15,11 +15,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: `Reservar sala | ${NOME_DA_MARCA}`,
-  description:
-    "Reserve a Sala CI, a Sala de Reunião ou a Sala Container em poucos toques.",
-};
+export const metadata: Metadata = metadadosPublicos({
+  titulo: "Reservar sala",
+  descricao: DESCRICAO_DO_SITE,
+  caminho: "/",
+  indexar: true,
+});
 
 // A maior parte do trafego chega pelo navegador de dentro do Instagram e do
 // WhatsApp. "maximumScale" fica de fora de proposito: bloquear o zoom quebra a

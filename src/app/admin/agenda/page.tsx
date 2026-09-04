@@ -8,15 +8,13 @@ import { AgendaDoPainel } from "@/components/admin/agenda/agenda";
 import { BotaoSair } from "@/components/admin/botao-sair";
 import { Carregando } from "@/components/ui/avisos";
 import { adminDoToken } from "@/lib/admin";
+import { metadadosDoPainel } from "@/lib/metadados";
 import { COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { dataLocalDe } from "@/lib/tempo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Agenda | Painel do coworking",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = metadadosDoPainel("Agenda");
 
 export default async function PaginaDaAgenda() {
   // Segunda camada de conferencia: o middleware ja olhou a assinatura do

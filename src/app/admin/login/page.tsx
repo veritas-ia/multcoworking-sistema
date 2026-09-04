@@ -4,15 +4,12 @@ import { cookies } from "next/headers";
 
 import { FormularioDeLogin } from "@/components/admin/formulario-de-login";
 import { adminDoToken } from "@/lib/admin";
-import { NOME_DA_MARCA } from "@/lib/marca";
+import { metadadosDoPainel } from "@/lib/metadados";
 import { COOKIE_ADMIN } from "@/lib/sessao-admin";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: `Entrar no painel | ${NOME_DA_MARCA}`,
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = metadadosDoPainel("Entrar no painel");
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

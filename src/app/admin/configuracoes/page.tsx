@@ -8,14 +8,12 @@ import { BotaoSair } from "@/components/admin/botao-sair";
 import { Configuracoes } from "@/components/admin/configuracoes/configuracoes";
 import { Carregando } from "@/components/ui/avisos";
 import { adminDoToken } from "@/lib/admin";
+import { metadadosDoPainel } from "@/lib/metadados";
 import { COOKIE_ADMIN } from "@/lib/sessao-admin";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Configurações | Painel do coworking",
-  robots: { index: false, follow: false },
-};
+export const metadata: Metadata = metadadosDoPainel("Configurações");
 
 export default async function PaginaDeConfiguracoes() {
   // Segunda camada de conferencia: o middleware ja olhou a assinatura do
