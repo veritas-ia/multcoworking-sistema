@@ -39,7 +39,10 @@ export default async function PaginaDeConfiguracoes() {
             <span aria-hidden className="text-text-secondary">
               /
             </span>
-            <span className="text-base text-text-secondary">Configurações</span>
+            {/* O <h1> da pagina. Sem ele, quem usa leitor de tela nao tem
+                como pular direto para o titulo — as telas do painel comecavam
+                no <h2>. O visual continua igual. */}
+            <h1 className="text-base text-text-secondary">Configurações</h1>
           </div>
 
           <div className="flex items-center gap-3">

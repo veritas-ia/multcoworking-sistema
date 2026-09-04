@@ -21,8 +21,42 @@ import type { NextConfig } from "next";
  */
 const AGENDADOR = /[\\/]src[\\/]lib[\\/]agendador\.ts$/;
 
+/**
+ * CABECALHOS DE SEGURANCA (Fase 12).
+ *
+ * Sao instrucoes que o servidor manda junto com cada pagina.
+ *
+ * O "X-Frame-Options: DENY" vale SO para o painel, e essa distincao e de
+ * proposito. Ele impede que a pagina seja aberta dentro de outro site
+ * disfarcada — o golpe classico e cobrir a tela com uma imagem e fazer a
+ * pessoa clicar em "cancelar reserva" achando que clica noutra coisa. No
+ * painel isso nunca deve acontecer; ja a area publica um dia pode ser
+ * embutida no site do coworking, e bloquear tudo quebraria essa possibilidade
+ * sem ninguem entender por que.
+ */
+const CABECALHOS_COMUNS = [
+  // Impede o navegador de "adivinhar" o tipo de um arquivo e executar como
+  // script algo que era para ser texto.
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // Ao sair do site por um link, o outro lado recebe so o dominio, nunca o
+  // endereco completo com os parametros.
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+];
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["pg", "@prisma/adapter-pg"],
+  // Esconde o "X-Powered-By: Next.js", que so serve para contar a quem estiver
+  // procurando alvo qual e a tecnologia e a versao do site.
+  poweredByHeader: false,
+  async headers() {
+    return [
+      { source: "/:caminho*", headers: CABECALHOS_COMUNS },
+      {
+        source: "/admin/:caminho*",
+        headers: [...CABECALHOS_COMUNS, { key: "X-Frame-Options", value: "DENY" }],
+      },
+    ];
+  },
   webpack: (config, { nextRuntime, webpack }) => {
     if (nextRuntime === "edge") {
       config.plugins.push(
