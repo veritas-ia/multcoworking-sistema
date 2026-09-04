@@ -200,3 +200,32 @@ export function salvarPoliticas(
 ): Promise<RespostaDePoliticas> {
   return pedir("/api/admin/politicas", { method: "PATCH", body: JSON.stringify(textos) });
 }
+
+// -----------------------------------------------------------------------------
+// Modelos de mensagem
+// -----------------------------------------------------------------------------
+
+export type TemplateNaTela = {
+  chave: string;
+  rotulo: string;
+  descricao: string;
+  texto: string;
+  variaveis: string[];
+  previa: string;
+};
+
+export function buscarTemplates(
+  sinal?: AbortSignal,
+): Promise<{ templates: TemplateNaTela[]; maximoDeCaracteres: number }> {
+  return pedir("/api/admin/templates", { signal: sinal });
+}
+
+export function salvarTemplate(
+  chave: string,
+  texto: string,
+): Promise<{ template: TemplateNaTela }> {
+  return pedir(`/api/admin/templates/${chave}`, {
+    method: "PATCH",
+    body: JSON.stringify({ texto }),
+  });
+}

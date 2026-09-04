@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { AbaDeMensagens } from "./aba-mensagens";
 import { AbaDeParametros } from "./aba-parametros";
 import { AbaDePoliticas } from "./aba-politicas";
 import { AbaDeHorarios } from "./aba-horarios";
@@ -28,6 +29,7 @@ const ABAS: readonly Aba[] = [
   { id: "horarios", rotulo: "Horários", conteudo: () => <AbaDeHorarios /> },
   { id: "parametros", rotulo: "Parâmetros", conteudo: () => <AbaDeParametros /> },
   { id: "politicas", rotulo: "Políticas", conteudo: () => <AbaDePoliticas /> },
+  { id: "mensagens", rotulo: "Mensagens", conteudo: () => <AbaDeMensagens /> },
 ];
 
 export function Configuracoes() {
