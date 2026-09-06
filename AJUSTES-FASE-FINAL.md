@@ -7,10 +7,10 @@ build de produção**.
 Nada aqui é erro que impeça o uso: são acabamentos. Cada item fica registrado
 com o que está acontecendo hoje, onde mexer e o que decidir.
 
-**Estado em setembro de 2026:** os itens 1, 5, 6 e 8 estão resolvidos. Seguem
-em aberto o 2 e o 3 (dependem de decisão/dado do dono), o 4 (decisão sobre
-versões) e o 9 (adiado a pedido do dono). O 7 é registro de decisão, não tem
-nada a fazer.
+**Estado em setembro de 2026:** resolvidos os itens 1, 2, 5, 6 e 8. O item 3
+foi decidido (fica sem capacidade por enquanto) e não tem nada a fazer. Seguem
+em aberto apenas o 4 (decisão sobre atualização de versões) e o 9 (adiado a
+pedido do dono). O 7 é registro de decisão.
 
 ---
 
@@ -46,7 +46,18 @@ igual à etapa 7.
 
 ---
 
-## 2. "Código da reserva" mostra o identificador interno
+## 2. ~~"Código da reserva" mostra o identificador interno~~ — RESOLVIDO na Fase 13
+
+**Decisão do dono (setembro de 2026):** a equipe procura a reserva **pelo
+telefone do cliente**, nunca por um número de reserva. Então valeu a opção
+(b): o bloco "Código da reserva" saiu da tela de confirmação.
+
+Nenhum número curto foi criado — não havia para que. O cliente entra em
+"Minhas reservas" com telefone + código do WhatsApp, e a equipe acha a reserva
+pelo telefone no painel. O identificador continua existindo por dentro, como
+sempre; só deixou de ser mostrado a quem não tem uso para ele.
+
+<details><summary>Registro do que era e das opções consideradas</summary>
 
 **Como está hoje:** a tela de confirmação mostra o identificador do banco,
 um UUID de 36 caracteres (`01a0624b-5f2f-...`). É impossível de ditar por
@@ -82,9 +93,23 @@ pelo telefone, a opção (b) resolve sem custo nenhum.
 
 **Tamanho:** (a) médio, mexe no banco. (b) pequeno, remove um bloco.
 
+</details>
+
 ---
 
-## 3. Capacidade das salas não está preenchida (anotado na Fase 5)
+## 3. Capacidade das salas — DECIDIDO na Fase 13: fica sem, por enquanto
+
+**Decisão do dono (setembro de 2026):** as salas ficam **sem capacidade
+cadastrada** por ora. A tela já trata esse caso: quando não há capacidade, o
+cartão simplesmente **omite a linha** — não mostra "0 pessoas" nem espaço
+vazio. Conferido no código antes de registrar
+(`src/components/reserva/etapa-sala.tsx`).
+
+Não há nada a fazer. Quando a equipe souber os números, é só preencher em
+**Configurações → Salas**, no painel — desde a Fase 11 o campo é editável ali,
+sem precisar mexer no código nem em carga inicial.
+
+<details><summary>Registro do que era</summary>
 
 **Como está hoje:** os cartões de sala da etapa 1 mostram nome e preço por
 hora, mas não a capacidade. O campo existe no banco desde a Fase 2 e nunca
@@ -100,6 +125,8 @@ Fase 11 o campo vira editável no painel.
 **Onde:** `prisma/seed.ts` (lista `SALAS`) para os valores iniciais.
 
 **Tamanho:** pequeno, depende só da informação.
+
+</details>
 
 ---
 

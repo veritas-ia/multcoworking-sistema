@@ -66,16 +66,6 @@ export function EtapaConfirmacao({
       </div>
 
       <div className="rounded-lg border border-border bg-bg-primary p-4">
-        <h2 className="text-sm font-bold text-text-primary">Código da reserva</h2>
-        <p className="mt-1.5 font-mono text-sm break-all text-text-secondary">
-          {reserva.id}
-        </p>
-        <p className="mt-1.5 text-sm text-text-secondary">
-          Guarde este código se precisar falar com a equipe.
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-border bg-bg-primary p-4">
         <h2 className="text-sm font-bold text-text-primary">
           Precisa remarcar ou cancelar?
         </h2>
