@@ -335,6 +335,72 @@ Isso é útil para conferir tudo com calma. Quando quiser ligar de verdade:
 
 ---
 
+## Esqueci a senha do painel (ou ela não bate)
+
+Acontece quando o primeiro admin foi criado pela carga inicial e a variável
+`ADMIN_SENHA` mudou depois: **mudar a variável não troca a senha de quem já
+existe**. A carga inicial só cria o admin se ele ainda não existir — de
+propósito, para uma nova publicação não sair redefinindo senha da equipe.
+
+Como ninguém consegue entrar, a troca pela tela (Configurações → Usuários)
+também não está disponível. Por isso existe uma saída pelo terminal.
+
+### O jeito normal
+
+No **Terminal** do serviço `sistema`:
+
+```sh
+npm run redefinir-senha
+```
+
+Sem mais nada, ele lista quem existe no banco. Depois, com o nome do usuário:
+
+```sh
+npm run redefinir-senha -- admin
+```
+
+Ele pede a senha nova duas vezes, e **o que você digita não aparece na tela**.
+
+### Se o comando acima não existir na sua versão
+
+Se aparecer `Missing script` ou `ERR_MODULE_NOT_FOUND`, a imagem publicada é
+anterior a este comando. Duas opções:
+
+**(a) Publicar de novo** (recomendado): clique em **Deploy** e depois use o
+comando acima. Leva alguns minutos e resolve de vez.
+
+**(b) Resolver agora**, sem republicar — cole isto no terminal do serviço
+`sistema`, trocando `SUA_NOVA_SENHA` pela senha que você quer:
+
+```sh
+NOVA_SENHA='SUA_NOVA_SENHA' node -e 'const b=require("bcryptjs"),{Client}=require("pg");const s=process.env.NOVA_SENHA||"",u=(process.env.USUARIO||"admin").trim().toLowerCase();if(s.length<8){console.error("A senha precisa ter pelo menos 8 caracteres.");process.exit(1)}const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>b.hash(s,12)).then(h=>c.query("UPDATE usuarios SET senha_hash=$1 WHERE usuario=$2 RETURNING nome,ativo",[h,u])).then(r=>{if(!r.rowCount){console.error("Nao existe usuario "+u+" no banco.");process.exit(1)}console.log("Senha redefinida para "+u+" ("+r.rows[0].nome+").");if(!r.rows[0].ativo)console.log("ATENCAO: este acesso esta DESLIGADO e nao entra ate ser religado.");return c.end()}).catch(e=>{console.error("Falhou: "+e.message);process.exit(1)})'
+```
+
+Para trocar a senha de outra pessoa, acrescente o usuário na frente:
+
+```sh
+USUARIO='maria.silva' NOVA_SENHA='...' node -e '...'
+```
+
+> **Atenção:** neste jeito a senha **aparece na tela** enquanto você digita, e
+> fica no histórico daquele terminal. O histórico some quando o container é
+> recriado (na próxima publicação), mas, se alguém puder ver a sua tela, use a
+> opção (a).
+
+### Depois de entrar
+
+1. Vá em **Configurações → Usuários → Minha senha** e troque por uma senha só
+   sua.
+2. **Apague o valor de `ADMIN_SENHA`** nas variáveis de ambiente. Ela não é
+   mais usada depois da carga inicial, e senha parada em variável é senha
+   guardada à toa.
+
+> As sessões que já estavam abertas continuam valendo até vencerem (12 horas).
+> Para derrubar todas na hora — se você desconfiar que alguém entrou —, troque
+> a `ADMIN_SESSAO_SEGREDO` e reinicie o serviço.
+
+---
+
 ## Publicar uma versão nova
 
 Quando houver mudanças no código:

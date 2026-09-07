@@ -37,6 +37,9 @@ Para desligar o banco: `npm run db:down`.
 | `npm run db:down`   | Desliga o banco de dados                        |
 | `npm run db:migrate`| Aplica as mudancas de estrutura no banco        |
 | `npm run db:seed`   | Carrega os dados iniciais (pode repetir)        |
+| `npm run db:deploy` | Aplica as migracoes em producao                 |
+| `npm run criar-admin` | Cria um usuario do painel                     |
+| `npm run redefinir-senha` | Troca a senha de um usuario do painel     |
 
 ## A tela de reserva (Fase 5)
 

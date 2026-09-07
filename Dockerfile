@@ -98,6 +98,14 @@ COPY --chown=nextjs:nodejs prisma7.config.ts ./
 # O schema e as migracoes: sao eles que o "prisma migrate deploy" aplica.
 COPY --chown=nextjs:nodejs prisma ./prisma
 
+# Os comandos de manutencao: criar admin e redefinir senha.
+#
+# Entraram depois de a equipe ficar trancada do lado de fora em producao: a
+# senha do primeiro admin nao batia, e a troca pela tela do painel exige...
+# entrar no painel. Sem estes arquivos na imagem, a unica saida era mexer no
+# banco na mao.
+COPY --chown=nextjs:nodejs scripts ./scripts
+
 # O cliente do Prisma gerado, do jeito que a CARGA INICIAL o importa.
 #
 # O site nao precisa desta copia — o dele ja vai embutido no pacote enxuto. Ela

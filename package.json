@@ -22,6 +22,7 @@
     "db:reset": "prisma migrate reset",
     "reservas-de-teste": "tsx scripts/reservas-de-teste.ts",
     "criar-admin": "tsx scripts/criar-admin.ts",
+    "redefinir-senha": "tsx scripts/redefinir-senha.ts",
     "db:teste": "sh scripts/preparar-banco-de-teste.sh",
     "db:deploy": "prisma migrate deploy"
   },
