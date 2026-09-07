@@ -105,6 +105,9 @@ model Sala {
   duracaoMaximaMinutos Int?    @map("duracao_maxima_minutos")
   /// Ordem de exibicao na tela.
   ordem                Int
+  /// Cor da sala na agenda do painel, em "#RRGGBB". Escolhida no cadastro,
+  /// de uma paleta fechada — cor livre acabaria em texto ilegivel.
+  cor                  String  @default("#FFC700") @db.VarChar(7)
 
   criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)

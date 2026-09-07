@@ -93,6 +93,7 @@ export type SalaDoPainel = {
   pessoasParaGrupo: number | null;
   aceitaDiaria: boolean;
   precoDiaria: string | null;
+  cor: string;
   duracaoMaximaMinutos: number | null;
   ordem: number;
   reservasFuturas: number;
@@ -107,6 +108,7 @@ export type DadosDeSala = {
   pessoasParaGrupo: number | null;
   aceitaDiaria: boolean;
   precoDiaria: number | null;
+  cor: string;
   duracaoMaximaMinutos: number | null;
   ordem: number;
 };

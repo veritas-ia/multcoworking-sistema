@@ -9,7 +9,7 @@ import type { Agenda, Sala } from "@/components/reserva/tipos";
 import { AvisoVazio } from "@/components/ui/avisos";
 import { cn } from "@/lib/utils";
 
-import { estiloDoItem } from "./cores";
+import { estiloDoItem, fundoDaSala } from "./cores";
 import type { ItemDaAgenda } from "./tipos";
 
 const ALTURA_DO_BLOCO = 44;
@@ -132,6 +132,7 @@ export function VisaoDiaria({
                     (minutosDaHora(item.fim) - minutosDaHora(item.inicio)) / 30,
                   );
                   const estilo = estiloDoItem(item.tipo, item.status);
+                  const fundo = fundoDaSala(item.tipo, item.status, item.cor);
 
                   return (
                     <button
@@ -141,6 +142,9 @@ export function VisaoDiaria({
                       style={{
                         gridColumn: coluna + 2,
                         gridRow: `${Math.floor(linhaInicial) + 1} / span ${linhas}`,
+                        // A cor da SALA. Vem depois das posicoes de proposito:
+                        // e ela que vence a cor de fundo vinda das classes.
+                        ...fundo,
                       }}
                       className={cn(
                         "m-0.5 flex flex-col items-start gap-0.5 overflow-hidden rounded-md border p-1.5 text-left text-xs",

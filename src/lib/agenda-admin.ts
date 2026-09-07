@@ -89,6 +89,8 @@ export type ReservaNaAgenda = {
   id: string;
   salaId: string;
   sala: string;
+  /** Cor da sala na agenda, "#RRGGBB". */
+  cor: string;
   inicio: Date;
   fim: Date;
   status: StatusReserva;
@@ -106,6 +108,8 @@ export type BloqueioNaAgenda = {
   id: string;
   salaId: string;
   sala: string;
+  /** Cor da sala na agenda, "#RRGGBB". */
+  cor: string;
   inicio: Date;
   fim: Date;
   motivo: string | null;
@@ -132,12 +136,12 @@ export async function itensDaAgenda(entrada: {
   const [reservas, bloqueios] = await Promise.all([
     prisma.reserva.findMany({
       where: { ...janela, ...daSala },
-      include: { sala: { select: { nome: true } } },
+      include: { sala: { select: { nome: true, cor: true } } },
       orderBy: { inicio: "asc" },
     }),
     prisma.bloqueio.findMany({
       where: { ...janela, ...daSala },
-      include: { sala: { select: { nome: true } } },
+      include: { sala: { select: { nome: true, cor: true } } },
       orderBy: { inicio: "asc" },
     }),
   ]);
@@ -149,6 +153,7 @@ export async function itensDaAgenda(entrada: {
         id: reserva.id,
         salaId: reserva.salaId,
         sala: reserva.sala.nome,
+        cor: reserva.sala.cor,
         inicio: reserva.inicio,
         fim: reserva.fim,
         status: reserva.status,
@@ -165,6 +170,7 @@ export async function itensDaAgenda(entrada: {
         id: bloqueio.id,
         salaId: bloqueio.salaId,
         sala: bloqueio.sala.nome,
+        cor: bloqueio.sala.cor,
         inicio: bloqueio.inicio,
         fim: bloqueio.fim,
         motivo: bloqueio.motivo,
@@ -241,7 +247,7 @@ export async function criarReservaNaRecepcao(entrada: {
           quemNome: entrada.operador.nome,
         }),
       },
-      include: { sala: { select: { nome: true } } },
+      include: { sala: { select: { nome: true, cor: true } } },
     });
 
     return {
@@ -457,7 +463,7 @@ export async function reagendarComoAdmin(entrada: {
           },
         }),
       },
-      include: { sala: { select: { nome: true } } },
+      include: { sala: { select: { nome: true, cor: true } } },
     });
 
     return {

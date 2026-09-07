@@ -5,6 +5,8 @@ export type ItemDaAgenda = {
   id: string;
   salaId: string;
   sala: string;
+  /** Cor da sala na agenda, "#RRGGBB". */
+  cor: string;
   /** "AAAA-MM-DD" no relogio de Sao Paulo. */
   data: string;
   inicio: string;
@@ -52,6 +54,8 @@ export type ReservaDetalhada = {
   id: string;
   salaId: string;
   sala: string;
+  /** Cor da sala na agenda, "#RRGGBB". */
+  cor: string;
   nomeCliente: string;
   telefone: string;
   data: string;

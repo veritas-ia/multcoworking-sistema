@@ -38,6 +38,33 @@ const BLOQUEIO: EstiloDoItem = {
   rotulo: "Bloqueio",
 };
 
+/**
+ * A cor da SALA, para o fundo do bloco na agenda.
+ *
+ * So vale para reserva ATIVA. Cancelada e concluida continuam apagadas, e
+ * bloqueio continua com a textura listrada: pintar tudo com a cor da sala
+ * faria as quatro situacoes virarem a mesma coisa aos olhos.
+ *
+ * A situacao NUNCA depende so da cor — borda, textura e texto continuam
+ * dizendo qual e (CLAUDE.md). A cor da sala responde outra pergunta: "de quem
+ * e este bloco?".
+ */
+export function fundoDaSala(
+  tipo: string,
+  status: string | undefined,
+  cor: string | undefined,
+): { backgroundColor: string } | undefined {
+  if (tipo !== "RESERVA" || !cor) {
+    return undefined;
+  }
+
+  if (status !== "CONFIRMADA" && status !== "REAGENDADA") {
+    return undefined;
+  }
+
+  return { backgroundColor: cor };
+}
+
 export function estiloDoItem(tipo: string, status?: string): EstiloDoItem {
   if (tipo === "BLOQUEIO") {
     return BLOQUEIO;

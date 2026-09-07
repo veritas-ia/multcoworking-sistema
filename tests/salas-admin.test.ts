@@ -91,6 +91,7 @@ async function cadastrar(dados: Record<string, unknown>) {
         pessoasParaGrupo: null,
         aceitaDiaria: false,
         precoDiaria: null,
+        cor: "#FFC700",
         duracaoMaximaMinutos: null,
         ordem: 90,
         ...dados,
@@ -163,6 +164,7 @@ describe("endereco da sala", () => {
           pessoasParaGrupo: null,
           aceitaDiaria: false,
           precoDiaria: null,
+          cor: "#FFC700",
           duracaoMaximaMinutos: null,
           ordem: 90,
         },
@@ -315,5 +317,34 @@ describe("ligar e desligar", () => {
       select: { ativa: true },
     });
     expect(conferencia.ativa).toBe(true);
+  });
+});
+
+describe("cor da sala", () => {
+  it("guarda a cor escolhida", async () => {
+    const { status, corpo } = await cadastrar({
+      nome: `${PREFIXO} Colorida`,
+      cor: "#9AD5F0",
+    });
+
+    expect(status).toBe(201);
+    expect(corpo.sala.cor).toBe("#9AD5F0");
+  });
+
+  it("recusa cor fora da paleta oferecida", async () => {
+    // Paleta fechada de proposito: cor livre acabaria em texto ilegivel na
+    // agenda — um azul-marinho com texto preto em cima, por exemplo.
+    const { status, corpo } = await cadastrar({
+      nome: `${PREFIXO} Escura`,
+      cor: "#000080",
+    });
+
+    expect(status).toBe(422);
+    expect(corpo.erro).toMatch(/cores oferecidas/i);
+  });
+
+  it("recusa texto que nem e cor", async () => {
+    const { status } = await cadastrar({ nome: `${PREFIXO} Torta`, cor: "azul" });
+    expect(status).toBe(422);
   });
 });

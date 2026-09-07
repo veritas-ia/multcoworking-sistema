@@ -17,6 +17,7 @@
  */
 import { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
+import { estaNaPaleta } from "@/lib/cores-de-sala";
 import { prisma } from "@/lib/prisma";
 
 export type SalaDoPainel = {
@@ -37,6 +38,8 @@ export type SalaDoPainel = {
   aceitaDiaria: boolean;
   /** Preco fechado da diaria. */
   precoDiaria: string | null;
+  /** Cor da sala na agenda, "#RRGGBB". */
+  cor: string;
   /** Nulo = pode ir ate o fechamento do dia. */
   duracaoMaximaMinutos: number | null;
   ordem: number;
@@ -65,6 +68,8 @@ export type DadosDeSala = {
   aceitaDiaria: boolean;
   /** Obrigatorio quando a sala aceita diaria. */
   precoDiaria: number | null;
+  /** Cor da sala na agenda. Precisa estar na paleta do painel. */
+  cor: string;
   duracaoMaximaMinutos: number | null;
   ordem: number;
 };
@@ -171,6 +176,11 @@ async function validar(dados: DadosDeSala): Promise<string | null> {
     return "Sala que aceita diária precisa ter o preço da diária preenchido.";
   }
 
+  // Paleta fechada: cor livre acabaria em texto ilegivel na agenda.
+  if (!estaNaPaleta(dados.cor)) {
+    return "Escolha uma das cores oferecidas para a sala.";
+  }
+
   if (dados.capacidade !== null) {
     if (!Number.isInteger(dados.capacidade) || dados.capacidade < 1 || dados.capacidade > 500) {
       return "A capacidade precisa ser um número inteiro de 1 a 500 pessoas.";
@@ -257,6 +267,7 @@ export async function listarSalas(): Promise<SalaDoPainel[]> {
     pessoasParaGrupo: sala.pessoasParaGrupo,
     aceitaDiaria: sala.aceitaDiaria,
     precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
+    cor: sala.cor,
     duracaoMaximaMinutos: sala.duracaoMaximaMinutos,
     ordem: sala.ordem,
     reservasFuturas: sala._count.reservas,
@@ -295,6 +306,7 @@ export async function criarSala(dados: DadosDeSala): Promise<Resultado<SalaDoPai
         pessoasParaGrupo: dados.pessoasParaGrupo,
         aceitaDiaria: dados.aceitaDiaria,
         precoDiaria: dados.precoDiaria?.toFixed(2) ?? null,
+        cor: dados.cor,
         duracaoMaximaMinutos: dados.duracaoMaximaMinutos,
         ordem: dados.ordem,
         ativa: true,
@@ -362,6 +374,7 @@ export async function atualizarSala(
         pessoasParaGrupo: dados.pessoasParaGrupo,
         aceitaDiaria: dados.aceitaDiaria,
         precoDiaria: dados.precoDiaria?.toFixed(2) ?? null,
+        cor: dados.cor,
         duracaoMaximaMinutos: dados.duracaoMaximaMinutos,
         ordem: dados.ordem,
       },

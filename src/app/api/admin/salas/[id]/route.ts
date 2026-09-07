@@ -27,6 +27,7 @@ const Corpo = z.union([
     pessoasParaGrupo: Opcional,
     aceitaDiaria: z.boolean(),
     precoDiaria: z.union([z.number(), z.null()]),
+    cor: z.string(),
     duracaoMaximaMinutos: Opcional,
     ordem: z.number().int(),
   }),

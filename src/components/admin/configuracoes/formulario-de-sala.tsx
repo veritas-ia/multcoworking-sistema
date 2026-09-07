@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
 
+import { COR_PADRAO, PALETA } from "@/lib/cores-de-sala";
+
 import type { DadosDeSala, SalaDoPainel } from "./api";
 
 export type Rascunho = {
@@ -16,6 +18,7 @@ export type Rascunho = {
   pessoasParaGrupo: string;
   aceitaDiaria: boolean;
   precoDiaria: string;
+  cor: string;
   duracaoMaximaMinutos: string;
   ordem: string;
 };
@@ -50,6 +53,7 @@ export function rascunhoDaSala(sala: SalaDoPainel): Rascunho {
       sala.pessoasParaGrupo === null ? "" : String(sala.pessoasParaGrupo),
     aceitaDiaria: sala.aceitaDiaria,
     precoDiaria: sala.precoDiaria === null ? "" : precoParaTexto(sala.precoDiaria),
+    cor: sala.cor,
     duracaoMaximaMinutos:
       sala.duracaoMaximaMinutos === null ? "" : String(sala.duracaoMaximaMinutos),
     ordem: String(sala.ordem),
@@ -65,6 +69,7 @@ export const RASCUNHO_VAZIO: Rascunho = {
   pessoasParaGrupo: "",
   aceitaDiaria: false,
   precoDiaria: "",
+  cor: COR_PADRAO,
   duracaoMaximaMinutos: "",
   ordem: "",
 };
@@ -144,6 +149,7 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
     pessoasParaGrupo: pessoasEscrito === "" ? null : Number(pessoasEscrito),
     aceitaDiaria: rascunho.aceitaDiaria,
     precoDiaria: precoDaDiaria,
+    cor: rascunho.cor,
     duracaoMaximaMinutos: duracao === "" ? null : Number(duracao),
     ordem: Number(ordem),
   };
@@ -234,6 +240,40 @@ export function CamposDaSala({
         onChange={(evento) => trocar("ordem", evento.target.value.replace(/\D/g, ""))}
         dica="1 aparece primeiro."
       />
+
+      <div className="flex flex-col gap-2 sm:col-span-2">
+        <span className="text-sm font-semibold text-text-primary">
+          Cor na agenda
+        </span>
+        <p className="text-sm text-text-secondary">
+          Serve para bater o olho na agenda e ver de quem é cada bloco. A
+          situação da reserva continua marcada por borda e texto, e não por cor.
+        </p>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {PALETA.map((opcao) => {
+            const escolhida = opcao.valor.toLowerCase() === rascunho.cor.toLowerCase();
+
+            return (
+              <button
+                key={opcao.valor}
+                type="button"
+                aria-pressed={escolhida}
+                aria-label={opcao.nome}
+                title={opcao.nome}
+                onClick={() => trocar("cor", opcao.valor)}
+                style={{ backgroundColor: opcao.valor }}
+                className={`size-11 rounded-lg border-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                  escolhida ? "border-black" : "border-border"
+                }`}
+              >
+                <span aria-hidden className="text-lg font-bold text-black">
+                  {escolhida ? "✓" : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="flex flex-col gap-4 rounded-lg border border-border bg-bg-secondary p-4 sm:col-span-2">
         <label className="flex items-start gap-3 text-sm text-text-primary">
