@@ -23,6 +23,8 @@ type Props = {
   nome: string;
   telefoneMascarado: string | null;
   janelaCancelamentoHoras: number;
+  /** A partir de que hora vale o preco noturno. */
+  horaInicioNoturno: string;
   textos: TextosDePolitica;
   enviando: boolean;
   erro: string | null;
@@ -38,6 +40,7 @@ export function EtapaResumo({
   nome,
   telefoneMascarado,
   janelaCancelamentoHoras,
+  horaInicioNoturno,
   textos,
   enviando,
   erro,
@@ -77,7 +80,14 @@ export function EtapaResumo({
         <LinhaDeResumo
           rotulo="Valor estimado"
           destaque
-          valor={emReais(valorEstimadoEmCentavos(sala.precoPorHora, minutos))}
+          valor={emReais(
+            valorEstimadoEmCentavos({
+              sala,
+              inicio,
+              fim,
+              horaInicioNoturno,
+            }),
+          )}
         />
       </dl>
 

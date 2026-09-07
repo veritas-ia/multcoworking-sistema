@@ -110,6 +110,7 @@ beforeEach(async () => {
       nome: SALA,
       slug: "zz-teste-horarios",
       precoPorHora: "40.00",
+      precoPorHoraNoturno: "75.00",
       ordem: 95,
       ativa: false, // fora do site publico: e sala de teste
     },

@@ -443,6 +443,7 @@ export function FluxoDeReserva({
             nome={nome.trim()}
             telefoneMascarado={telefoneMascarado}
             janelaCancelamentoHoras={iniciais.agenda.janelaCancelamentoHoras}
+            horaInicioNoturno={iniciais.agenda.horaInicioNoturno}
             textos={iniciais.agenda.textos}
             enviando={confirmando}
             erro={erroDoResumo}

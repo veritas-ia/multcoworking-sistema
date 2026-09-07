@@ -35,25 +35,46 @@ function anotar(mensagem: string): void {
 // Salas
 // -----------------------------------------------------------------------------
 
+// Precos por faixa de horario. "precoPorHora" e o de DIA; depois do inicio da
+// faixa noturna (configuravel, 18:00 no padrao) vale o noturno.
+//
+// Estes valores so entram em banco VAZIO. Onde o sistema ja roda, quem mandou
+// foi a migracao "precos_por_faixa_e_diaria", e a partir dali o painel manda.
 const SALAS = [
   {
     slug: "sala-ci",
-    nome: "Sala CI",
-    precoPorHora: "50.00",
+    nome: "Privativa",
+    precoPorHora: "40.00",
+    precoPorHoraNoturno: "75.00",
+    precoPorHoraNoturnoGrupo: null,
+    pessoasParaGrupo: null,
+    aceitaDiaria: false,
+    precoDiaria: null,
     duracaoMaximaMinutos: null,
     ordem: 1,
   },
   {
     slug: "sala-de-reuniao",
     nome: "Sala de Reunião",
-    precoPorHora: "80.00",
+    precoPorHora: "40.00",
+    precoPorHoraNoturno: "75.00",
+    // Acima de 4 pessoas, a noite, a hora sobe para R$95.
+    precoPorHoraNoturnoGrupo: "95.00",
+    pessoasParaGrupo: 4,
+    aceitaDiaria: true,
+    precoDiaria: "350.00",
     duracaoMaximaMinutos: 120,
     ordem: 2,
   },
   {
     slug: "sala-container",
     nome: "Sala Container",
-    precoPorHora: "40.00",
+    precoPorHora: "35.00",
+    precoPorHoraNoturno: "75.00",
+    precoPorHoraNoturnoGrupo: null,
+    pessoasParaGrupo: null,
+    aceitaDiaria: false,
+    precoDiaria: null,
     duracaoMaximaMinutos: null,
     ordem: 3,
   },
@@ -67,6 +88,11 @@ async function criarSalas(): Promise<void> {
         slug: sala.slug,
         nome: sala.nome,
         precoPorHora: sala.precoPorHora,
+        precoPorHoraNoturno: sala.precoPorHoraNoturno,
+        precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo,
+        pessoasParaGrupo: sala.pessoasParaGrupo,
+        aceitaDiaria: sala.aceitaDiaria,
+        precoDiaria: sala.precoDiaria,
         duracaoMaximaMinutos: sala.duracaoMaximaMinutos,
         ordem: sala.ordem,
         ativa: true,
@@ -81,17 +107,22 @@ async function criarSalas(): Promise<void> {
 }
 
 // -----------------------------------------------------------------------------
-// Horario de funcionamento padrao (CLAUDE.md):
-// seg-qui 08:00-18:00 | sex fechado | sab 09:00-13:00 | dom fechado
+// Horario de funcionamento padrao:
+// seg-SEX 08:00-22:00 | sab 09:00-13:00 | dom fechado
+//
+// Mudou no bloco de precos por faixa: a sexta passou a abrir e o fechamento
+// foi das 18h para as 22h, para o cliente conseguir reservar na faixa
+// noturna pelo site. Antes disso o dia acabava as 18h e a faixa da noite so
+// existia para lancamento da recepcao.
 // -----------------------------------------------------------------------------
 
 const HORARIOS = [
   { diaDaSemana: 0, aberto: false, horaAbertura: null, horaFechamento: null },
-  { diaDaSemana: 1, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 2, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 3, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 4, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 5, aberto: false, horaAbertura: null, horaFechamento: null },
+  { diaDaSemana: 1, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 2, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 3, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 4, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 5, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
   { diaDaSemana: 6, aberto: true, horaAbertura: "09:00", horaFechamento: "13:00" },
 ] as const;
 
@@ -139,6 +170,11 @@ const CONFIGURACOES = [
     chave: "antecedenciaMaximaDias",
     valor: "60",
     descricao: "Até quantos dias no futuro o cliente pode reservar.",
+  },
+  {
+    chave: "horaInicioNoturno",
+    valor: "18:00",
+    descricao: "A partir de que hora vale o preço noturno das salas.",
   },
 ] as const;
 

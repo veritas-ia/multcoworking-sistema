@@ -1,4 +1,6 @@
-import type { Agenda } from "./tipos";
+import { valorEmCentavos, type CategoriaReserva } from "@/lib/precos";
+
+import type { Agenda, Sala } from "./tipos";
 
 /**
  * Contas de calendario para a tela, feitas em cima do texto "AAAA-MM-DD".
@@ -138,15 +140,34 @@ export function emReais(centavos: number): string {
 
 /**
  * Valor estimado da reserva, em centavos.
- * Mesma conta do servidor: preco da hora proporcional aos minutos.
- * O valor que vale e sempre o que o servidor devolve na confirmacao.
+ *
+ * Chama o MESMO codigo do servidor ("precos.ts"). Antes esta conta estava
+ * escrita aqui de novo, a mao: bastava uma das duas mudar para o cliente ver
+ * um preco na tela e receber outro no WhatsApp. O valor que vale continua
+ * sendo o que o servidor devolve ao confirmar; isto aqui e a previa.
  */
-export function valorEstimadoEmCentavos(
-  precoPorHora: string,
-  minutos: number,
-): number {
-  const centavosDaHora = Math.round(Number(precoPorHora) * 100);
-  return Math.round((centavosDaHora * minutos) / 60);
+export function valorEstimadoEmCentavos(entrada: {
+  sala: Sala;
+  inicio: string;
+  fim: string;
+  horaInicioNoturno: string;
+  categoria?: CategoriaReserva;
+  pessoas?: number | null;
+}): number {
+  return valorEmCentavos({
+    inicio: entrada.inicio,
+    fim: entrada.fim,
+    tarifas: {
+      precoPorHora: entrada.sala.precoPorHora,
+      precoPorHoraNoturno: entrada.sala.precoPorHoraNoturno,
+      precoPorHoraNoturnoGrupo: entrada.sala.precoPorHoraNoturnoGrupo,
+      pessoasParaGrupo: entrada.sala.pessoasParaGrupo,
+      precoDiaria: entrada.sala.precoDiaria,
+    },
+    categoria: entrada.categoria ?? "HORA",
+    pessoas: entrada.pessoas ?? null,
+    horaInicioNoturno: entrada.horaInicioNoturno,
+  });
 }
 
 // -----------------------------------------------------------------------------

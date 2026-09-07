@@ -475,8 +475,8 @@ describe("admin nao tem a trava de 12h", () => {
       )
     ).json();
 
-    // Sala Container: 40/h por 2h = 80.
-    expect(corpo.valor).toBe("80.00");
+    // Sala Container: 35/h de dia por 2h = 70.
+    expect(corpo.valor).toBe("70.00");
   });
 
   it("nao remarca reserva ja cancelada", async () => {

@@ -5,8 +5,16 @@ export type Sala = {
   slug: string;
   nome: string;
   capacidade: number | null;
-  /** "50.00" — texto para nao perder centavos no caminho. */
+  /** Preco de DIA. Texto, para nao perder centavos no caminho. */
   precoPorHora: string;
+  /** Preco depois do inicio da faixa noturna. */
+  precoPorHoraNoturno: string;
+  /** Preco noturno para grupo grande. Nulo = a sala nao cobra diferente. */
+  precoPorHoraNoturnoGrupo: string | null;
+  /** ACIMA de quantas pessoas vale o preco de grupo. */
+  pessoasParaGrupo: number | null;
+  aceitaDiaria: boolean;
+  precoDiaria: string | null;
 };
 
 export type DiaDeExpediente = {
@@ -24,6 +32,8 @@ export type Agenda = {
   antecedenciaMaximaDias: number;
   duracaoMinimaMinutos: number;
   janelaCancelamentoHoras: number;
+  /** A partir de que hora vale o preco noturno. */
+  horaInicioNoturno: string;
   /** Textos de politica editaveis no painel, ja com as variaveis trocadas. */
   textos: TextosDePolitica;
 };

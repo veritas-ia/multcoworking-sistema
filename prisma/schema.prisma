@@ -78,8 +78,21 @@ model Sala {
   slug                 String  @unique
   ativa                Boolean @default(true)
   capacidade           Int?
-  /// Preco por hora, em reais. Usado so para calcular o valor estimado.
+  /// Preco por hora DE DIA (ate o inicio da faixa noturna), em reais.
+  /// Usado so para calcular o valor estimado — nao ha pagamento online.
   precoPorHora         Decimal @map("preco_por_hora") @db.Decimal(10, 2)
+  /// Preco por hora APOS o inicio da faixa noturna.
+  precoPorHoraNoturno  Decimal @map("preco_por_hora_noturno") @db.Decimal(10, 2)
+  /// Preco por hora a noite quando o grupo passa de "pessoasParaGrupo".
+  /// Nulo = esta sala nao cobra diferente por tamanho de grupo.
+  precoPorHoraNoturnoGrupo Decimal? @map("preco_por_hora_noturno_grupo") @db.Decimal(10, 2)
+  /// A partir de QUANTAS pessoas o preco de grupo passa a valer (acima deste
+  /// numero). Nulo junto com o preco acima.
+  pessoasParaGrupo     Int?    @map("pessoas_para_grupo")
+  /// Esta sala aceita reserva na categoria DIARIA?
+  aceitaDiaria         Boolean @default(false) @map("aceita_diaria")
+  /// Preco fechado da diaria. Nulo quando a sala nao aceita diaria.
+  precoDiaria          Decimal? @map("preco_diaria") @db.Decimal(10, 2)
   /// Duracao maxima de uma reserva, em minutos. Nulo = ate o fechamento do dia.
   duracaoMaximaMinutos Int?    @map("duracao_maxima_minutos")
   /// Ordem de exibicao na tela.

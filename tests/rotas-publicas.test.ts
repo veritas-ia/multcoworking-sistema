@@ -122,12 +122,20 @@ describe("GET /api/publico/salas", () => {
     expect(corpo.salas.length).toBeGreaterThanOrEqual(3);
     // Lista fechada de proposito: se um campo novo aparecer aqui sem passar
     // por esta linha, e porque alguem expos dado que a area publica nao pode
-    // mostrar. O "slug" entrou na Fase 5, para o link ?sala=... funcionar.
+    // mostrar. O "slug" entrou na Fase 5, para o link ?sala=... funcionar; as
+    // tarifas entraram no bloco de precos por faixa, para a tela calcular a
+    // estimativa com o mesmo codigo do servidor. Preco nao e sigilo — nome,
+    // telefone e motivo de bloqueio e que nao podem aparecer aqui.
     expect(Object.keys(corpo.salas[0] ?? {}).sort()).toEqual([
+      "aceitaDiaria",
       "capacidade",
       "id",
       "nome",
+      "pessoasParaGrupo",
+      "precoDiaria",
       "precoPorHora",
+      "precoPorHoraNoturno",
+      "precoPorHoraNoturnoGrupo",
       "slug",
     ]);
   });
@@ -448,12 +456,13 @@ describe("POST /api/publico/reservas", () => {
     };
 
     expect(resposta.status).toBe(201);
-    expect(corpo.valorEstimado).toBe("50.00");
+    // Privativa (ex-Sala CI) a R$40/h de dia, 1 hora.
+    expect(corpo.valorEstimado).toBe("40.00");
     expect(corpo.status).toBe("CONFIRMADA");
 
     const gravada = await bancoDeTeste.reserva.findUnique({ where: { id: corpo.id } });
     expect(gravada?.telefone).toBe(TELEFONE);
-    expect(gravada?.valor.toFixed(2)).toBe("50.00");
+    expect(gravada?.valor.toFixed(2)).toBe("40.00");
   });
 
   it("IGNORA o telefone enviado no corpo e usa o da sessão", async () => {

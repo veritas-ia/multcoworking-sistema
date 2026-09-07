@@ -421,7 +421,7 @@ describe("reagendamento", () => {
   });
 
   it("recalcula o valor com o preco atual da sala", async () => {
-    // Criada com valor "50.00" chumbado. Sala CI custa 50/h: 2h = 100.
+    // Criada com valor "50.00" chumbado. A Privativa custa 40/h de dia: 2h = 80.
     const id = await criarReserva({ telefone: EU, data: QUARTA, inicio: "10:00", fim: "11:00" });
     await codigoValidoPara(EU);
 
@@ -436,10 +436,10 @@ describe("reagendamento", () => {
       )
     ).json();
 
-    expect(corpo.valorEstimado).toBe("100.00");
+    expect(corpo.valorEstimado).toBe("80.00");
 
     const reserva = await bancoDeTeste.reserva.findUnique({ where: { id } });
-    expect(reserva?.valor.toFixed(2)).toBe("100.00");
+    expect(reserva?.valor.toFixed(2)).toBe("80.00");
   });
 
   it("zera os lembretes já enviados, para valerem no horário novo", async () => {
@@ -481,8 +481,8 @@ describe("reagendamento", () => {
 
     const reserva = await bancoDeTeste.reserva.findUnique({ where: { id } });
     expect(reserva?.salaId).toBe(salaContainer);
-    // Sala Container custa 40/h: 1h = 40.
-    expect(reserva?.valor.toFixed(2)).toBe("40.00");
+    // Sala Container custa 35/h de dia: 1h = 35.
+    expect(reserva?.valor.toFixed(2)).toBe("35.00");
   });
 
   it("nao briga com o proprio horario ao andar 30 minutos", async () => {

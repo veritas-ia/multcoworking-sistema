@@ -272,7 +272,7 @@ describe("criar a série pela recepção", () => {
       expect(reserva.origem).toBe(OrigemReserva.ADMIN);
       expect(reserva.status).toBe(StatusReserva.CONFIRMADA);
       expect(reserva.recorrenciaId).toBe(corpo.recorrenciaId);
-      expect(reserva.valor.toFixed(2)).toBe("50.00");
+      expect(reserva.valor.toFixed(2)).toBe("40.00");
     }
   });
 

@@ -4,7 +4,13 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/publico/salas — as salas que aceitam reserva. */
+/**
+ * GET /api/publico/salas — as salas que aceitam reserva.
+ *
+ * Leva junto as tarifas porque a tela precisa mostrar a estimativa ANTES de
+ * confirmar, e ela usa o mesmo calculo do servidor ("precos.ts"). Preco nao e
+ * dado sigiloso: e o que esta na parede do coworking.
+ */
 export async function GET(): Promise<NextResponse> {
   const salas = await prisma.sala.findMany({
     where: { ativa: true },
@@ -15,6 +21,11 @@ export async function GET(): Promise<NextResponse> {
       nome: true,
       capacidade: true,
       precoPorHora: true,
+      precoPorHoraNoturno: true,
+      precoPorHoraNoturnoGrupo: true,
+      pessoasParaGrupo: true,
+      aceitaDiaria: true,
+      precoDiaria: true,
     },
   });
 
@@ -25,6 +36,11 @@ export async function GET(): Promise<NextResponse> {
       nome: sala.nome,
       capacidade: sala.capacidade,
       precoPorHora: sala.precoPorHora.toFixed(2),
+      precoPorHoraNoturno: sala.precoPorHoraNoturno.toFixed(2),
+      precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
+      pessoasParaGrupo: sala.pessoasParaGrupo,
+      aceitaDiaria: sala.aceitaDiaria,
+      precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
     })),
   });
 }

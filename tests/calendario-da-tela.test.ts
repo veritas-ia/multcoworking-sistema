@@ -7,6 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 
+import type { Sala } from "@/components/reserva/tipos";
+
 import {
   dataCurta,
   dataPorExtenso,
@@ -92,17 +94,47 @@ describe("duracao", () => {
 });
 
 describe("valor estimado", () => {
+  /** Uma sala de mentira, so com o que o calculo usa. */
+  function salaCom(dia: string, noite = dia): Sala {
+    return {
+      id: "s1",
+      slug: "sala",
+      nome: "Sala",
+      capacidade: null,
+      precoPorHora: dia,
+      precoPorHoraNoturno: noite,
+      precoPorHoraNoturnoGrupo: null,
+      pessoasParaGrupo: null,
+      aceitaDiaria: false,
+      precoDiaria: null,
+    };
+  }
+
+  function estimar(sala: Sala, inicio: string, fim: string): number {
+    return valorEstimadoEmCentavos({
+      sala,
+      inicio,
+      fim,
+      horaInicioNoturno: "18:00",
+    });
+  }
+
   it("cobra proporcional aos minutos, igual ao servidor", () => {
-    expect(valorEstimadoEmCentavos("50.00", 60)).toBe(5_000);
-    expect(valorEstimadoEmCentavos("50.00", 90)).toBe(7_500);
-    expect(valorEstimadoEmCentavos("40.00", 150)).toBe(10_000);
+    expect(estimar(salaCom("50.00"), "09:00", "10:00")).toBe(5_000);
+    expect(estimar(salaCom("50.00"), "09:00", "10:30")).toBe(7_500);
+    expect(estimar(salaCom("40.00"), "09:00", "11:30")).toBe(10_000);
   });
 
   it("arredonda o centavo para cima na metade, como o banco", () => {
-    // 45,00/h por 30 min = 22,50. Por 90 min = 67,50.
-    expect(valorEstimadoEmCentavos("45.00", 90)).toBe(6_750);
+    // 45,00/h por 90 min = 67,50.
+    expect(estimar(salaCom("45.00"), "09:00", "10:30")).toBe(6_750);
     // 0,01/h por 90 min = 0,015 -> 0,02.
-    expect(valorEstimadoEmCentavos("0.01", 90)).toBe(2);
+    expect(estimar(salaCom("0.01"), "09:00", "10:30")).toBe(2);
+  });
+
+  it("usa a faixa noturna quando a reserva atravessa as 18h", () => {
+    // 17h-20h numa sala 40/75 = 40 + 75 + 75 = R$190.
+    expect(estimar(salaCom("40.00", "75.00"), "17:00", "20:00")).toBe(19_000);
   });
 
   it("escreve o valor em reais", () => {

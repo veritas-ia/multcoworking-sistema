@@ -13,6 +13,12 @@ import { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import {
+  BLOCO_MINUTOS,
+  valorEmCentavos,
+  type CategoriaReserva,
+  type TarifasDaSala,
+} from "@/lib/precos";
+import {
   type DataLocal,
   type HoraLocal,
   dataLocalDe,
@@ -28,8 +34,12 @@ import {
 /**
  * Tamanho do bloco da grade, em minutos. Nao e configuravel: o CLAUDE.md
  * fixa a grade de selecao em 30 minutos.
+ *
+ * A definicao mora em "precos.ts" porque aquele arquivo tambem roda no
+ * navegador; este aqui fala com o banco e nao pode ir junto. Reexportado para
+ * quem ja importava daqui continuar funcionando.
  */
-export const BLOCO_MINUTOS = 30;
+export { BLOCO_MINUTOS };
 
 /** Por que uma reserva foi recusada. */
 export type MotivoInvalido =
@@ -554,13 +564,17 @@ function avaliar(
 // -----------------------------------------------------------------------------
 
 /**
- * Valor estimado da reserva: preco por hora da sala, proporcional aos
- * minutos, arredondado em centavos. Nao ha pagamento online no MVP.
+ * Valor estimado da reserva.
+ *
+ * A conta em si esta em "precos.ts", que o navegador tambem usa — assim a
+ * estimativa que o cliente ve na tela e o valor que o servidor grava saem do
+ * MESMO codigo. Aqui so buscamos os numeros no banco e passamos adiante.
  */
 export async function calcularValor(
   salaId: string,
   inicio: Date,
   fim: Date,
+  opcoes: { categoria?: CategoriaReserva; pessoas?: number | null } = {},
 ): Promise<Prisma.Decimal> {
   const sala = await buscarSala(salaId);
 
@@ -568,14 +582,48 @@ export async function calcularValor(
     throw new Error(`Sala "${salaId}" nao encontrada.`);
   }
 
-  const duracao = minutosEntre(inicio, fim);
+  const centavos = valorEmCentavos({
+    inicio: horaLocalDe(inicio),
+    fim: horaLocalDe(fim),
+    tarifas: tarifasDe(sala),
+    categoria: opcoes.categoria ?? "HORA",
+    pessoas: opcoes.pessoas ?? null,
+    horaInicioNoturno: await lerHoraInicioNoturno(),
+  });
 
-  if (duracao <= 0) {
-    throw new Error("O horario de termino precisa ser depois do de inicio.");
-  }
+  return new Prisma.Decimal(centavos).div(100).toDecimalPlaces(2);
+}
 
-  return new Prisma.Decimal(sala.precoPorHora)
-    .mul(duracao)
-    .div(60)
-    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+/** Os precos da sala no formato que o modulo de calculo espera. */
+export function tarifasDe(sala: {
+  precoPorHora: Prisma.Decimal;
+  precoPorHoraNoturno: Prisma.Decimal;
+  precoPorHoraNoturnoGrupo: Prisma.Decimal | null;
+  pessoasParaGrupo: number | null;
+  precoDiaria: Prisma.Decimal | null;
+}): TarifasDaSala {
+  return {
+    precoPorHora: sala.precoPorHora.toFixed(2),
+    precoPorHoraNoturno: sala.precoPorHoraNoturno.toFixed(2),
+    precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
+    pessoasParaGrupo: sala.pessoasParaGrupo,
+    precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
+  };
+}
+
+/**
+ * A partir de que hora vale o preco noturno.
+ *
+ * Vem da tabela Configuracao: e numero de negocio, o dono muda no painel sem
+ * mexer no sistema. Se a linha sumir, valem 18:00 — o combinado inicial —, e
+ * nao um horario inventado na hora.
+ */
+export async function lerHoraInicioNoturno(): Promise<HoraLocal> {
+  const linha = await prisma.configuracao.findUnique({
+    where: { chave: "horaInicioNoturno" },
+  });
+
+  const valor = linha?.valor?.trim();
+
+  return valor && /^([01]\d|2[0-3]):[0-5]\d$/.test(valor) ? valor : "18:00";
 }

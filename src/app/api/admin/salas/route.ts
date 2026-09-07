@@ -16,6 +16,11 @@ const CorpoDaSala = z.object({
   nome: z.string().trim().min(1, "Escreva o nome da sala."),
   capacidade: Opcional,
   precoPorHora: z.number(),
+  precoPorHoraNoturno: z.number(),
+  precoPorHoraNoturnoGrupo: z.union([z.number(), z.null()]),
+  pessoasParaGrupo: Opcional,
+  aceitaDiaria: z.boolean(),
+  precoDiaria: z.union([z.number(), z.null()]),
   duracaoMaximaMinutos: Opcional,
   ordem: z.number().int(),
 });

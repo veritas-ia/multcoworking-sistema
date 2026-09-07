@@ -25,8 +25,18 @@ export type SalaDoPainel = {
   slug: string;
   ativa: boolean;
   capacidade: number | null;
-  /** Em reais, com centavos: "80.00". */
+  /** Preco de DIA, em reais com centavos: "40.00". */
   precoPorHora: string;
+  /** Preco depois do inicio da faixa noturna. */
+  precoPorHoraNoturno: string;
+  /** Preco noturno para grupo grande. Nulo = esta sala nao cobra diferente. */
+  precoPorHoraNoturnoGrupo: string | null;
+  /** ACIMA de quantas pessoas vale o preco de grupo. */
+  pessoasParaGrupo: number | null;
+  /** Esta sala aceita reserva de dia inteiro? */
+  aceitaDiaria: boolean;
+  /** Preco fechado da diaria. */
+  precoDiaria: string | null;
   /** Nulo = pode ir ate o fechamento do dia. */
   duracaoMaximaMinutos: number | null;
   ordem: number;
@@ -44,8 +54,17 @@ export type Resultado<T> = { ok: true; dados: T } | { ok: false; falha: FalhaDeS
 export type DadosDeSala = {
   nome: string;
   capacidade: number | null;
-  /** Em reais: 80 ou 80.5. */
+  /** Preco de DIA, em reais: 40 ou 40.5. */
   precoPorHora: number;
+  /** Preco depois do inicio da faixa noturna. */
+  precoPorHoraNoturno: number;
+  /** Nulo quando a sala nao cobra diferente por tamanho de grupo. */
+  precoPorHoraNoturnoGrupo: number | null;
+  /** Anda junto com o preco acima: um sem o outro e regra pela metade. */
+  pessoasParaGrupo: number | null;
+  aceitaDiaria: boolean;
+  /** Obrigatorio quando a sala aceita diaria. */
+  precoDiaria: number | null;
   duracaoMaximaMinutos: number | null;
   ordem: number;
 };
@@ -105,16 +124,51 @@ async function validar(dados: DadosDeSala): Promise<string | null> {
     return "O nome da sala precisa ter pelo menos uma letra ou número.";
   }
 
-  if (!Number.isFinite(dados.precoPorHora) || dados.precoPorHora < 0) {
-    return "O preço por hora não pode ser negativo.";
+  const precos: [string, number | null][] = [
+    ["O preço por hora (dia)", dados.precoPorHora],
+    ["O preço por hora à noite", dados.precoPorHoraNoturno],
+    ["O preço por hora à noite para grupo", dados.precoPorHoraNoturnoGrupo],
+    ["O preço da diária", dados.precoDiaria],
+  ];
+
+  for (const [rotulo, valor] of precos) {
+    if (valor === null) {
+      continue;
+    }
+
+    if (!Number.isFinite(valor) || valor < 0) {
+      return `${rotulo} não pode ser negativo.`;
+    }
+
+    if (valor > 99_999) {
+      return `${rotulo} está alto demais. Confira se não sobrou um zero.`;
+    }
+
+    if (Math.round(valor * 100) !== valor * 100) {
+      return `${rotulo} aceita no máximo dois números depois da vírgula.`;
+    }
   }
 
-  if (dados.precoPorHora > 99_999) {
-    return "O preço por hora está alto demais. Confira se não sobrou um zero.";
+  // Preco de grupo e numero de pessoas andam JUNTOS. Um sem o outro seria uma
+  // regra pela metade, que a tela nao saberia aplicar — e o banco recusa.
+  const temPrecoDeGrupo = dados.precoPorHoraNoturnoGrupo !== null;
+  const temLimiteDeGrupo = dados.pessoasParaGrupo !== null;
+
+  if (temPrecoDeGrupo !== temLimiteDeGrupo) {
+    return "Para cobrar diferente por grupo, preencha os dois campos: o preço e a partir de quantas pessoas. Deixe os dois em branco para não cobrar diferente.";
   }
 
-  if (Math.round(dados.precoPorHora * 100) !== dados.precoPorHora * 100) {
-    return "O preço por hora aceita no máximo dois números depois da vírgula.";
+  if (
+    dados.pessoasParaGrupo !== null &&
+    (!Number.isInteger(dados.pessoasParaGrupo) ||
+      dados.pessoasParaGrupo < 1 ||
+      dados.pessoasParaGrupo > 500)
+  ) {
+    return "O número de pessoas do grupo precisa ser um inteiro de 1 a 500.";
+  }
+
+  if (dados.aceitaDiaria && dados.precoDiaria === null) {
+    return "Sala que aceita diária precisa ter o preço da diária preenchido.";
   }
 
   if (dados.capacidade !== null) {
@@ -198,6 +252,11 @@ export async function listarSalas(): Promise<SalaDoPainel[]> {
     ativa: sala.ativa,
     capacidade: sala.capacidade,
     precoPorHora: sala.precoPorHora.toFixed(2),
+    precoPorHoraNoturno: sala.precoPorHoraNoturno.toFixed(2),
+    precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
+    pessoasParaGrupo: sala.pessoasParaGrupo,
+    aceitaDiaria: sala.aceitaDiaria,
+    precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
     duracaoMaximaMinutos: sala.duracaoMaximaMinutos,
     ordem: sala.ordem,
     reservasFuturas: sala._count.reservas,
@@ -231,6 +290,11 @@ export async function criarSala(dados: DadosDeSala): Promise<Resultado<SalaDoPai
         slug: await enderecoLivre(enderecoDe(nome)),
         capacidade: dados.capacidade,
         precoPorHora: dados.precoPorHora.toFixed(2),
+        precoPorHoraNoturno: dados.precoPorHoraNoturno.toFixed(2),
+        precoPorHoraNoturnoGrupo: dados.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
+        pessoasParaGrupo: dados.pessoasParaGrupo,
+        aceitaDiaria: dados.aceitaDiaria,
+        precoDiaria: dados.precoDiaria?.toFixed(2) ?? null,
         duracaoMaximaMinutos: dados.duracaoMaximaMinutos,
         ordem: dados.ordem,
         ativa: true,
@@ -293,6 +357,11 @@ export async function atualizarSala(
         nome,
         capacidade: dados.capacidade,
         precoPorHora: dados.precoPorHora.toFixed(2),
+        precoPorHoraNoturno: dados.precoPorHoraNoturno.toFixed(2),
+        precoPorHoraNoturnoGrupo: dados.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
+        pessoasParaGrupo: dados.pessoasParaGrupo,
+        aceitaDiaria: dados.aceitaDiaria,
+        precoDiaria: dados.precoDiaria?.toFixed(2) ?? null,
         duracaoMaximaMinutos: dados.duracaoMaximaMinutos,
         ordem: dados.ordem,
       },

@@ -538,49 +538,79 @@ describe("antecedência", () => {
 });
 
 describe("cálculo do valor", () => {
-  it("cobra 1 hora da Sala CI (R$ 50/h) como R$ 50,00", async () => {
+  // Os precos vem do banco (migracao "precos_por_faixa_e_diaria"):
+  // Privativa/ex-CI e Reuniao a R$40 de dia, Container a R$35, todas a R$75
+  // depois das 18h. A conta em si tem teste proprio, sem banco, em
+  // "precos.test.ts" — aqui a gente confere que o motor le a sala certa.
+  it("cobra 1 hora de dia pelo preco de dia da sala", async () => {
     const valor = await calcularValor(
       salaCI,
       instanteDe(TERCA, "10:00"),
       instanteDe(TERCA, "11:00"),
     );
-    expect(valor.toFixed(2)).toBe("50.00");
+    expect(valor.toFixed(2)).toBe("40.00");
   });
 
-  it("cobra 1h30 da Sala CI como R$ 75,00", async () => {
+  it("cobra 1h30 proporcional", async () => {
     const valor = await calcularValor(
       salaCI,
-      instanteDe(TERCA, "10:00"),
-      instanteDe(TERCA, "11:30"),
-    );
-    expect(valor.toFixed(2)).toBe("75.00");
-  });
-
-  it("cobra 3h da Sala CI como R$ 150,00", async () => {
-    const valor = await calcularValor(
-      salaCI,
-      instanteDe(TERCA, "10:00"),
-      instanteDe(TERCA, "13:00"),
-    );
-    expect(valor.toFixed(2)).toBe("150.00");
-  });
-
-  it("cobra 1h30 da Sala de Reunião (R$ 80/h) como R$ 120,00", async () => {
-    const valor = await calcularValor(
-      salaReuniao,
-      instanteDe(TERCA, "10:00"),
-      instanteDe(TERCA, "11:30"),
-    );
-    expect(valor.toFixed(2)).toBe("120.00");
-  });
-
-  it("cobra 1h30 da Sala Container (R$ 40/h) como R$ 60,00", async () => {
-    const valor = await calcularValor(
-      salaContainer,
       instanteDe(TERCA, "10:00"),
       instanteDe(TERCA, "11:30"),
     );
     expect(valor.toFixed(2)).toBe("60.00");
+  });
+
+  it("cada sala tem o seu preco de dia", async () => {
+    const container = await calcularValor(
+      salaContainer,
+      instanteDe(TERCA, "10:00"),
+      instanteDe(TERCA, "11:00"),
+    );
+    const reuniao = await calcularValor(
+      salaReuniao,
+      instanteDe(TERCA, "10:00"),
+      instanteDe(TERCA, "11:00"),
+    );
+
+    expect(container.toFixed(2)).toBe("35.00");
+    expect(reuniao.toFixed(2)).toBe("40.00");
+  });
+
+  it("cobra o preco noturno depois das 18h", async () => {
+    const valor = await calcularValor(
+      salaCI,
+      instanteDe(TERCA, "19:00"),
+      instanteDe(TERCA, "21:00"),
+    );
+    expect(valor.toFixed(2)).toBe("150.00");
+  });
+
+  it("reserva que atravessa as 18h paga as duas faixas", async () => {
+    // 17h-20h a R$40 de dia e R$75 a noite = 40 + 75 + 75.
+    const valor = await calcularValor(
+      salaCI,
+      instanteDe(TERCA, "17:00"),
+      instanteDe(TERCA, "20:00"),
+    );
+    expect(valor.toFixed(2)).toBe("190.00");
+  });
+
+  it("na Sala de Reuniao, grupo grande a noite paga mais", async () => {
+    const quatro = await calcularValor(
+      salaReuniao,
+      instanteDe(TERCA, "19:00"),
+      instanteDe(TERCA, "20:00"),
+      { pessoas: 4 },
+    );
+    const cinco = await calcularValor(
+      salaReuniao,
+      instanteDe(TERCA, "19:00"),
+      instanteDe(TERCA, "20:00"),
+      { pessoas: 5 },
+    );
+
+    expect(quatro.toFixed(2)).toBe("75.00");
+    expect(cinco.toFixed(2)).toBe("95.00");
   });
 });
 
