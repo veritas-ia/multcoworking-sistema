@@ -212,6 +212,7 @@ export function AreaDoCliente() {
           reserva={modo.reserva}
           telefoneMascarado={telefoneMascarado}
           janelaHoras={lista.janelaCancelamentoHoras}
+          horaInicioNoturno={lista.horaInicioNoturno}
           enviando={enviando}
           erro={erroDaAcao}
           aoConfirmar={(escolha) => void confirmarReagendamento(modo.reserva.id, escolha)}

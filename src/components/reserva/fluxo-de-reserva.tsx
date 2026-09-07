@@ -379,6 +379,7 @@ export function FluxoDeReserva({
         {etapa === "sala" ? (
           <EtapaSala
             salas={iniciais.salas}
+            horaInicioNoturno={iniciais.agenda.horaInicioNoturno}
             salaEscolhida={salaId}
             aoEscolher={escolherSala}
           />

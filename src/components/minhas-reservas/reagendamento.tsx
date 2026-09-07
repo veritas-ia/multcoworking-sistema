@@ -37,6 +37,7 @@ export function Reagendamento({
   reserva,
   telefoneMascarado,
   janelaHoras,
+  horaInicioNoturno,
   enviando,
   erro,
   aoConfirmar,
@@ -45,6 +46,8 @@ export function Reagendamento({
   reserva: ReservaDoCliente;
   telefoneMascarado: string | null;
   janelaHoras: number;
+  /** A partir de que hora vale o preco noturno, para o cartao da sala. */
+  horaInicioNoturno: string;
   enviando: boolean;
   erro: string | null;
   aoConfirmar: (escolha: {
@@ -144,6 +147,7 @@ export function Reagendamento({
 
       {passo === "sala" ? (
         <EtapaSala
+          horaInicioNoturno={horaInicioNoturno}
           salas={salas}
           salaEscolhida={salaId}
           aoEscolher={(nova) => {

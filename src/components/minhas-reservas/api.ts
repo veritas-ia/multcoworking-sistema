@@ -19,6 +19,7 @@ export type ListaDeReservas = {
   futuras: ReservaDoCliente[];
   historico: ReservaDoCliente[];
   janelaCancelamentoHoras: number;
+  horaInicioNoturno: string;
   textos: TextosDePolitica;
 };
 

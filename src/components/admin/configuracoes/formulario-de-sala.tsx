@@ -11,6 +11,11 @@ export type Rascunho = {
   nome: string;
   capacidade: string;
   precoPorHora: string;
+  precoPorHoraNoturno: string;
+  precoPorHoraNoturnoGrupo: string;
+  pessoasParaGrupo: string;
+  aceitaDiaria: boolean;
+  precoDiaria: string;
   duracaoMaximaMinutos: string;
   ordem: string;
 };
@@ -36,6 +41,15 @@ export function rascunhoDaSala(sala: SalaDoPainel): Rascunho {
     nome: sala.nome,
     capacidade: sala.capacidade === null ? "" : String(sala.capacidade),
     precoPorHora: precoParaTexto(sala.precoPorHora),
+    precoPorHoraNoturno: precoParaTexto(sala.precoPorHoraNoturno),
+    precoPorHoraNoturnoGrupo:
+      sala.precoPorHoraNoturnoGrupo === null
+        ? ""
+        : precoParaTexto(sala.precoPorHoraNoturnoGrupo),
+    pessoasParaGrupo:
+      sala.pessoasParaGrupo === null ? "" : String(sala.pessoasParaGrupo),
+    aceitaDiaria: sala.aceitaDiaria,
+    precoDiaria: sala.precoDiaria === null ? "" : precoParaTexto(sala.precoDiaria),
     duracaoMaximaMinutos:
       sala.duracaoMaximaMinutos === null ? "" : String(sala.duracaoMaximaMinutos),
     ordem: String(sala.ordem),
@@ -46,6 +60,11 @@ export const RASCUNHO_VAZIO: Rascunho = {
   nome: "",
   capacidade: "",
   precoPorHora: "",
+  precoPorHoraNoturno: "",
+  precoPorHoraNoturnoGrupo: "",
+  pessoasParaGrupo: "",
+  aceitaDiaria: false,
+  precoDiaria: "",
   duracaoMaximaMinutos: "",
   ordem: "",
 };
@@ -61,7 +80,41 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
   const preco = precoParaNumero(rascunho.precoPorHora);
 
   if (preco === null) {
-    return "Escreva o preço por hora como 80 ou 80,50.";
+    return "Escreva o preço por hora (dia) como 40 ou 40,50.";
+  }
+
+  const precoNoturno = precoParaNumero(rascunho.precoPorHoraNoturno);
+
+  if (precoNoturno === null) {
+    return "Escreva o preço por hora da noite como 75 ou 75,50.";
+  }
+
+  const grupoEscrito = rascunho.precoPorHoraNoturnoGrupo.trim();
+  const pessoasEscrito = rascunho.pessoasParaGrupo.trim();
+
+  if ((grupoEscrito === "") !== (pessoasEscrito === "")) {
+    return "Para cobrar diferente por grupo, preencha os dois campos: o preço da noite para grupo e a partir de quantas pessoas. Deixe os dois em branco para não cobrar diferente.";
+  }
+
+  const precoGrupo = grupoEscrito === "" ? null : precoParaNumero(grupoEscrito);
+
+  if (grupoEscrito !== "" && precoGrupo === null) {
+    return "Escreva o preço da noite para grupo como 95 ou 95,50.";
+  }
+
+  if (pessoasEscrito !== "" && !/^\d+$/.test(pessoasEscrito)) {
+    return "O número de pessoas do grupo precisa ser um número inteiro.";
+  }
+
+  const precoDaDiaria =
+    rascunho.precoDiaria.trim() === "" ? null : precoParaNumero(rascunho.precoDiaria);
+
+  if (rascunho.precoDiaria.trim() !== "" && precoDaDiaria === null) {
+    return "Escreva o preço da diária como 350 ou 350,50.";
+  }
+
+  if (rascunho.aceitaDiaria && precoDaDiaria === null) {
+    return "Sala que aceita diária precisa ter o preço da diária preenchido.";
   }
 
   const capacidade = rascunho.capacidade.trim();
@@ -86,6 +139,11 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
     nome,
     capacidade: capacidade === "" ? null : Number(capacidade),
     precoPorHora: preco,
+    precoPorHoraNoturno: precoNoturno,
+    precoPorHoraNoturnoGrupo: precoGrupo,
+    pessoasParaGrupo: pessoasEscrito === "" ? null : Number(pessoasEscrito),
+    aceitaDiaria: rascunho.aceitaDiaria,
+    precoDiaria: precoDaDiaria,
     duracaoMaximaMinutos: duracao === "" ? null : Number(duracao),
     ordem: Number(ordem),
   };
@@ -118,11 +176,37 @@ export function CamposDaSala({
       />
 
       <Campo
-        etiqueta="Preço por hora (R$)"
+        etiqueta="Preço por hora — de dia (R$)"
         inputMode="decimal"
         value={rascunho.precoPorHora}
         onChange={(evento) => trocar("precoPorHora", evento.target.value)}
-        dica="Só para o valor estimado. Não há cobrança pelo site."
+        dica="Vale até o horário em que começa a faixa noturna."
+      />
+
+      <Campo
+        etiqueta="Preço por hora — à noite (R$)"
+        inputMode="decimal"
+        value={rascunho.precoPorHoraNoturno}
+        onChange={(evento) => trocar("precoPorHoraNoturno", evento.target.value)}
+        dica="Uma reserva que atravessa o horário paga cada meia hora pela faixa dela."
+      />
+
+      <Campo
+        etiqueta="Preço por hora — à noite, para grupo (R$)"
+        inputMode="decimal"
+        value={rascunho.precoPorHoraNoturnoGrupo}
+        onChange={(evento) => trocar("precoPorHoraNoturnoGrupo", evento.target.value)}
+        dica="Em branco = esta sala não cobra diferente por tamanho de grupo."
+      />
+
+      <Campo
+        etiqueta="Grupo é acima de quantas pessoas"
+        inputMode="numeric"
+        value={rascunho.pessoasParaGrupo}
+        onChange={(evento) =>
+          trocar("pessoasParaGrupo", evento.target.value.replace(/\D/g, ""))
+        }
+        dica="Com 4 aqui, 5 pessoas já pagam o preço de grupo. Só à noite."
       />
 
       <Campo
@@ -150,6 +234,35 @@ export function CamposDaSala({
         onChange={(evento) => trocar("ordem", evento.target.value.replace(/\D/g, ""))}
         dica="1 aparece primeiro."
       />
+
+      <div className="flex flex-col gap-4 rounded-lg border border-border bg-bg-secondary p-4 sm:col-span-2">
+        <label className="flex items-start gap-3 text-sm text-text-primary">
+          <input
+            type="checkbox"
+            checked={rascunho.aceitaDiaria}
+            onChange={(evento) =>
+              aoMudar({ ...rascunho, aceitaDiaria: evento.target.checked })
+            }
+            className="mt-0.5 size-5 shrink-0 accent-[var(--brand-yellow)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          />
+          <span>
+            <strong className="font-semibold">Esta sala aceita diária</strong>
+            <br />
+            Dia inteiro, das 8h às 18h, por um preço fechado. Quem reserva a
+            diária ocupa a sala o dia todo.
+          </span>
+        </label>
+
+        {rascunho.aceitaDiaria ? (
+          <Campo
+            etiqueta="Preço da diária (R$)"
+            inputMode="decimal"
+            value={rascunho.precoDiaria}
+            onChange={(evento) => trocar("precoDiaria", evento.target.value)}
+            dica="Preço fechado do dia inteiro, independente do horário."
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

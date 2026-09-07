@@ -10,10 +10,13 @@ import type { Sala } from "./tipos";
 export function EtapaSala({
   salas,
   salaEscolhida,
+  horaInicioNoturno,
   aoEscolher,
 }: {
   salas: Sala[];
   salaEscolhida: string | null;
+  /** A partir de que hora vale o preco noturno, para o cartao explicar. */
+  horaInicioNoturno: string;
   aoEscolher: (salaId: string) => void;
 }) {
   return (
@@ -52,6 +55,20 @@ export function EtapaSala({
                   >
                     {emReais(Math.round(Number(sala.precoPorHora) * 100))} por hora
                   </span>
+
+                  {/* O preco muda depois do horario da faixa noturna. Mostrar
+                      so o de dia faria o cliente descobrir a diferenca na
+                      etapa do resumo, ja com o horario escolhido. */}
+                  {sala.precoPorHoraNoturno !== sala.precoPorHora ? (
+                    <span
+                      className={
+                        escolhida ? "text-black" : "text-text-secondary"
+                      }
+                    >
+                      {emReais(Math.round(Number(sala.precoPorHoraNoturno) * 100))} após
+                      as {horaInicioNoturno.slice(0, 2)}h
+                    </span>
+                  ) : null}
 
                   {sala.capacidade !== null ? (
                     <span
