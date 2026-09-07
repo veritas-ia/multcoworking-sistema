@@ -7,6 +7,7 @@ import { lerCorpo, respostaErro } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { criarReservaPublica } from "@/lib/reservas";
 import { telefoneDaSessao } from "@/lib/sessao-cliente";
+import { horarioDaDiaria } from "@/lib/disponibilidade";
 import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { dispararMensagem } from "@/lib/whatsapp";
 
@@ -14,6 +15,8 @@ export const dynamic = "force-dynamic";
 
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
+  /** "DIARIA" ignora inicio/fim: o horario vem da configuracao. */
+  categoria: z.enum(["HORA", "DIARIA"]).optional(),
   /** So as salas que cobram diferente por grupo perguntam isso. */
   pessoas: z
     .number()
@@ -58,14 +61,25 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     return respostaErro(400, corpo.error.issues[0]?.message ?? "Pedido inválido.");
   }
 
-  const inicio = instanteDe(corpo.data.data, corpo.data.inicio);
-  const fim = instanteDe(corpo.data.data, corpo.data.fim);
+  const categoria = corpo.data.categoria ?? "HORA";
+
+  // Na diaria o horario NAO vem do pedido: vem da configuracao. Assim ninguem
+  // consegue mandar "diaria das 08:00 as 09:00" e pagar R$350 por uma hora —
+  // ou o contrario, ocupar o dia inteiro por engano.
+  const janela =
+    categoria === "DIARIA"
+      ? await horarioDaDiaria()
+      : { inicio: corpo.data.inicio, fim: corpo.data.fim };
+
+  const inicio = instanteDe(corpo.data.data, janela.inicio);
+  const fim = instanteDe(corpo.data.data, janela.fim);
 
   const resultado = await criarReservaPublica({
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
     pessoas: corpo.data.pessoas ?? null,
+    categoria,
     inicio,
     fim,
   });

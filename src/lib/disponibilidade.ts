@@ -56,7 +56,8 @@ export type MotivoInvalido =
   | "ANTECEDENCIA_MINIMA"
   | "ANTECEDENCIA_MAXIMA"
   | "HORARIO_OCUPADO"
-  | "INTERVALO_ENTRE_RESERVAS";
+  | "INTERVALO_ENTRE_RESERVAS"
+  | "SALA_SEM_DIARIA";
 
 export type ResultadoValidacao = {
   valido: boolean;
@@ -349,6 +350,7 @@ type SalaBasica = {
   ativa: boolean;
   duracaoMaximaMinutos: number | null;
   precoPorHora: Prisma.Decimal;
+  aceitaDiaria: boolean;
 };
 
 function terminosPossiveis(
@@ -413,6 +415,8 @@ export async function validarReserva(entrada: {
   ignorarReservaId?: string;
   /** Quem esta marcando. Padrao: CLIENTE, com todas as regras. */
   modo?: Modo;
+  /** Por hora ou dia inteiro. Padrao: HORA. */
+  categoria?: CategoriaReserva;
 }): Promise<ResultadoValidacao> {
   const sala = await buscarSala(entrada.salaId);
 
@@ -458,7 +462,29 @@ export async function validarReserva(entrada: {
     parametros,
     new Date(),
     modo,
+    entrada.categoria ?? "HORA",
   );
+}
+
+/**
+ * O horario fixo da diaria, vindo da configuracao.
+ *
+ * Nao e escolhido pelo cliente: a diaria e "o dia inteiro", e o que "o dia
+ * inteiro" quer dizer e decisao do coworking, editavel no painel.
+ */
+export async function horarioDaDiaria(): Promise<{ inicio: HoraLocal; fim: HoraLocal }> {
+  const linhas = await prisma.configuracao.findMany({
+    where: { chave: { in: ["diariaInicio", "diariaFim"] } },
+  });
+
+  const valores = new Map(linhas.map((linha) => [linha.chave, linha.valor.trim()]));
+  const valida = (hora: string | undefined, padrao: string): HoraLocal =>
+    hora && /^([01]\d|2[0-3]):[0-5]\d$/.test(hora) ? hora : padrao;
+
+  return {
+    inicio: valida(valores.get("diariaInicio"), "08:00"),
+    fim: valida(valores.get("diariaFim"), "18:00"),
+  };
 }
 
 function avaliar(
@@ -470,7 +496,15 @@ function avaliar(
   parametros: Parametros,
   agora: Date,
   modo: Modo = "CLIENTE",
+  categoria: CategoriaReserva = "HORA",
 ): ResultadoValidacao {
+  if (categoria === "DIARIA" && !sala.aceitaDiaria) {
+    return recusar(
+      "SALA_SEM_DIARIA",
+      "Esta sala não trabalha com diária.",
+    );
+  }
+
   if (fim <= inicio) {
     return recusar(
       "FIM_ANTES_DO_INICIO",
@@ -501,7 +535,14 @@ function avaliar(
     );
   }
 
-  if (modo === "CLIENTE" && duracao < parametros.duracaoMinimaMinutos) {
+  // A diaria tem duracao FIXA (o dia inteiro): a minima e a maxima existem
+  // para a reserva por hora. Sem esta excecao, uma diaria de 10 horas seria
+  // recusada pela Sala de Reuniao, que tem teto de 2 horas.
+  if (
+    categoria === "HORA" &&
+    modo === "CLIENTE" &&
+    duracao < parametros.duracaoMinimaMinutos
+  ) {
     return recusar(
       "DURACAO_MINIMA",
       `A reserva mínima é de ${parametros.duracaoMinimaMinutos} minutos.`,
@@ -509,6 +550,7 @@ function avaliar(
   }
 
   if (
+    categoria === "HORA" &&
     modo === "CLIENTE" &&
     sala.duracaoMaximaMinutos !== null &&
     duracao > sala.duracaoMaximaMinutos

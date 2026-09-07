@@ -5,6 +5,7 @@ import { z } from "zod";
 import { ChaveTemplate } from "@/generated/prisma/enums";
 import { criarReservaNaRecepcao } from "@/lib/agenda-admin";
 import { lerCorpo, respostaErro } from "@/lib/api";
+import { horarioDaDiaria } from "@/lib/disponibilidade";
 import { normalizarTelefone } from "@/lib/telefone";
 import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { dispararMensagem } from "@/lib/whatsapp";
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
+  /** "DIARIA" ignora inicio/fim: o horario vem da configuracao. */
+  categoria: z.enum(["HORA", "DIARIA"]).optional(),
+  pessoas: z.number().int().min(1).max(500).nullish(),
   telefone: z.string().min(1, "Informe o telefone do cliente."),
   nome: z.string().trim().min(2, "Informe o nome do cliente.").max(120, "Nome muito longo."),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a data no formato AAAA-MM-DD."),
@@ -54,13 +58,23 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const inicio = instanteDe(corpo.data.data, corpo.data.inicio);
-  const fim = instanteDe(corpo.data.data, corpo.data.fim);
+  const categoria = corpo.data.categoria ?? "HORA";
+
+  // Na diaria o horario vem da configuracao, e nao do pedido.
+  const janela =
+    categoria === "DIARIA"
+      ? await horarioDaDiaria()
+      : { inicio: corpo.data.inicio, fim: corpo.data.fim };
+
+  const inicio = instanteDe(corpo.data.data, janela.inicio);
+  const fim = instanteDe(corpo.data.data, janela.fim);
 
   const resultado = await criarReservaNaRecepcao({
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
+    pessoas: corpo.data.pessoas ?? null,
+    categoria,
     inicio,
     fim,
     operador,

@@ -24,6 +24,7 @@ import {
   type ResultadoValidacao,
 } from "@/lib/disponibilidade";
 import { historicoCom, type Momento } from "@/lib/historico-reserva";
+import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
 import { minutosEntre } from "@/lib/tempo";
@@ -194,6 +195,8 @@ export async function criarReservaNaRecepcao(entrada: {
   fim: Date;
   /** Quantas pessoas. So as salas com preco de grupo perguntam isso. */
   pessoas?: number | null;
+  /** Por hora ou dia inteiro. Padrao: HORA. */
+  categoria?: CategoriaReserva;
   operador: Operador;
 }): Promise<Resultado<{ id: string; sala: string; valor: string }>> {
   // Modo ADMIN: sem antecedencia minima, sem limite de duracao, pode no passado.
@@ -202,6 +205,7 @@ export async function criarReservaNaRecepcao(entrada: {
     inicio: entrada.inicio,
     fim: entrada.fim,
     modo: "ADMIN",
+    categoria: entrada.categoria ?? "HORA",
   });
 
   if (!validacao.valido) {
@@ -210,6 +214,7 @@ export async function criarReservaNaRecepcao(entrada: {
 
   const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim, {
     pessoas: entrada.pessoas ?? null,
+    categoria: entrada.categoria ?? "HORA",
   });
   const agora = new Date();
 
@@ -221,6 +226,7 @@ export async function criarReservaNaRecepcao(entrada: {
         nomeCliente: entrada.nomeCliente,
         telefone: entrada.telefone,
         pessoas: entrada.pessoas ?? null,
+        categoria: entrada.categoria ?? "HORA",
         inicio: entrada.inicio,
         fim: entrada.fim,
         duracaoMinutos: minutosEntre(entrada.inicio, entrada.fim),

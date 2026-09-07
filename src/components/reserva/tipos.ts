@@ -34,6 +34,8 @@ export type Agenda = {
   janelaCancelamentoHoras: number;
   /** A partir de que hora vale o preco noturno. */
   horaInicioNoturno: string;
+  /** O horario fixo da diaria (dia inteiro). */
+  diaria: { inicio: string; fim: string };
   /** Textos de politica editaveis no painel, ja com as variaveis trocadas. */
   textos: TextosDePolitica;
 };
@@ -63,9 +65,17 @@ export type ReservaCriada = {
   status: string;
 };
 
-/** As 8 telas do fluxo, na ordem. */
+/**
+ * As telas do fluxo, na ordem.
+ *
+ * Nem todas aparecem sempre: "categoria" so existe nas salas que trabalham
+ * com diaria, e "inicio"/"fim" nao existem quando a escolha e diaria — o
+ * horario dela e fixo. Quem decide o que aparece e "etapasVisiveis", no
+ * fluxo; esta lista e so a ordem.
+ */
 export const ETAPAS = [
   "sala",
+  "categoria",
   "data",
   "inicio",
   "fim",
@@ -78,4 +88,9 @@ export const ETAPAS = [
 export type Etapa = (typeof ETAPAS)[number];
 
 /** Quantas telas aparecem na barra de progresso (a confirmacao nao conta). */
-export const TOTAL_DE_ETAPAS = ETAPAS.length - 1;
+/**
+ * Quantas telas a barra de progresso mostra por padrao (a confirmacao nao
+ * conta, e a categoria so aparece em algumas salas). O fluxo calcula o total
+ * de verdade a partir das etapas visiveis.
+ */
+export const TOTAL_DE_ETAPAS = ETAPAS.length - 2;

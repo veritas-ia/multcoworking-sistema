@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { carregarParametros, lerHoraInicioNoturno } from "@/lib/disponibilidade";
+import {
+  carregarParametros,
+  horarioDaDiaria,
+  lerHoraInicioNoturno,
+} from "@/lib/disponibilidade";
 import { prisma } from "@/lib/prisma";
 import { textosParaOSite } from "@/lib/politicas";
 import { dataLocalDe, somarMinutos } from "@/lib/tempo";
@@ -30,6 +34,8 @@ export type RespostaAgenda = {
   janelaCancelamentoHoras: number;
   /** A partir de que hora vale o preco noturno das salas. */
   horaInicioNoturno: string;
+  /** O horario fixo da diaria (dia inteiro). */
+  diaria: { inicio: string; fim: string };
   /** Textos de politica editaveis no painel, com {{horas}} ja trocado. */
   textos: { politicaCancelamento: string; avisoDoValor: string };
 };
@@ -53,6 +59,7 @@ export async function GET(): Promise<NextResponse<RespostaAgenda>> {
 
   const textos = await textosParaOSite(parametros.janelaCancelamentoHoras);
   const horaInicioNoturno = await lerHoraInicioNoturno();
+  const diaria = await horarioDaDiaria();
 
   const agora = new Date();
 
@@ -81,6 +88,7 @@ export async function GET(): Promise<NextResponse<RespostaAgenda>> {
     duracaoMinimaMinutos: parametros.duracaoMinimaMinutos,
     janelaCancelamentoHoras: parametros.janelaCancelamentoHoras,
     horaInicioNoturno,
+    diaria,
     textos,
   });
 }

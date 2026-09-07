@@ -33,6 +33,14 @@ enum OrigemReserva {
   ADMIN
 }
 
+/// Como a reserva foi vendida.
+enum CategoriaReserva {
+  /// Por hora, na grade de 30 min. E o padrao desde sempre.
+  HORA
+  /// Dia inteiro, num horario fixo e por um preco fechado.
+  DIARIA
+}
+
 enum StatusMensagem {
   ENVIADA
   FALHOU
@@ -193,8 +201,10 @@ model Reserva {
   /// Valor estimado, congelado no momento da criacao da reserva.
   valor          Decimal  @db.Decimal(10, 2)
 
-  status StatusReserva @default(CONFIRMADA)
-  origem OrigemReserva
+  status    StatusReserva    @default(CONFIRMADA)
+  origem    OrigemReserva
+  /// Por hora ou dia inteiro. Muda o preco e o horario ocupado.
+  categoria CategoriaReserva @default(HORA)
 
   recorrenciaId String?      @map("recorrencia_id")
   recorrencia   Recorrencia? @relation(fields: [recorrenciaId], references: [id], onDelete: SetNull)

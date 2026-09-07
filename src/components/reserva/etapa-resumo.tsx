@@ -27,6 +27,8 @@ type Props = {
   horaInicioNoturno: string;
   /** Quantas pessoas, quando a sala cobra diferente por grupo. */
   pessoas: number | null;
+  /** Por hora ou dia inteiro. */
+  categoria: "HORA" | "DIARIA";
   textos: TextosDePolitica;
   enviando: boolean;
   erro: string | null;
@@ -44,6 +46,7 @@ export function EtapaResumo({
   janelaCancelamentoHoras,
   horaInicioNoturno,
   pessoas,
+  categoria,
   textos,
   enviando,
   erro,
@@ -73,6 +76,9 @@ export function EtapaResumo({
 
       <dl className="divide-y divide-border rounded-xl border border-border bg-bg-primary px-4 py-1">
         <LinhaDeResumo rotulo="Sala" valor={sala.nome} />
+        {categoria === "DIARIA" ? (
+          <LinhaDeResumo rotulo="Tipo" valor="Diária (dia inteiro)" />
+        ) : null}
         <LinhaDeResumo rotulo="Dia" valor={dataPorExtenso(data)} />
         <LinhaDeResumo rotulo="Horário" valor={`${inicio} às ${fim}`} />
         <LinhaDeResumo rotulo="Duração" valor={duracaoPorExtenso(minutos)} />
@@ -96,6 +102,7 @@ export function EtapaResumo({
               fim,
               horaInicioNoturno,
               pessoas,
+              categoria,
             }),
           )}
         />

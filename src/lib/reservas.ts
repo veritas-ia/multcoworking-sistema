@@ -10,6 +10,7 @@
  */
 import { StatusReserva } from "@/generated/prisma/enums";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
+import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { minutosEntre } from "@/lib/tempo";
 
@@ -57,11 +58,16 @@ export async function criarReservaPublica(entrada: {
   fim: Date;
   /** Quantas pessoas. So as salas com preco de grupo perguntam isso. */
   pessoas?: number | null;
+  /** Por hora ou dia inteiro. Padrao: HORA. */
+  categoria?: CategoriaReserva;
 }): Promise<ResultadoCriacao> {
+  const categoria = entrada.categoria ?? "HORA";
+
   const validacao = await validarReserva({
     salaId: entrada.salaId,
     inicio: entrada.inicio,
     fim: entrada.fim,
+    categoria,
   });
 
   if (!validacao.valido) {
@@ -77,6 +83,7 @@ export async function criarReservaPublica(entrada: {
 
   const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim, {
     pessoas: entrada.pessoas ?? null,
+    categoria,
   });
 
   try {
@@ -109,6 +116,7 @@ export async function criarReservaPublica(entrada: {
           valor,
           status: StatusReserva.CONFIRMADA,
           origem: "PUBLICO",
+          categoria,
         },
         select: { id: true },
       });

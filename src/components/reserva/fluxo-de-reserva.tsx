@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
+import type { CategoriaReserva } from "@/lib/precos";
 import { NOME_DA_MARCA } from "@/lib/marca";
 
 import {
@@ -15,6 +16,7 @@ import {
   ErroDaApi,
   mensagemDoErro,
 } from "./api";
+import { EtapaCategoria } from "./etapa-categoria";
 import { EtapaConfirmacao } from "./etapa-confirmacao";
 import { EtapaData } from "./etapa-data";
 import { EtapaFim, EtapaInicio } from "./etapa-horarios";
@@ -25,7 +27,6 @@ import { EtapaTelefone } from "./etapa-telefone";
 import { BarraDeProgresso } from "./pecas";
 import {
   ETAPAS,
-  TOTAL_DE_ETAPAS,
   type Agenda,
   type Etapa,
   type ReservaCriada,
@@ -33,6 +34,7 @@ import {
 } from "./tipos";
 
 const TITULOS: Record<Etapa, string> = {
+  categoria: "Como você quer reservar",
   sala: "Sala",
   data: "Dia",
   inicio: "Início",
@@ -78,6 +80,8 @@ export function FluxoDeReserva({
   const [iniciais, setIniciais] = useState<DadosIniciais | null>(null);
   /** Quantas pessoas. So as salas com preco de grupo perguntam isso. */
   const [pessoas, setPessoas] = useState("");
+  /** Por hora ou dia inteiro. So as salas com diaria oferecem a escolha. */
+  const [categoria, setCategoria] = useState<CategoriaReserva>("HORA");
   const [erroInicial, setErroInicial] = useState<string | null>(null);
   const [tentativaInicial, setTentativaInicial] = useState(0);
 
@@ -154,30 +158,59 @@ export function FluxoDeReserva({
   // codigo: ligar a regra numa sala nova e so preencher o painel.
   const perguntarPessoas = sala?.pessoasParaGrupo !== null && sala !== null;
   const pulaTelefone = telefoneMascarado !== null;
-  const numeroDaEtapa = ETAPAS.indexOf(etapa) + 1;
+
+  /**
+   * As telas que ESTA reserva vai percorrer.
+   *
+   * A escolha entre hora e dia inteiro so existe nas salas que trabalham com
+   * diaria; e quem escolhe diaria nao passa por inicio e fim, porque o
+   * horario dela e fixo. Calcular a lista aqui, num lugar so, evita a barra
+   * de progresso dizer "etapa 3 de 7" numa reserva que tem 5 telas.
+   */
+  const etapasVisiveis: Etapa[] = ETAPAS.filter((nome) => {
+    if (nome === "categoria") {
+      return sala?.aceitaDiaria === true;
+    }
+    if (nome === "inicio" || nome === "fim") {
+      return categoria === "HORA";
+    }
+    return true;
+  });
+
+  const numeroDaEtapa = etapasVisiveis.indexOf(etapa) + 1;
+  /** A confirmacao nao entra na contagem: ela ja e o fim. */
+  const totalDeEtapas = etapasVisiveis.length - 1;
 
   function etapaAnterior(): Etapa | null {
-    switch (etapa) {
-      case "data":
-        return "sala";
-      case "inicio":
-        return "data";
-      case "fim":
-        return "inicio";
-      case "telefone":
-        return "fim";
-      case "nome":
-        return pulaTelefone ? "fim" : "telefone";
-      case "resumo":
-        return "nome";
-      default:
-        return null;
+    if (etapa === "sala" || etapa === "confirmacao") {
+      return null;
     }
+
+    if (etapa === "nome" && pulaTelefone) {
+      // Sem a tela de telefone, voltar do nome tem de pular por cima dela.
+      const posicao = etapasVisiveis.indexOf("telefone");
+      return etapasVisiveis[posicao - 1] ?? null;
+    }
+
+    return etapasVisiveis[etapasVisiveis.indexOf(etapa) - 1] ?? null;
   }
 
   function escolherSala(novaSala: string): void {
+    const escolhida = iniciais?.salas.find((item) => item.id === novaSala) ?? null;
+
     setSalaId(novaSala);
     setData(null);
+    setInicio(null);
+    setFim(null);
+    setAviso(null);
+    // Sala nova, escolha nova: quem vinha de uma diaria e troca para uma sala
+    // que nao tem diaria nao pode continuar marcado como "dia inteiro".
+    setCategoria("HORA");
+    setEtapa(escolhida?.aceitaDiaria ? "categoria" : "data");
+  }
+
+  function escolherCategoria(nova: CategoriaReserva): void {
+    setCategoria(nova);
     setInicio(null);
     setFim(null);
     setAviso(null);
@@ -186,9 +219,18 @@ export function FluxoDeReserva({
 
   function escolherData(novaData: string): void {
     setData(novaData);
+    setAviso(null);
+
+    // Na diaria o horario e fixo: nao ha o que escolher depois da data.
+    if (categoria === "DIARIA") {
+      setInicio(iniciais?.agenda.diaria.inicio ?? null);
+      setFim(iniciais?.agenda.diaria.fim ?? null);
+      setEtapa(pulaTelefone ? "nome" : "telefone");
+      return;
+    }
+
     setInicio(null);
     setFim(null);
-    setAviso(null);
     setEtapa("inicio");
   }
 
@@ -233,6 +275,7 @@ export function FluxoDeReserva({
         fim,
         nome: nome.trim(),
         pessoas: perguntarPessoas && pessoas !== "" ? Number(pessoas) : null,
+        categoria,
       });
       setReserva(criada);
       setAviso(null);
@@ -349,7 +392,7 @@ export function FluxoDeReserva({
             <BarraDeProgresso
               numero={numeroDaEtapa}
               titulo={TITULOS[etapa]}
-              total={TOTAL_DE_ETAPAS}
+              total={totalDeEtapas}
             />
           )}
         </div>
@@ -394,6 +437,15 @@ export function FluxoDeReserva({
             horaInicioNoturno={iniciais.agenda.horaInicioNoturno}
             salaEscolhida={salaId}
             aoEscolher={escolherSala}
+          />
+        ) : null}
+
+        {etapa === "categoria" && sala ? (
+          <EtapaCategoria
+            sala={sala}
+            diaria={iniciais.agenda.diaria}
+            escolhida={categoria}
+            aoEscolher={escolherCategoria}
           />
         ) : null}
 
@@ -461,6 +513,7 @@ export function FluxoDeReserva({
             janelaCancelamentoHoras={iniciais.agenda.janelaCancelamentoHoras}
             horaInicioNoturno={iniciais.agenda.horaInicioNoturno}
             pessoas={perguntarPessoas && pessoas !== "" ? Number(pessoas) : null}
+            categoria={categoria}
             textos={iniciais.agenda.textos}
             enviando={confirmando}
             erro={erroDoResumo}
