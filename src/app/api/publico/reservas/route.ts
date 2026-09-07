@@ -14,6 +14,13 @@ export const dynamic = "force-dynamic";
 
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
+  /** So as salas que cobram diferente por grupo perguntam isso. */
+  pessoas: z
+    .number()
+    .int()
+    .min(1, "O número de pessoas precisa ser pelo menos 1.")
+    .max(500, "Número de pessoas alto demais.")
+    .nullish(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a data no formato AAAA-MM-DD."),
   inicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a hora no formato HH:MM."),
   fim: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a hora no formato HH:MM."),
@@ -58,6 +65,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
+    pessoas: corpo.data.pessoas ?? null,
     inicio,
     fim,
   });

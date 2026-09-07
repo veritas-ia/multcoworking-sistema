@@ -136,11 +136,12 @@ describe("DELETE /api/publico/sessao (o 'trocar numero')", () => {
 });
 
 describe("GET /api/publico/agenda", () => {
-  it("lista os dias fechados do CLAUDE.md: sexta e domingo", async () => {
+  it("lista os dias fechados: hoje, so o domingo", async () => {
     const corpo = await (await getAgenda()).json();
 
+    // A sexta abriu junto com a ampliacao do expediente ate as 22h.
     expect(corpo.diasFechados).toContain(0);
-    expect(corpo.diasFechados).toContain(5);
+    expect(corpo.diasFechados).not.toContain(5);
     expect(corpo.diasFechados).not.toContain(1);
     expect(corpo.diasFechados).not.toContain(6);
   });
@@ -181,7 +182,7 @@ describe("GET /api/publico/agenda", () => {
     expect(corpo.diasAbertos).toContainEqual({
       diaDaSemana: 1,
       horaAbertura: "08:00",
-      horaFechamento: "18:00",
+      horaFechamento: "22:00",
     });
     expect(corpo.diasAbertos).toContainEqual({
       diaDaSemana: 6,

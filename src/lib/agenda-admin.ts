@@ -192,6 +192,8 @@ export async function criarReservaNaRecepcao(entrada: {
   nomeCliente: string;
   inicio: Date;
   fim: Date;
+  /** Quantas pessoas. So as salas com preco de grupo perguntam isso. */
+  pessoas?: number | null;
   operador: Operador;
 }): Promise<Resultado<{ id: string; sala: string; valor: string }>> {
   // Modo ADMIN: sem antecedencia minima, sem limite de duracao, pode no passado.
@@ -206,7 +208,9 @@ export async function criarReservaNaRecepcao(entrada: {
     return { ok: false, falha: falhaDaValidacao(validacao) };
   }
 
-  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim);
+  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim, {
+    pessoas: entrada.pessoas ?? null,
+  });
   const agora = new Date();
 
   try {
@@ -216,6 +220,7 @@ export async function criarReservaNaRecepcao(entrada: {
         salaId: entrada.salaId,
         nomeCliente: entrada.nomeCliente,
         telefone: entrada.telefone,
+        pessoas: entrada.pessoas ?? null,
         inicio: entrada.inicio,
         fim: entrada.fim,
         duracaoMinutos: minutosEntre(entrada.inicio, entrada.fim),
@@ -410,8 +415,11 @@ export async function reagendarComoAdmin(entrada: {
     return { ok: false, falha: falhaDaValidacao(validacao) };
   }
 
-  // Mesma regra da Fase 6: remarcar recalcula o valor pelo preco atual.
-  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim);
+  // Mesma regra da Fase 6: remarcar recalcula o valor pelo preco atual. O
+  // numero de pessoas viaja com a reserva, senao o preco de grupo sumiria.
+  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim, {
+    pessoas: reserva.pessoas,
+  });
   const agora = new Date();
 
   try {

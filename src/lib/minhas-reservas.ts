@@ -322,7 +322,11 @@ export async function reagendarReserva(entrada: {
     };
   }
 
-  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim);
+  // O numero de pessoas viaja com a reserva: remarcar nao e ocasiao de
+  // perguntar de novo, e sem ele o preco de grupo sumiria no reagendamento.
+  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim, {
+    pessoas: reserva.pessoas,
+  });
   const agora = new Date();
 
   try {

@@ -214,3 +214,30 @@ describe("dinheiro nao some no arredondamento", () => {
     );
   });
 });
+
+// -----------------------------------------------------------------------------
+// A regra completa da Sala de Reuniao, do jeito que o dono descreveu.
+// -----------------------------------------------------------------------------
+
+describe("a Sala de Reuniao na pratica", () => {
+  const naReuniao = (inicio: string, fim: string, quantas: number | null) =>
+    valorEmReais(pedido({ inicio, fim, pessoas: quantas }));
+
+  it("reuniao de manha com muita gente custa o preco de dia", () => {
+    // 09:00-12:00, 12 pessoas: 3 horas a R$40. Pessoas nao contam de dia.
+    expect(naReuniao("09:00", "12:00", 12)).toBe("120.00");
+  });
+
+  it("reuniao a noite com quatro pessoas paga R$75 a hora", () => {
+    expect(naReuniao("19:00", "22:00", 4)).toBe("225.00");
+  });
+
+  it("a quinta pessoa muda a conta da noite inteira", () => {
+    expect(naReuniao("19:00", "22:00", 5)).toBe("285.00");
+  });
+
+  it("comecando de tarde e virando a noite, so a noite encarece", () => {
+    // 16:00-22:00 com 5 pessoas: 2h de dia (R$80) + 4h de grupo (R$380).
+    expect(naReuniao("16:00", "22:00", 5)).toBe("460.00");
+  });
+});

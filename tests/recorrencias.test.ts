@@ -395,36 +395,39 @@ describe("ocorrências puladas e o relatório", () => {
   });
 
   it("pula os dias fechados e informa quantos", async () => {
-    // Sexta e domingo sao fechados. A serie pede sexta.
+    // O domingo e o dia fechado (a sexta abriu junto com o expediente ate
+    // as 22h). A serie pede domingo.
     const corpo = await (
       await criarSeriePelaRota({
-        diasDaSemana: [5],
+        diasDaSemana: [0],
         frequencia: "SEMANAL",
         dataInicio: "2026-10-06",
         dataFim: "2026-10-31",
       })
     ).json();
 
+    // Domingos entre 06/10 e 31/10: 11, 18 e 25.
     expect(corpo.criadas).toHaveLength(0);
-    expect(corpo.puladas).toHaveLength(4);
+    expect(corpo.puladas).toHaveLength(3);
     for (const pulada of corpo.puladas) {
       expect(pulada.tipo).toBe("DIA_FECHADO");
     }
   });
 
   it("uma série mista cria os dias abertos e pula os fechados", async () => {
-    // Terca (aberta) e sexta (fechada), no mesmo periodo.
+    // Terca (aberta) e domingo (fechado), no mesmo periodo.
     const corpo = await (
       await criarSeriePelaRota({
-        diasDaSemana: [2, 5],
+        diasDaSemana: [2, 0],
         frequencia: "SEMANAL",
         dataInicio: "2026-10-06",
         dataFim: "2026-10-31",
       })
     ).json();
 
+    // Tercas: 06, 13, 20 e 27. Domingos: 11, 18 e 25.
     expect(corpo.criadas).toHaveLength(4);
-    expect(corpo.puladas.filter((p: { tipo: string }) => p.tipo === "DIA_FECHADO")).toHaveLength(4);
+    expect(corpo.puladas.filter((p: { tipo: string }) => p.tipo === "DIA_FECHADO")).toHaveLength(3);
   });
 
   it("um conflito no meio não derruba a série inteira", async () => {
@@ -652,10 +655,10 @@ describe("WhatsApp da série", () => {
   });
 
   it("série sem nenhuma ocorrência criada não manda mensagem nenhuma", async () => {
-    // So sextas: o coworking nao abre, entao nada e criado.
+    // So domingos: o coworking nao abre, entao nada e criado.
     const corpo = await (
       await criarSeriePelaRota({
-        diasDaSemana: [5],
+        diasDaSemana: [0],
         frequencia: "SEMANAL",
         dataInicio: "2026-10-06",
         dataFim: "2026-10-31",

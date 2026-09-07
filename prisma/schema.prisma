@@ -183,6 +183,9 @@ model Reserva {
   nomeCliente String @map("nome_cliente")
   /// Formato internacional E.164: +55 + DDD + celular de 9 digitos.
   telefone    String
+  /// Quantas pessoas vao usar a sala. So e perguntado nas salas que cobram
+  /// diferente por tamanho de grupo; nas outras fica nulo.
+  pessoas     Int?
 
   inicio         DateTime @db.Timestamptz(3)
   fim            DateTime @db.Timestamptz(3)

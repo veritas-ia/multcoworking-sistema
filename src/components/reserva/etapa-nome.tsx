@@ -8,19 +8,33 @@ import { Campo } from "@/components/ui/campo";
 import { TituloDaEtapa } from "./pecas";
 
 /**
- * Etapa 6 — nome.
+ * Etapa 6 — nome (e, em algumas salas, quantas pessoas).
+ *
  * Sem e-mail: decisao do CLAUDE.md, a reserva guarda so nome e telefone.
+ *
+ * O numero de pessoas so aparece nas salas que COBRAM diferente por tamanho
+ * de grupo — hoje, a de Reuniao. A pergunta nasce do cadastro da sala, e nao
+ * de uma lista de nomes no codigo: ligar a mesma regra numa sala nova e so
+ * preencher os campos no painel.
  */
 export function EtapaNome({
   nome,
+  pessoas,
+  perguntarPessoas,
   aoMudar,
+  aoMudarPessoas,
   aoContinuar,
 }: {
   nome: string;
+  /** Texto, para o campo poder ficar vazio enquanto a pessoa digita. */
+  pessoas: string;
+  perguntarPessoas: boolean;
   aoMudar: (nome: string) => void;
+  aoMudarPessoas: (pessoas: string) => void;
   aoContinuar: () => void;
 }) {
   const [erro, setErro] = useState<string | null>(null);
+  const [erroDePessoas, setErroDePessoas] = useState<string | null>(null);
 
   return (
     <form
@@ -31,11 +45,23 @@ export function EtapaNome({
           setErro("Escreva seu nome para a equipe saber quem esperar.");
           return;
         }
+
+        if (perguntarPessoas && !/^[1-9]\d*$/.test(pessoas.trim())) {
+          setErroDePessoas("Diga quantas pessoas vão usar a sala.");
+          return;
+        }
+
         aoContinuar();
       }}
     >
-      <TituloDaEtapa apoio="É como a equipe vai te chamar quando você chegar.">
-        Como você se chama?
+      <TituloDaEtapa
+        apoio={
+          perguntarPessoas
+            ? "O nome é como a equipe vai te chamar. O número de pessoas ajuda a preparar a sala."
+            : "É como a equipe vai te chamar quando você chegar."
+        }
+      >
+        {perguntarPessoas ? "Quase lá" : "Como você se chama?"}
       </TituloDaEtapa>
 
       <Campo
@@ -52,6 +78,21 @@ export function EtapaNome({
           setErro(null);
         }}
       />
+
+      {perguntarPessoas ? (
+        <Campo
+          etiqueta="Quantas pessoas vão usar a sala?"
+          inputMode="numeric"
+          placeholder="4"
+          value={pessoas}
+          erro={erroDePessoas}
+          dica="Depois das 18h, grupos maiores têm preço diferente. O valor aparece na próxima tela."
+          onChange={(evento) => {
+            aoMudarPessoas(evento.target.value.replace(/\D/g, ""));
+            setErroDePessoas(null);
+          }}
+        />
+      ) : null}
 
       <Botao type="submit">Continuar</Botao>
     </form>

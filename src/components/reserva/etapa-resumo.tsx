@@ -25,6 +25,8 @@ type Props = {
   janelaCancelamentoHoras: number;
   /** A partir de que hora vale o preco noturno. */
   horaInicioNoturno: string;
+  /** Quantas pessoas, quando a sala cobra diferente por grupo. */
+  pessoas: number | null;
   textos: TextosDePolitica;
   enviando: boolean;
   erro: string | null;
@@ -41,6 +43,7 @@ export function EtapaResumo({
   telefoneMascarado,
   janelaCancelamentoHoras,
   horaInicioNoturno,
+  pessoas,
   textos,
   enviando,
   erro,
@@ -74,6 +77,12 @@ export function EtapaResumo({
         <LinhaDeResumo rotulo="Horário" valor={`${inicio} às ${fim}`} />
         <LinhaDeResumo rotulo="Duração" valor={duracaoPorExtenso(minutos)} />
         <LinhaDeResumo rotulo="Nome" valor={nome} />
+        {pessoas !== null ? (
+          <LinhaDeResumo
+            rotulo="Pessoas"
+            valor={pessoas === 1 ? "1 pessoa" : `${pessoas} pessoas`}
+          />
+        ) : null}
         {telefoneMascarado ? (
           <LinhaDeResumo rotulo="WhatsApp" valor={telefoneMascarado} />
         ) : null}
@@ -86,6 +95,7 @@ export function EtapaResumo({
               inicio,
               fim,
               horaInicioNoturno,
+              pessoas,
             }),
           )}
         />

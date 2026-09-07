@@ -76,6 +76,8 @@ export function FluxoDeReserva({
   salaPreSelecionada: string | null;
 }) {
   const [iniciais, setIniciais] = useState<DadosIniciais | null>(null);
+  /** Quantas pessoas. So as salas com preco de grupo perguntam isso. */
+  const [pessoas, setPessoas] = useState("");
   const [erroInicial, setErroInicial] = useState<string | null>(null);
   const [tentativaInicial, setTentativaInicial] = useState(0);
 
@@ -148,6 +150,9 @@ export function FluxoDeReserva({
   }, [etapa]);
 
   const sala = iniciais?.salas.find((item) => item.id === salaId) ?? null;
+  // Pergunta nascida do CADASTRO da sala, e nao de uma lista de nomes no
+  // codigo: ligar a regra numa sala nova e so preencher o painel.
+  const perguntarPessoas = sala?.pessoasParaGrupo !== null && sala !== null;
   const pulaTelefone = telefoneMascarado !== null;
   const numeroDaEtapa = ETAPAS.indexOf(etapa) + 1;
 
@@ -221,7 +226,14 @@ export function FluxoDeReserva({
     setErroDoResumo(null);
 
     try {
-      const criada = await criarReserva({ salaId, data, inicio, fim, nome: nome.trim() });
+      const criada = await criarReserva({
+        salaId,
+        data,
+        inicio,
+        fim,
+        nome: nome.trim(),
+        pessoas: perguntarPessoas && pessoas !== "" ? Number(pessoas) : null,
+      });
       setReserva(criada);
       setAviso(null);
       setEtapa("confirmacao");
@@ -430,7 +442,10 @@ export function FluxoDeReserva({
         {etapa === "nome" ? (
           <EtapaNome
             nome={nome}
+            pessoas={pessoas}
+            perguntarPessoas={perguntarPessoas}
             aoMudar={setNome}
+            aoMudarPessoas={setPessoas}
             aoContinuar={() => setEtapa("resumo")}
           />
         ) : null}
@@ -445,6 +460,7 @@ export function FluxoDeReserva({
             telefoneMascarado={telefoneMascarado}
             janelaCancelamentoHoras={iniciais.agenda.janelaCancelamentoHoras}
             horaInicioNoturno={iniciais.agenda.horaInicioNoturno}
+            pessoas={perguntarPessoas && pessoas !== "" ? Number(pessoas) : null}
             textos={iniciais.agenda.textos}
             enviando={confirmando}
             erro={erroDoResumo}

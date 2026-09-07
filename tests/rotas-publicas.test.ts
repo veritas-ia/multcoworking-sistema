@@ -151,7 +151,9 @@ describe("GET /api/publico/disponibilidade", () => {
     };
 
     expect(resposta.status).toBe(200);
-    expect(corpo.blocos).toHaveLength(20);
+    // 08:00 as 22:00 em blocos de 30 min = 28 blocos. O expediente foi
+    // ampliado no bloco de precos por faixa, para existir horario noturno.
+    expect(corpo.blocos).toHaveLength(28);
     expect(Object.keys(corpo.blocos[0] ?? {}).sort()).toEqual([
       "disponivelParaInicio",
       "horario",
@@ -202,7 +204,10 @@ describe("GET /api/publico/terminos", () => {
     const corpo = (await resposta.json()) as { terminos: string[] };
 
     expect(resposta.status).toBe(200);
-    expect(corpo.terminos).toEqual(["18:00"]);
+    // Comecando as 17:00, os terminos possiveis vao ate o fechamento (22:00),
+    // de meia em meia hora, respeitando a duracao minima de 1 hora.
+    expect(corpo.terminos[0]).toBe("18:00");
+    expect(corpo.terminos.at(-1)).toBe("22:00");
   });
 });
 
@@ -628,3 +633,4 @@ describe("montagem do texto das mensagens", () => {
     expect(renderizarTemplate("Oi, {{nomee}}!", { nome: "Ana" })).toBe("Oi, {{nomee}}!");
   });
 });
+

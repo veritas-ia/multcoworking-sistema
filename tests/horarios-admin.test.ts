@@ -28,14 +28,21 @@ const USUARIO = "teste.fase11.horarios";
 const SALA = "ZZ Teste Horarios";
 const TELEFONE = "+5511900000077";
 
-/** O padrao do CLAUDE.md: seg-qui 08:00-18:00, sex fechado, sab 09:00-13:00. */
+/**
+ * O expediente atual: seg-SEX 08:00-22:00, sab 09:00-13:00, dom fechado.
+ *
+ * Este arquivo MEXE no horario e devolve ao normal no fim. Se estes valores
+ * ficarem diferentes do que o banco de teste traz, o estrago aparece em OUTROS
+ * arquivos: eles passam sozinhos e falham na suite inteira, porque o
+ * expediente ficou diferente do que esperam.
+ */
 const PADRAO = [
   { diaDaSemana: 0, aberto: false, horaAbertura: null, horaFechamento: null },
-  { diaDaSemana: 1, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 2, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 3, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 4, aberto: true, horaAbertura: "08:00", horaFechamento: "18:00" },
-  { diaDaSemana: 5, aberto: false, horaAbertura: null, horaFechamento: null },
+  { diaDaSemana: 1, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 2, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 3, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 4, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
+  { diaDaSemana: 5, aberto: true, horaAbertura: "08:00", horaFechamento: "22:00" },
   { diaDaSemana: 6, aberto: true, horaAbertura: "09:00", horaFechamento: "13:00" },
 ];
 
@@ -275,8 +282,8 @@ describe("reservas que ficam fora do novo horario", () => {
 
   it("NAO aponta reserva que a recepcao ja tinha lancado fora do expediente", async () => {
     const segunda = proximaSegunda();
-    // 19:00 ja esta fora do expediente atual (08:00-18:00): foi de proposito.
-    await reservar(segunda, "19:00", "20:00");
+    // 22:30 ja esta fora do expediente atual (08:00-22:00): foi de proposito.
+    await reservar(segunda, "22:30", "23:30");
 
     const corpo = await (
       await postConferir(

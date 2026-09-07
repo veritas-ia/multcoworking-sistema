@@ -33,7 +33,8 @@ import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 const AGORA = new Date("2026-10-05T12:00:00.000Z");
 
 const QUARTA = "2026-10-07";
-const SEXTA_FECHADA = "2026-10-09";
+/** Um dia FECHADO. Era a sexta; desde a ampliacao do expediente, e o domingo. */
+const SEXTA_FECHADA = "2026-10-11";
 const CLIENTE = "+5511900000040";
 const OPERADOR = "bloqueios.teste";
 const MOTIVO_SECRETO = "Dedetização — não contar ao cliente";
@@ -393,7 +394,8 @@ describe("dia fechado", () => {
   });
 
   it("a recepcao tambem pode lancar fora do horario de funcionamento", async () => {
-    // Quarta fecha as 18:00. A recepcao marca das 19:00 as 20:00.
+    // Quarta fecha as 22:00. A recepcao marca das 22:30 as 23:30 — depois do
+    // expediente, para um evento pontual que a equipe sabe que vai abrir.
     const resposta = await postReservaAdmin(
       pedidoPost(
         "/api/admin/reservas",
@@ -402,8 +404,8 @@ describe("dia fechado", () => {
           telefone: CLIENTE,
           nome: "Evento à Noite",
           data: QUARTA,
-          inicio: "19:00",
-          fim: "20:00",
+          inicio: "22:30",
+          fim: "23:30",
         },
         { cookie: await cookieAdmin() },
       ),
@@ -413,8 +415,8 @@ describe("dia fechado", () => {
 
     const doCliente = await validarReserva({
       salaId: salaCI,
-      inicio: instanteDe(QUARTA, "19:00"),
-      fim: instanteDe(QUARTA, "20:00"),
+      inicio: instanteDe(QUARTA, "22:30"),
+      fim: instanteDe(QUARTA, "23:30"),
     });
     expect(doCliente.valido).toBe(false);
     expect(doCliente.codigo).toBe("DEPOIS_DO_FECHAMENTO");

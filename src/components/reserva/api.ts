@@ -116,6 +116,8 @@ export function confirmarCodigo(
 }
 
 export function criarReserva(entrada: {
+  /** So as salas que cobram diferente por grupo mandam isto. */
+  pessoas?: number | null;
   salaId: string;
   data: string;
   inicio: string;

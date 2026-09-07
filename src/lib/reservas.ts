@@ -55,6 +55,8 @@ export async function criarReservaPublica(entrada: {
   nomeCliente: string;
   inicio: Date;
   fim: Date;
+  /** Quantas pessoas. So as salas com preco de grupo perguntam isso. */
+  pessoas?: number | null;
 }): Promise<ResultadoCriacao> {
   const validacao = await validarReserva({
     salaId: entrada.salaId,
@@ -73,7 +75,9 @@ export async function criarReservaPublica(entrada: {
     };
   }
 
-  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim);
+  const valor = await calcularValor(entrada.salaId, entrada.inicio, entrada.fim, {
+    pessoas: entrada.pessoas ?? null,
+  });
 
   try {
     const reservaId = await prisma.$transaction(async (tx) => {
@@ -98,6 +102,7 @@ export async function criarReservaPublica(entrada: {
           salaId: entrada.salaId,
           nomeCliente: entrada.nomeCliente,
           telefone: entrada.telefone,
+          pessoas: entrada.pessoas ?? null,
           inicio: entrada.inicio,
           fim: entrada.fim,
           duracaoMinutos: minutosEntre(entrada.inicio, entrada.fim),

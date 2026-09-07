@@ -6,7 +6,7 @@
  *
  * Datas usadas (todas conferidas):
  *   2026-10-05  segunda   (o "hoje" dos testes, 09:00 em Sao Paulo)
- *   2026-10-06  terca     08:00-18:00
+ *   2026-10-06  terca     08:00-22:00
  *   2026-10-09  sexta     FECHADO
  *   2026-10-10  sabado    09:00-13:00
  *   2026-12-15  terca     alem dos 60 dias de antecedencia
@@ -34,7 +34,8 @@ import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
 const AGORA = new Date("2026-10-05T12:00:00.000Z");
 
 const TERCA = "2026-10-06";
-const SEXTA = "2026-10-09";
+/** Um dia FECHADO. Era a sexta; desde a ampliacao do expediente, e o domingo. */
+const DIA_FECHADO = "2026-10-11";
 const SABADO = "2026-10-10";
 const MUITO_LONGE = "2026-12-15";
 
@@ -134,25 +135,25 @@ afterAll(async () => {
 // =============================================================================
 
 describe("slotsDoDia — a grade do dia", () => {
-  it("monta 20 blocos de 30 min numa terca (08:00 às 18:00)", async () => {
+  it("monta 28 blocos de 30 min numa terca (08:00 às 22:00)", async () => {
     const blocos = await slotsDoDia(salaCI, TERCA);
 
     expect(BLOCO_MINUTOS).toBe(30);
-    expect(blocos).toHaveLength(20);
+    expect(blocos).toHaveLength(28);
     expect(blocos[0]?.horario).toBe("08:00");
     expect(blocos[1]?.horario).toBe("08:30");
-    expect(blocos.at(-1)?.horario).toBe("17:30");
+    expect(blocos.at(-1)?.horario).toBe("21:30");
   });
 
   it("nao oferece o ultimo bloco do dia, onde nao cabe 1 hora", async () => {
     const blocos = await slotsDoDia(salaCI, TERCA);
 
-    expect(blocos.at(-1)).toEqual({ horario: "17:30", disponivelParaInicio: false });
-    expect(blocos.at(-2)).toEqual({ horario: "17:00", disponivelParaInicio: true });
+    expect(blocos.at(-1)).toEqual({ horario: "21:30", disponivelParaInicio: false });
+    expect(blocos.at(-2)).toEqual({ horario: "21:00", disponivelParaInicio: true });
   });
 
-  it("devolve nenhum bloco na sexta-feira, que é fechada", async () => {
-    expect(await slotsDoDia(salaCI, SEXTA)).toEqual([]);
+  it("devolve nenhum bloco num dia fechado", async () => {
+    expect(await slotsDoDia(salaCI, DIA_FECHADO)).toEqual([]);
   });
 
   it("monta 8 blocos no sábado (09:00 às 13:00)", async () => {
@@ -176,26 +177,26 @@ describe("limites do dia — abertura e fechamento", () => {
     expect(resultado.motivo).toBeNull();
   });
 
-  it("aceita reserva que termina exatamente no fechamento (17:00 às 18:00)", async () => {
+  it("aceita reserva que termina exatamente no fechamento (21:00 às 22:00)", async () => {
     const resultado = await validarReserva({
       salaId: salaCI,
-      inicio: instanteDe(TERCA, "17:00"),
-      fim: instanteDe(TERCA, "18:00"),
+      inicio: instanteDe(TERCA, "21:00"),
+      fim: instanteDe(TERCA, "22:00"),
     });
 
     expect(resultado.valido).toBe(true);
   });
 
-  it("recusa reserva que ultrapassa o fechamento (17:30 às 18:30)", async () => {
+  it("recusa reserva que ultrapassa o fechamento (21:30 às 22:30)", async () => {
     const resultado = await validarReserva({
       salaId: salaCI,
-      inicio: instanteDe(TERCA, "17:30"),
-      fim: instanteDe(TERCA, "18:30"),
+      inicio: instanteDe(TERCA, "21:30"),
+      fim: instanteDe(TERCA, "22:30"),
     });
 
     expect(resultado.valido).toBe(false);
     expect(resultado.codigo).toBe("DEPOIS_DO_FECHAMENTO");
-    expect(resultado.motivo).toContain("18:00");
+    expect(resultado.motivo).toContain("22:00");
   });
 
   it("recusa reserva antes da abertura (07:00 às 08:00)", async () => {
@@ -209,11 +210,11 @@ describe("limites do dia — abertura e fechamento", () => {
     expect(resultado.codigo).toBe("ANTES_DA_ABERTURA");
   });
 
-  it("recusa qualquer reserva na sexta-feira", async () => {
+  it("recusa qualquer reserva em dia fechado", async () => {
     const resultado = await validarReserva({
       salaId: salaCI,
-      inicio: instanteDe(SEXTA, "10:00"),
-      fim: instanteDe(SEXTA, "11:00"),
+      inicio: instanteDe(DIA_FECHADO, "10:00"),
+      fim: instanteDe(DIA_FECHADO, "11:00"),
     });
 
     expect(resultado.valido).toBe(false);
@@ -391,6 +392,14 @@ describe("intervalo de 30 minutos entre reservas", () => {
       "16:00",
       "16:30",
       "17:00",
+      "17:30",
+      "18:00",
+      "18:30",
+      "19:00",
+      "19:30",
+      "20:00",
+      "20:30",
+      "21:00",
     ]);
   });
 
@@ -635,12 +644,15 @@ describe("virada do horário de verão", () => {
     );
   });
 
-  it("a grade do dia continua com 20 blocos das 08:00 às 17:30 dentro do horário de verão", async () => {
+  it("a grade do dia continua com 28 blocos das 08:00 às 21:30 dentro do horário de verão", async () => {
     const blocos = await slotsDoDia(salaCI, SEGUNDA_COM_VERAO);
 
-    expect(blocos).toHaveLength(20);
+    // O que este teste guarda nao e o numero: e que a hora do relogio nao
+    // escorrega quando entra o horario de verao. A grade tem de comecar as
+    // 08:00 e terminar as 21:30 igual a qualquer outro dia.
+    expect(blocos).toHaveLength(28);
     expect(blocos[0]?.horario).toBe("08:00");
-    expect(blocos.at(-1)?.horario).toBe("17:30");
+    expect(blocos.at(-1)?.horario).toBe("21:30");
   });
 
   it("valida normalmente uma reserva dentro do horário de verão", async () => {

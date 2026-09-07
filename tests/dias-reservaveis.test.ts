@@ -104,12 +104,17 @@ describe("o calendario segue o HorarioFuncionamento do banco", () => {
     expect(motivoDoBloqueioDoDia("2026-10-24", agenda)).toBeNull();
   });
 
-  it("SEXTA e DOMINGO não são reserváveis", () => {
-    expect(abertoNoBanco.get(5)).toBe(false);
-    expect(abertoNoBanco.get(0)).toBe(false);
-    expect(agenda.diasFechados).toEqual(expect.arrayContaining([0, 5]));
+  it("SEXTA passou a ser reservável", () => {
+    // A sexta abriu junto com a ampliacao do expediente ate as 22h. Se alguem
+    // fechar a sexta de novo no painel, esta linha avisa.
+    expect(abertoNoBanco.get(5)).toBe(true);
+    expect(agenda.diasFechados).not.toContain(5);
+    expect(motivoDoBloqueioDoDia("2026-10-09", agenda)).toBeNull();
+  });
 
-    expect(motivoDoBloqueioDoDia("2026-10-09", agenda)).toBe("fechado");
+  it("DOMINGO não é reservável", () => {
+    expect(abertoNoBanco.get(0)).toBe(false);
+    expect(agenda.diasFechados).toEqual(expect.arrayContaining([0]));
     expect(motivoDoBloqueioDoDia("2026-10-11", agenda)).toBe("fechado");
   });
 
@@ -121,9 +126,15 @@ describe("o calendario segue o HorarioFuncionamento do banco", () => {
     expect(blocos.some((bloco) => bloco.disponivelParaInicio)).toBe(true);
   });
 
-  it("na sexta e no domingo a grade vem vazia", async () => {
-    await expect(slotsDoDia(salaCI, "2026-10-09")).resolves.toEqual([]);
+  it("no domingo a grade vem vazia", async () => {
     await expect(slotsDoDia(salaCI, "2026-10-11")).resolves.toEqual([]);
+  });
+
+  it("na sexta a grade oferece horarios ate a noite", async () => {
+    const blocos = await slotsDoDia(salaCI, "2026-10-09");
+
+    expect(blocos[0]?.horario).toBe("08:00");
+    expect(blocos.at(-1)?.horario).toBe("21:30");
   });
 
   it("bloqueia o que está fora da janela de reserva, não o dia da semana", () => {
@@ -147,7 +158,7 @@ describe("cabeçalho do calendário", () => {
 describe("resumo do funcionamento no rodapé", () => {
   it("junta os dias iguais numa linha só", () => {
     expect(resumoDoFuncionamento(agenda)).toBe(
-      "Seg a qui: 08h–18h · Sáb: 09h–13h · Sex e dom: fechado.",
+      "Seg a sex: 08h–22h · Sáb: 09h–13h · Dom: fechado.",
     );
   });
 
