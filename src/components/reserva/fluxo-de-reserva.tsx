@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
 import type { CategoriaReserva } from "@/lib/precos";
-import { NOME_DA_MARCA } from "@/lib/marca";
+import { Logotipo } from "@/components/marca/logotipo";
 
 import {
   buscarAgenda,
@@ -378,10 +378,12 @@ export function FluxoDeReserva({
             )}
 
             {/* Quem chega pelo Instagram precisa ver de cara ONDE esta. A etapa
-                atual ja aparece logo abaixo, na barra de progresso. */}
-            <p className="flex-1 truncate text-base font-bold text-text-primary">
-              {NOME_DA_MARCA}
-            </p>
+                atual ja aparece logo abaixo, na barra de progresso.
+
+                A logo e menor no celular para caber ao lado do botao de voltar
+                e do link das reservas, sem espremer nenhum dos dois. */}
+            <Logotipo className="h-7 sm:h-8" prioridade />
+            <span aria-hidden className="flex-1" />
 
             <Link
               href="/minhas-reservas"

@@ -118,6 +118,13 @@ COPY --from=construcao --chown=nextjs:nodejs /app/src/generated ./src/generated
 COPY --from=construcao --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=construcao --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Os arquivos estaticos servidos como estao — hoje, a logo da marca.
+#
+# O pacote "standalone" NAO leva a pasta public junto: e preciso copiar. Sem
+# esta linha a logo aparece no computador de quem programa (onde o Next le a
+# pasta direto) e some no ar, virando um quadrado vazio no cabecalho.
+COPY --from=construcao --chown=nextjs:nodejs /app/public ./public
+
 COPY --chown=nextjs:nodejs --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
 
 EXPOSE 3000

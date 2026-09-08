@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Botao } from "@/components/ui/botao";
+import { Logotipo } from "@/components/marca/logotipo";
 import { Campo } from "@/components/ui/campo";
 
 type CorpoDeErro = { erro?: string };
@@ -49,8 +50,11 @@ export function FormularioDeLogin({ voltarPara }: { voltarPara: string }) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-bg-secondary px-4 py-10">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <span aria-hidden className="h-2 w-16 rounded-full bg-brand" />
+        <div className="mb-8 flex flex-col items-center gap-4 text-center">
+          {/* A logo entra no lugar da barrinha amarela que representava a
+              marca aqui. O titulo continua: a logo diz de QUEM e o sistema, e
+              o titulo diz que esta area e a da equipe, nao a do cliente. */}
+          <Logotipo className="h-12 sm:h-14" prioridade />
           <h1 className="text-2xl font-bold tracking-tight text-text-primary">
             Painel do coworking
           </h1>
