@@ -33,6 +33,16 @@ enum OrigemReserva {
   ADMIN
 }
 
+/// Em que area o cliente trabalha. Perguntado na reserva, usado so no
+/// relatorio do painel — nao muda preco nem disponibilidade.
+enum CategoriaProfissao {
+  MARKETING
+  JURIDICO
+  CONTABIL
+  SAUDE
+  OUTROS
+}
+
 /// Como a reserva foi vendida.
 enum CategoriaReserva {
   /// Por hora, na grade de 30 min. E o padrao desde sempre.
@@ -208,6 +218,11 @@ model Reserva {
   origem    OrigemReserva
   /// Por hora ou dia inteiro. Muda o preco e o horario ocupado.
   categoria CategoriaReserva @default(HORA)
+  /// Area de atuacao do cliente. NULO nas reservas anteriores ao campo — o
+  /// relatorio trata essas como "nao informado". Para reserva NOVA e
+  /// obrigatorio, e quem cobra isso e a aplicacao: a coluna precisa aceitar
+  /// nulo por causa do passado.
+  profissao CategoriaProfissao?
 
   recorrenciaId String?      @map("recorrencia_id")
   recorrencia   Recorrencia? @relation(fields: [recorrenciaId], references: [id], onDelete: SetNull)

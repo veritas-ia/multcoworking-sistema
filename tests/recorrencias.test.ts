@@ -114,6 +114,7 @@ async function criarSeriePelaRota(entrada: Entrada) {
         salaId: entrada.salaId ?? salaCI,
         telefone: CLIENTE,
         nome: "Cliente Recorrente",
+        profissao: "OUTROS",
         inicio: entrada.inicio ?? "09:00",
         fim: entrada.fim ?? "10:00",
         diasDaSemana: entrada.diasDaSemana,

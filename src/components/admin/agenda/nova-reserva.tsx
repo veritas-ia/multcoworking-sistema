@@ -9,6 +9,7 @@ import { AvisoDeErro } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
 import { serieporExtenso, type SemanaDoMes } from "@/lib/datas-recorrencia";
+import { PROFISSOES } from "@/lib/profissoes";
 import { formatarEnquantoDigita } from "@/lib/telefone";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,8 @@ export function NovaReserva({
 }) {
   const [salaId, setSalaId] = useState(salaInicial ?? salas[0]?.id ?? "");
   const [nome, setNome] = useState("");
+  /** Area de atuacao do cliente. Vazia ate a recepcao escolher. */
+  const [profissao, setProfissao] = useState("");
   const [telefone, setTelefone] = useState("");
   const [data, setData] = useState(dataInicial);
   const [inicio, setInicio] = useState("09:00");
@@ -84,7 +87,11 @@ export function NovaReserva({
     repetir && (diasDaSemana.length === 0 || !dataFim || dataFim < data);
 
   const invalido =
-    fim <= inicio || nome.trim().length < 2 || telefone.length < 14 || faltaAlgoDaSerie;
+    fim <= inicio ||
+    nome.trim().length < 2 ||
+    telefone.length < 14 ||
+    profissao === "" ||
+    faltaAlgoDaSerie;
 
   async function salvar(): Promise<void> {
     setEnviando(true);
@@ -95,6 +102,7 @@ export function NovaReserva({
           salaId,
           telefone,
           nome: nome.trim(),
+          profissao,
           inicio,
           fim,
           diasDaSemana,
@@ -107,7 +115,15 @@ export function NovaReserva({
         return;
       }
 
-      await criarNaRecepcao({ salaId, telefone, nome: nome.trim(), data, inicio, fim });
+      await criarNaRecepcao({
+        salaId,
+        telefone,
+        nome: nome.trim(),
+        profissao,
+        data,
+        inicio,
+        fim,
+      });
       aoCriar();
     } catch (problema: unknown) {
       setErro(mensagemDoErro(problema));
@@ -175,6 +191,27 @@ export function NovaReserva({
           placeholder="Maria Silva"
           onChange={(evento) => setNome(evento.target.value)}
         />
+
+        <label className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-text-primary">
+            Área de atuação
+          </span>
+          <select
+            value={profissao}
+            onChange={(evento) => setProfissao(evento.target.value)}
+            className="min-h-12 w-full rounded-lg border border-border bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+          >
+            <option value="">Escolha…</option>
+            {PROFISSOES.map((opcao) => (
+              <option key={opcao.valor} value={opcao.valor}>
+                {opcao.rotulo}
+              </option>
+            ))}
+          </select>
+          <span className="text-sm text-text-secondary">
+            Entra no relatório do painel. Não muda o valor da reserva.
+          </span>
+        </label>
 
         <Campo
           etiqueta="Telefone (WhatsApp)"

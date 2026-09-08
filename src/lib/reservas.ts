@@ -10,6 +10,7 @@
  */
 import { StatusReserva } from "@/generated/prisma/enums";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
+import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { minutosEntre } from "@/lib/tempo";
@@ -60,6 +61,8 @@ export async function criarReservaPublica(entrada: {
   pessoas?: number | null;
   /** Por hora ou dia inteiro. Padrao: HORA. */
   categoria?: CategoriaReserva;
+  /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
+  profissao: CategoriaProfissao;
 }): Promise<ResultadoCriacao> {
   const categoria = entrada.categoria ?? "HORA";
 
@@ -117,6 +120,7 @@ export async function criarReservaPublica(entrada: {
           status: StatusReserva.CONFIRMADA,
           origem: "PUBLICO",
           categoria,
+          profissao: entrada.profissao,
         },
         select: { id: true },
       });

@@ -66,6 +66,7 @@ function corpoDeReserva(extra: Record<string, unknown> = {}) {
     inicio: "10:00",
     fim: "11:00",
     nome: "Cliente de Teste",
+    profissao: "OUTROS",
     aceitePolitica: true,
     ...extra,
   };

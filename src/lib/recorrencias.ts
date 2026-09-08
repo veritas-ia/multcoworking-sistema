@@ -24,6 +24,7 @@ import {
   type Frequencia,
   type SemanaDoMes,
 } from "@/lib/datas-recorrencia";
+import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import { historicoCom } from "@/lib/historico-reserva";
 import { prisma } from "@/lib/prisma";
@@ -59,6 +60,8 @@ export async function criarSerie(entrada: {
   salaId: string;
   telefone: string;
   nomeCliente: string;
+  /** Area de atuacao do cliente, perguntada UMA vez para a serie inteira. */
+  profissao: CategoriaProfissao;
   horaInicio: string;
   horaFim: string;
   diasDaSemana: number[];
@@ -172,6 +175,7 @@ export async function criarSerie(entrada: {
           salaId: entrada.salaId,
           nomeCliente: entrada.nomeCliente,
           telefone: entrada.telefone,
+          profissao: entrada.profissao,
           inicio,
           fim,
           duracaoMinutos: minutosEntre(inicio, fim),

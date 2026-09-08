@@ -56,6 +56,8 @@ export function buscarReserva(
 
 export function criarNaRecepcao(entrada: {
   salaId: string;
+  /** Area de atuacao do cliente. Obrigatoria. */
+  profissao: string;
   telefone: string;
   nome: string;
   data: string;
@@ -205,6 +207,8 @@ export type RelatorioDaSerie = {
 
 export type DadosDaSerie = {
   salaId: string;
+  /** Area de atuacao do cliente, perguntada uma vez para a serie. */
+  profissao: string;
   telefone: string;
   nome: string;
   inicio: string;

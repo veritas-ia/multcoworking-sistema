@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
+import { PROFISSOES } from "@/lib/profissoes";
 
 import { TituloDaEtapa } from "./pecas";
 
@@ -21,20 +22,27 @@ export function EtapaNome({
   nome,
   pessoas,
   perguntarPessoas,
+  profissao,
   aoMudar,
   aoMudarPessoas,
+  aoMudarProfissao,
   aoContinuar,
 }: {
   nome: string;
   /** Texto, para o campo poder ficar vazio enquanto a pessoa digita. */
   pessoas: string;
   perguntarPessoas: boolean;
+  /** Vazio ate a pessoa escolher. Obrigatorio para continuar. */
+  profissao: string;
   aoMudar: (nome: string) => void;
   aoMudarPessoas: (pessoas: string) => void;
+  aoMudarProfissao: (profissao: string) => void;
   aoContinuar: () => void;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [erroDePessoas, setErroDePessoas] = useState<string | null>(null);
+  const [erroDeProfissao, setErroDeProfissao] = useState<string | null>(null);
+  const idProfissao = useId();
 
   return (
     <form
@@ -48,6 +56,11 @@ export function EtapaNome({
 
         if (perguntarPessoas && !/^[1-9]\d*$/.test(pessoas.trim())) {
           setErroDePessoas("Diga quantas pessoas vão usar a sala.");
+          return;
+        }
+
+        if (profissao === "") {
+          setErroDeProfissao("Escolha a sua área de atuação.");
           return;
         }
 
@@ -93,6 +106,43 @@ export function EtapaNome({
           }}
         />
       ) : null}
+
+      <div className="flex flex-col gap-2">
+        <label
+          htmlFor={idProfissao}
+          className="text-sm font-semibold text-text-primary"
+        >
+          Sua área de atuação
+        </label>
+
+        <select
+          id={idProfissao}
+          value={profissao}
+          aria-invalid={erroDeProfissao ? true : undefined}
+          onChange={(evento) => {
+            aoMudarProfissao(evento.target.value);
+            setErroDeProfissao(null);
+          }}
+          className={`min-h-12 w-full rounded-lg border bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black ${
+            erroDeProfissao ? "border-destructive" : "border-border"
+          }`}
+        >
+          <option value="">Escolha…</option>
+          {PROFISSOES.map((opcao) => (
+            <option key={opcao.valor} value={opcao.valor}>
+              {opcao.rotulo}
+            </option>
+          ))}
+        </select>
+
+        {erroDeProfissao ? (
+          <p className="text-sm font-medium text-destructive">{erroDeProfissao}</p>
+        ) : (
+          <p className="text-sm text-text-secondary">
+            Ajuda a equipe a entender quem usa o espaço. Não muda o valor.
+          </p>
+        )}
+      </div>
 
       <Botao type="submit">Continuar</Botao>
     </form>

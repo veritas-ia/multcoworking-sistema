@@ -82,6 +82,8 @@ export function FluxoDeReserva({
   const [pessoas, setPessoas] = useState("");
   /** Por hora ou dia inteiro. So as salas com diaria oferecem a escolha. */
   const [categoria, setCategoria] = useState<CategoriaReserva>("HORA");
+  /** Area de atuacao do cliente. Vazia ate ele escolher. */
+  const [profissao, setProfissao] = useState("");
   const [erroInicial, setErroInicial] = useState<string | null>(null);
   const [tentativaInicial, setTentativaInicial] = useState(0);
 
@@ -276,6 +278,7 @@ export function FluxoDeReserva({
         nome: nome.trim(),
         pessoas: perguntarPessoas && pessoas !== "" ? Number(pessoas) : null,
         categoria,
+        profissao,
       });
       setReserva(criada);
       setAviso(null);
@@ -496,8 +499,10 @@ export function FluxoDeReserva({
             nome={nome}
             pessoas={pessoas}
             perguntarPessoas={perguntarPessoas}
+            profissao={profissao}
             aoMudar={setNome}
             aoMudarPessoas={setPessoas}
+            aoMudarProfissao={setProfissao}
             aoContinuar={() => setEtapa("resumo")}
           />
         ) : null}

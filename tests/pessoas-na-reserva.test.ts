@@ -70,6 +70,7 @@ async function reservar(entrada: {
     salaId: salaReuniao,
     telefone: TELEFONE,
     nomeCliente: "Cliente de Teste",
+    profissao: "OUTROS",
     inicio: instanteDe(entrada.dia, entrada.inicio),
     fim: instanteDe(entrada.dia, entrada.fim),
     pessoas: entrada.pessoas,

@@ -16,6 +16,10 @@ export const dynamic = "force-dynamic";
 
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
+  /** Obrigatoria em reserva nova; so o passado tem reserva sem profissao. */
+  profissao: z.enum(["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"], {
+    message: "Escolha a área de atuação do cliente.",
+  }),
   /** "DIARIA" ignora inicio/fim: o horario vem da configuracao. */
   categoria: z.enum(["HORA", "DIARIA"]).optional(),
   pessoas: z.number().int().min(1).max(500).nullish(),
@@ -73,6 +77,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
+    profissao: corpo.data.profissao,
     pessoas: corpo.data.pessoas ?? null,
     categoria,
     inicio,

@@ -24,6 +24,7 @@ import {
   type ResultadoValidacao,
 } from "@/lib/disponibilidade";
 import { historicoCom, type Momento } from "@/lib/historico-reserva";
+import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
@@ -203,6 +204,8 @@ export async function criarReservaNaRecepcao(entrada: {
   pessoas?: number | null;
   /** Por hora ou dia inteiro. Padrao: HORA. */
   categoria?: CategoriaReserva;
+  /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
+  profissao: CategoriaProfissao;
   operador: Operador;
 }): Promise<Resultado<{ id: string; sala: string; valor: string }>> {
   // Modo ADMIN: sem antecedencia minima, sem limite de duracao, pode no passado.
@@ -233,6 +236,7 @@ export async function criarReservaNaRecepcao(entrada: {
         telefone: entrada.telefone,
         pessoas: entrada.pessoas ?? null,
         categoria: entrada.categoria ?? "HORA",
+        profissao: entrada.profissao,
         inicio: entrada.inicio,
         fim: entrada.fim,
         duracaoMinutos: minutosEntre(entrada.inicio, entrada.fim),

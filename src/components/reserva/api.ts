@@ -120,6 +120,8 @@ export function criarReserva(entrada: {
   pessoas?: number | null;
   /** "DIARIA" faz o servidor usar o horario fixo, ignorando inicio/fim. */
   categoria?: "HORA" | "DIARIA";
+  /** Area de atuacao do cliente. Obrigatoria. */
+  profissao: string;
   salaId: string;
   data: string;
   inicio: string;

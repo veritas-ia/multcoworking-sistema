@@ -17,6 +17,9 @@ export const dynamic = "force-dynamic";
 
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
+  profissao: z.enum(["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"], {
+    message: "Escolha a área de atuação do cliente.",
+  }),
   telefone: z.string().min(1, "Informe o telefone do cliente."),
   nome: z.string().trim().min(2, "Informe o nome do cliente.").max(120, "Nome muito longo."),
   inicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a hora no formato HH:MM."),
@@ -66,6 +69,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
+    profissao: corpo.data.profissao,
     horaInicio: corpo.data.inicio,
     horaFim: corpo.data.fim,
     diasDaSemana: corpo.data.diasDaSemana,
