@@ -170,6 +170,37 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   bloqueios e feriados guardam quem os criou. Quem é desligado perde o acesso na
   hora, mesmo com o cookie ainda no prazo. Ninguém desliga o próprio acesso.
 
+### Categoria de profissão e relatórios
+- Toda reserva guarda a **categoria de profissão** do cliente: Marketing, Jurídico,
+  Contábil, Área da Saúde ou Outros. O campo se chama `profissao` no banco — `categoria`
+  já é de "hora ou diária" e as duas coisas não podem se misturar.
+- É **obrigatório** nas três portas que criam reserva: site, recepção e série recorrente.
+  A série pergunta uma vez e todas as ocorrências nascem com a resposta.
+- A coluna aceita nulo **de propósito**: quem cobra a obrigatoriedade é a aplicação. As
+  reservas anteriores ao campo nunca foram perguntadas, e preencher um valor agora seria
+  inventar informação que o cliente não deu. No relatório elas aparecem como
+  "Não informado".
+- A profissão **não entra** em preço, disponibilidade nem em nenhuma regra da agenda.
+  Serve só ao relatório. No reagendamento ela viaja com a reserva, sem perguntar de novo.
+- **Dashboard de relatórios** em `/admin/relatorios`: total do período com variação,
+  evolução no tempo, dias da semana (barras horizontais), salas, horários, situação das
+  reservas e área de atuação.
+- O dashboard é **só leitura**: não existe rota de escrita nele, e nada ali altera reserva,
+  sala ou configuração.
+- **Sem faturamento, receita ou valor em lugar nenhum** — decisão do dono. A garantia não é
+  esconder na tela: a consulta traz uma lista fechada de campos e `valor` não está nela.
+  Há teste procurando o valor dentro da resposta.
+- Uma reserva entra no período quando **o horário dela** cai ali, em qualquer situação
+  (confirmada, cancelada, concluída ou remarcada). O gráfico por situação mostra a divisão.
+- O período de comparação tem sempre o **mesmo número de dias** do atual, colado antes.
+  Sem isso, fevereiro "cairia" só por ter menos dias que janeiro.
+- Todo agrupamento (dia, dia da semana, hora) é feito no **relógio de São Paulo**, e não no
+  banco. Agrupando em UTC, uma reserva de segunda às 21h apareceria como terça no
+  relatório e discordaria da agenda.
+- Os gráficos são feitos em **SVG e CSS, sem biblioteca**: a stack do CLAUDE.md não tem
+  nenhuma, e as formas são simples o bastante. Todo gráfico escreve o número por extenso
+  ao lado — nenhuma informação depende só do desenho.
+
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.
 
