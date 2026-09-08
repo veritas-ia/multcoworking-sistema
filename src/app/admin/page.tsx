@@ -50,6 +50,11 @@ export default async function PaginaDoPainel() {
             descricao="Ver o dia, a semana ou o mês. Lançar reserva, bloquear horário e criar série."
           />
           <Atalho
+            href="/admin/relatorios"
+            titulo="Relatórios"
+            descricao="Quantas reservas, em quais salas, em que dias e horários. Só consulta — não altera nada."
+          />
+          <Atalho
             href="/admin/configuracoes"
             titulo="Configurações"
             descricao="Salas e preços, horário de funcionamento, regras de reserva, mensagens do WhatsApp e usuários do painel."
