@@ -68,6 +68,14 @@ export const TEMPLATES: readonly DefinicaoDeTemplate[] = [
     rotulo: "Lembrete de 3 horas antes",
     variaveis: ["nome", "sala", "data", "inicio", "fim", "link"],
   },
+  {
+    chave: ChaveTemplate.avaliacao_pos_uso,
+    rotulo: "Convite para avaliar (1 hora depois)",
+    // Aqui o {{link}} e o do GOOGLE, e nao o da area "Minhas reservas" como
+    // nos lembretes. Cada mensagem tem a sua lista, entao o mesmo nome pode
+    // significar coisas diferentes sem confundir o sistema.
+    variaveis: ["nome", "sala", "data", "link"],
+  },
 ] as const;
 
 /** Valores de mentira, so para a equipe ver como a mensagem vai ficar. */
@@ -150,6 +158,73 @@ export function validarTemplate(
   }
 
   return null;
+}
+
+/**
+ * O LINK DE AVALIACAO DO GOOGLE.
+ *
+ * Mora em Configuracao, e nao escrito dentro do texto da mensagem, para viver
+ * num lugar so: a equipe cola uma vez e nao precisa lembrar de repetir se um
+ * dia reescrever o texto. Vazio e um estado valido — e o estado inicial —, e
+ * enquanto estiver vazio a rotina de avaliacao nao envia nada.
+ */
+export const CHAVE_DO_LINK = "linkAvaliacaoGoogle";
+
+export async function lerLinkDeAvaliacao(): Promise<string> {
+  const linha = await prisma.configuracao.findUnique({ where: { chave: CHAVE_DO_LINK } });
+  return linha?.valor.trim() ?? "";
+}
+
+/** Vazio limpa o link (e desliga o envio). Qualquer outra coisa precisa ser um endereco. */
+export function validarLinkDeAvaliacao(link: string): string | null {
+  const limpo = link.trim();
+
+  if (limpo === "") {
+    return null;
+  }
+
+  if (limpo.length > 500) {
+    return "O link está longo demais. Confira se não colou a página inteira.";
+  }
+
+  let endereco: URL;
+
+  try {
+    endereco = new URL(limpo);
+  } catch {
+    return "Escreva o link completo, começando com https://";
+  }
+
+  if (endereco.protocol !== "https:" && endereco.protocol !== "http:") {
+    return "O link precisa começar com https://";
+  }
+
+  return null;
+}
+
+export async function salvarLinkDeAvaliacao(
+  link: string,
+): Promise<Resultado<{ link: string }>> {
+  const erro = validarLinkDeAvaliacao(link);
+
+  if (erro) {
+    return { ok: false, falha: { codigo: "REGRA", motivo: erro } };
+  }
+
+  const limpo = link.trim();
+
+  await prisma.configuracao.upsert({
+    where: { chave: CHAVE_DO_LINK },
+    create: {
+      chave: CHAVE_DO_LINK,
+      valor: limpo,
+      descricao:
+        "Link do Google Meu Negócio para o cliente avaliar. Enquanto estiver vazio, a mensagem de avaliação não é enviada.",
+    },
+    update: { valor: limpo },
+  });
+
+  return { ok: true, dados: { link: limpo } };
 }
 
 export async function listarTemplates(): Promise<TemplateNaTela[]> {

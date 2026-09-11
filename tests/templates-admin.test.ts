@@ -1,5 +1,5 @@
 /**
- * MODELOS DE MENSAGEM DO WHATSAPP (Fase 11).
+ * MODELOS DE MENSAGEM DO WHATSAPP (Fase 11, mais o convite para avaliar).
  *
  * O que estes testes protegem:
  *  1. so a equipe logada edita as mensagens;
@@ -103,12 +103,12 @@ describe("quem pode mexer", () => {
 });
 
 describe("leitura", () => {
-  it("devolve as sete mensagens com suas variaveis e a previa", async () => {
+  it("devolve as oito mensagens com suas variaveis e a previa", async () => {
     const corpo = await (
       await getTemplates(pedidoGet("/api/admin/templates", {}, { cookie }))
     ).json();
 
-    expect(corpo.templates).toHaveLength(7);
+    expect(corpo.templates).toHaveLength(8);
 
     const lembrete = corpo.templates.find(
       (template: { chave: string }) => template.chave === "lembrete_13h",
@@ -121,6 +121,14 @@ describe("leitura", () => {
     expect(lembrete.variaveis).toContain("link");
     expect(confirmada.variaveis).not.toContain("link");
     expect(confirmada.variaveis).toContain("valor");
+
+    // Na avaliacao o {{link}} e o do GOOGLE, e nao o da area do cliente: cada
+    // mensagem tem a sua lista, entao o mesmo nome vale coisas diferentes.
+    const avaliacao = corpo.templates.find(
+      (template: { chave: string }) => template.chave === "avaliacao_pos_uso",
+    );
+    expect(avaliacao.variaveis).toContain("link");
+    expect(avaliacao.variaveis).not.toContain("valor");
   });
 
   it("a previa nao deixa nenhuma variavel por trocar", async () => {

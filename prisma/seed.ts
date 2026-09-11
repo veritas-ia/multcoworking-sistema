@@ -180,6 +180,12 @@ const CONFIGURACOES = [
     valor: "18:00",
     descricao: "A partir de que hora vale o preço noturno das salas.",
   },
+  {
+    chave: "linkAvaliacaoGoogle",
+    valor: "",
+    descricao:
+      "Link do Google Meu Negócio para o cliente avaliar. Enquanto estiver vazio, a mensagem de avaliação não é enviada.",
+  },
 ] as const;
 
 async function criarConfiguracoes(): Promise<void> {
@@ -194,8 +200,10 @@ async function criarConfiguracoes(): Promise<void> {
 }
 
 // -----------------------------------------------------------------------------
-// As seis mensagens de WhatsApp
+// As mensagens de WhatsApp
 // Variaveis: {{nome}} {{sala}} {{data}} {{inicio}} {{fim}} {{valor}} {{codigo}}
+// {{dias}} {{periodo}} {{quantidade}} {{link}} — cada mensagem aceita as suas,
+// e a lista de quais esta em "src/lib/templates-admin.ts".
 // -----------------------------------------------------------------------------
 
 const TEMPLATES = [
@@ -262,6 +270,17 @@ const TEMPLATES = [
       "📅 {{data}}\n" +
       "🕐 {{inicio}} às {{fim}}\n\n" +
       "Precisa cancelar ou remarcar? É só acessar:\n{{link}}",
+  },
+  {
+    chave: ChaveTemplate.avaliacao_pos_uso,
+    descricao:
+      "Enviada 1 hora depois do término da reserva, convidando a avaliar no Google.",
+    texto:
+      "Oi, {{nome}}! Obrigado por usar a {{sala}} hoje. 🙌\n\n" +
+      "Esperamos que tenha sido um bom dia de trabalho. Se puder, deixe uma " +
+      "avaliação — leva menos de um minuto e ajuda muito o coworking:\n" +
+      "{{link}}\n\n" +
+      "Até a próxima!",
   },
   {
     chave: ChaveTemplate.lembrete_3h,

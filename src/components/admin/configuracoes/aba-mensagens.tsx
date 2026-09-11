@@ -5,7 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 import { ErroDaApi } from "@/components/reserva/api";
 import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
 
-import { buscarTemplates, salvarTemplate, type TemplateNaTela } from "./api";
+import { Campo } from "@/components/ui/campo";
+
+import {
+  buscarTemplates,
+  salvarLinkDeAvaliacao,
+  salvarTemplate,
+  type TemplateNaTela,
+} from "./api";
 import { AreaDeTexto, BarraDeSalvar, Secao, type Situacao } from "./pecas";
 
 function mensagemDe(erro: unknown, padrao: string): string {
@@ -15,6 +22,7 @@ function mensagemDe(erro: unknown, padrao: string): string {
 export function AbaDeMensagens() {
   const [templates, setTemplates] = useState<TemplateNaTela[] | null>(null);
   const [maximo, setMaximo] = useState(1_000);
+  const [linkAvaliacao, setLinkAvaliacao] = useState("");
   const [erroAoCarregar, setErroAoCarregar] = useState<string | null>(null);
 
   const carregar = useCallback(async (sinal?: AbortSignal) => {
@@ -24,6 +32,7 @@ export function AbaDeMensagens() {
       const resposta = await buscarTemplates(sinal);
       setTemplates(resposta.templates);
       setMaximo(resposta.maximoDeCaracteres);
+      setLinkAvaliacao(resposta.linkAvaliacao);
     } catch (erro) {
       if (sinal?.aborted) {
         return;
@@ -56,6 +65,8 @@ export function AbaDeMensagens() {
         {" "}<code className="font-mono">{"{{"}...{"}}"}</code> escrito na mensagem, por
         isso o sistema recusa antes de salvar.
       </p>
+
+      <LinkDeAvaliacao inicial={linkAvaliacao} aoSalvar={setLinkAvaliacao} />
 
       {templates.map((template) => (
         <CartaoDaMensagem
@@ -178,4 +189,79 @@ function previaLocal(texto: string, previaDoServidor: string, alterado: boolean)
   }
 
   return texto.replace(/\{\{(\w+)\}\}/g, (original, chave: string) => EXEMPLO[chave] ?? original);
+}
+
+/**
+ * O link do Google Meu Negócio, usado pela mensagem de avaliação.
+ *
+ * Fica nesta aba, junto das mensagens, porque é aqui que quem for editar o
+ * texto do convite vai procurar por ele.
+ */
+function LinkDeAvaliacao({
+  inicial,
+  aoSalvar,
+}: {
+  inicial: string;
+  aoSalvar: (link: string) => void;
+}) {
+  const [link, setLink] = useState(inicial);
+  const [situacao, setSituacao] = useState<Situacao>({ tipo: "parado" });
+
+  const alterado = link.trim() !== inicial.trim();
+
+  async function salvar() {
+    setSituacao({ tipo: "salvando" });
+
+    try {
+      const { linkAvaliacao } = await salvarLinkDeAvaliacao(link);
+      aoSalvar(linkAvaliacao);
+      setLink(linkAvaliacao);
+      setSituacao({
+        tipo: "salvo",
+        mensagem:
+          linkAvaliacao === ""
+            ? "Link apagado. O convite para avaliar deixa de ser enviado."
+            : "Link salvo. O convite passa a ser enviado 1 hora depois de cada reserva.",
+      });
+    } catch (erro) {
+      setSituacao({ tipo: "erro", mensagem: mensagemDe(erro, "Não foi possível salvar.") });
+    }
+  }
+
+  return (
+    <Secao
+      titulo="Link de avaliação do Google"
+      descricao="É o endereço que o cliente abre para avaliar o coworking. A mensagem de avaliação usa ele na variável {{link}}."
+    >
+      <div className="flex flex-col gap-4">
+        <Campo
+          etiqueta="Endereço"
+          type="url"
+          inputMode="url"
+          placeholder="https://g.page/r/..."
+          value={link}
+          onChange={(evento) => {
+            setSituacao({ tipo: "parado" });
+            setLink(evento.target.value);
+          }}
+          dica={
+            inicial === ""
+              ? "Enquanto estiver em branco, a mensagem de avaliação NÃO é enviada — pedir avaliação sem dizer onde só gasta a paciência do cliente."
+              : "Para desligar o convite de avaliação, apague o endereço e salve."
+          }
+        />
+
+        <BarraDeSalvar
+          situacao={situacao}
+          alterado={alterado}
+          aoSalvar={() => void salvar()}
+          aoDescartar={() => {
+            setLink(inicial);
+            setSituacao({ tipo: "parado" });
+          }}
+          rotulo="Salvar link"
+        />
+      </div>
+    </Secao>
+  );
 }

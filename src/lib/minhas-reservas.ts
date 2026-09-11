@@ -343,6 +343,9 @@ export async function reagendarReserva(entrada: {
         lembrete13hEnviadoEm: null,
         lembrete3hEnviadoEm: null,
         lembrete13hNaoAplicavel: false,
+        // A avaliacao tambem recomeca: ela vale para o NOVO termino.
+        avaliacaoEnviadaEm: null,
+        avaliacaoNaoAplicavel: false,
         lembrete3hNaoAplicavel: false,
         historicoAlteracoes: historicoCom(reserva.historicoAlteracoes, {
           em: agora.toISOString(),

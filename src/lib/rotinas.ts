@@ -1,10 +1,11 @@
 /**
  * ROTINAS AUTOMATICAS (Fase 10).
  *
- * Tres coisas acontecem sozinhas, sem ninguem clicar:
+ * Quatro coisas acontecem sozinhas, sem ninguem clicar:
  *   1. lembrete 13 HORAS antes da reserva;
  *   2. lembrete 3 HORAS antes;
- *   3. marcar como CONCLUIDA quem ja terminou.
+ *   3. convite para avaliar, 1 HORA DEPOIS do termino;
+ *   4. marcar como CONCLUIDA quem ja terminou.
  * Mais uma faxina diaria de dados vencidos.
  *
  * IDEMPOTENCIA — a parte que importa
@@ -22,11 +23,15 @@
 import { ChaveTemplate, StatusReserva } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { dataLocalDe, horaLocalDe } from "@/lib/tempo";
+import { lerLinkDeAvaliacao } from "@/lib/templates-admin";
 import { enviarMensagem } from "@/lib/whatsapp";
 
 /** Quantas horas antes cada lembrete sai. Decisao do dono na Fase 10. */
 export const HORAS_DO_PRIMEIRO_LEMBRETE = 13;
 export const HORAS_DO_SEGUNDO_LEMBRETE = 3;
+
+/** Quanto tempo DEPOIS do termino sai o convite para avaliar. */
+export const HORAS_ATE_A_AVALIACAO = 1;
 
 /**
  * Folga de 15 minutos para cada lado.
@@ -163,6 +168,103 @@ export function lembrete3h(agora = new Date()): Promise<ResultadoDaRotina> {
 }
 
 // -----------------------------------------------------------------------------
+// 2b. Convite para avaliar, 1 hora DEPOIS do termino
+// -----------------------------------------------------------------------------
+
+/**
+ * Convite para avaliar, uma hora depois de a reserva terminar.
+ *
+ * TRES DIFERENCAS em relacao aos lembretes, todas de proposito:
+ *
+ *   1. olha para o TERMINO, e nao para o inicio;
+ *
+ *   2. aceita QUALQUER status menos CANCELADA — e precisa ser assim. Uma hora
+ *      depois do termino a reserva ja e CONCLUIDA, porque a rotina de marcar
+ *      concluidas roda na mesma passada e mudou o status quase uma hora antes.
+ *      Filtrar por CONFIRMADA/REAGENDADA aqui faria a consulta nunca achar
+ *      nada, e ninguem receberia a mensagem — sem erro nenhum aparecer;
+ *
+ *   3. sem o link do Google cadastrado, a rotina NAO FAZ NADA: nao envia e
+ *      nem marca. Pedir avaliacao sem dizer onde avaliar so gasta a paciencia
+ *      do cliente. No dia em que o link for preenchido, as reservas antigas
+ *      ja estarao fora da janela e viram "nao aplicavel" — ninguem leva uma
+ *      enxurrada de convites atrasados.
+ */
+export async function avaliacaoPosUso(agora = new Date()): Promise<ResultadoDaRotina> {
+  const link = await lerLinkDeAvaliacao();
+
+  if (link === "") {
+    return { enviados: 0, naoAplicaveis: 0, falhas: 0 };
+  }
+
+  // A reserva precisa ter terminado ha HORAS_ATE_A_AVALIACAO, com a folga.
+  const alvo = maisMinutos(agora, -HORAS_ATE_A_AVALIACAO * 60);
+  const de = maisMinutos(alvo, -JANELA_MINUTOS);
+  const ate = maisMinutos(alvo, JANELA_MINUTOS);
+
+  let enviados = 0;
+  let falhas = 0;
+
+  const candidatas = await prisma.reserva.findMany({
+    where: {
+      status: { not: StatusReserva.CANCELADA },
+      fim: { gte: de, lte: ate },
+      avaliacaoEnviadaEm: null,
+      avaliacaoNaoAplicavel: false,
+    },
+    include: { sala: { select: { nome: true } } },
+  });
+
+  for (const reserva of candidatas) {
+    // MARCAR PRIMEIRO, como nos lembretes: o "count" diz se fomos nos que
+    // marcamos. Quem nao marcou, nao manda.
+    const { count } = await prisma.reserva.updateMany({
+      where: { id: reserva.id, avaliacaoEnviadaEm: null },
+      data: { avaliacaoEnviadaEm: agora },
+    });
+
+    if (count === 0) {
+      continue;
+    }
+
+    const resultado = await enviarMensagem({
+      chave: ChaveTemplate.avaliacao_pos_uso,
+      telefone: reserva.telefone,
+      reservaId: reserva.id,
+      variaveis: {
+        nome: reserva.nomeCliente,
+        sala: reserva.sala.nome,
+        data: dataLocalDe(reserva.inicio),
+        link,
+      },
+    });
+
+    if (resultado.enviada || resultado.simulada) {
+      enviados += 1;
+    } else {
+      falhas += 1;
+    }
+  }
+
+  // --- as que terminaram ha tempo demais: marcar "nao aplicavel" ---
+  //
+  // Sem isto, ligar o agendador depois de um tempo desligado dispararia
+  // convite atrasado para tudo que ja passou — e a rotina reavaliaria essas
+  // reservas a cada cinco minutos, para sempre.
+  const { count: naoAplicaveis } = await prisma.reserva.updateMany({
+    where: {
+      status: { not: StatusReserva.CANCELADA },
+      fim: { lt: de },
+      avaliacaoEnviadaEm: null,
+      avaliacaoNaoAplicavel: false,
+    },
+    data: { avaliacaoNaoAplicavel: true },
+  });
+
+  return { enviados, naoAplicaveis, falhas };
+}
+
+// -----------------------------------------------------------------------------
 // 3. Marcar concluidas
 // -----------------------------------------------------------------------------
 
@@ -231,6 +333,7 @@ export async function faxina(agora = new Date()): Promise<ResultadoDaFaxina> {
 export type ResumoDaPassada = {
   lembrete13h: ResultadoDaRotina;
   lembrete3h: ResultadoDaRotina;
+  avaliacao: ResultadoDaRotina;
   concluidas: number;
 };
 
@@ -239,6 +342,9 @@ export async function passadaDeRotina(agora = new Date()): Promise<ResumoDaPassa
   return {
     lembrete13h: await lembrete13h(agora),
     lembrete3h: await lembrete3h(agora),
+    // A avaliacao roda ANTES de marcar concluidas so por clareza de leitura;
+    // a ordem nao muda o resultado, porque ela aceita CONCLUIDA tambem.
+    avaliacao: await avaliacaoPosUso(agora),
     concluidas: (await marcarConcluidas(agora)).concluidas,
   };
 }

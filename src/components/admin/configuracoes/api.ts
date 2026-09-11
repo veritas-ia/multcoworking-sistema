@@ -228,8 +228,19 @@ export type TemplateNaTela = {
 
 export function buscarTemplates(
   sinal?: AbortSignal,
-): Promise<{ templates: TemplateNaTela[]; maximoDeCaracteres: number }> {
+): Promise<{
+  templates: TemplateNaTela[];
+  maximoDeCaracteres: number;
+  linkAvaliacao: string;
+}> {
   return pedir("/api/admin/templates", { signal: sinal });
+}
+
+export function salvarLinkDeAvaliacao(link: string): Promise<{ linkAvaliacao: string }> {
+  return pedir("/api/admin/templates", {
+    method: "PATCH",
+    body: JSON.stringify({ link }),
+  });
 }
 
 export function salvarTemplate(

@@ -39,6 +39,9 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Identificação do cliente: telefone + código de 6 dígitos via WhatsApp (válido 10 min,
   uso único, máx. 5 tentativas). Exigido para reservar e para gerenciar reservas.
 - Máx. 3 reservas ativas por telefone. Limite de envio de códigos por número e por IP.
+- Mensagem de avaliação: enviada 1 hora DEPOIS do término da reserva, com o link do
+  Google Meu Negócio. Mesma mecânica dos lembretes (uma vez só, marcar antes de
+  mandar). Sem o link cadastrado no painel, ela simplesmente não é enviada.
 - Lembretes automáticos: 13h antes e 3h antes (mudado na Fase 10 — eram 24h e 2h).
   Cada um enviado NO MÁXIMO uma vez por reserva (registrar data/hora de envio e nunca
   reenviar). As DUAS mensagens levam o link da área "Minhas reservas", para o cliente
@@ -104,7 +107,7 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Preço é informativo no MVP ("valor estimado"), sem pagamento online. O valor fica congelado na reserva no momento da criação; aumento futuro de preço não altera reservas antigas.
 - Lembrete cujo horário já passou no momento da criação não é enviado; fica registrado como "não aplicável".
 - Ao reagendar, os campos de lembrete são zerados e os lembretes valem para o novo horário. A regra "uma vez só" passa a valer por horário agendado, não por reserva na vida toda.
-- Sete templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes, {{link}}. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+- Oito templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h e convite para avaliar. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes e no convite para avaliar, {{link}} — que nos lembretes é a área "Minhas reservas" e no convite é o Google. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
 - Criar uma série recorrente manda UMA mensagem só, resumindo a série (sala, dias da
   semana, horário, período e quantas datas) — não uma por ocorrência. Uma série de dois
   meses mandaria ~17 mensagens seguidas, que parece defeito para o cliente e arrisca o
@@ -200,6 +203,27 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Os gráficos são feitos em **SVG e CSS, sem biblioteca**: a stack do CLAUDE.md não tem
   nenhuma, e as formas são simples o bastante. Todo gráfico escreve o número por extenso
   ao lado — nenhuma informação depende só do desenho.
+
+### Mensagem de avaliação (1 hora após o término)
+- Oitavo template, `avaliacao_pos_uso`: agradecimento pelo uso + convite para avaliar
+  no Google. Variáveis: {{nome}}, {{sala}}, {{data}} e {{link}}.
+- Nesta mensagem o {{link}} é o do **Google Meu Negócio**, e não o da área "Minhas
+  reservas" como nos lembretes. Cada mensagem tem a sua lista de variáveis, então o
+  mesmo nome pode valer coisas diferentes sem confundir o sistema.
+- O link mora em **Configurações → Mensagens**, num campo próprio — não escrito dentro
+  do texto. Assim a equipe cola uma vez e não precisa repetir se reescrever a mensagem.
+- **Sem o link cadastrado, a rotina não envia e não marca nada.** Pedir avaliação sem
+  dizer onde avaliar só gasta a paciência do cliente. No dia em que o link for
+  preenchido, as reservas antigas já estarão fora da janela e viram "não aplicável" —
+  ninguém leva uma enxurrada de convites atrasados.
+- Roda no mesmo agendador dos lembretes, de 5 em 5 minutos, com a mesma janela de
+  tolerância de 15 minutos e a mesma idempotência: **marcar primeiro, mandar depois**.
+- Vale para **qualquer status menos CANCELADA** — e isso inclui CONCLUIDA, de propósito.
+  Uma hora depois do término a reserva **já é** CONCLUIDA, porque a rotina de marcar
+  concluídas roda na mesma passada. Filtrar por CONFIRMADA/REAGENDADA aqui faria a
+  consulta nunca achar nada, e ninguém receberia a mensagem — sem erro nenhum aparecer.
+- Ao reagendar, o campo é zerado junto com os lembretes: a avaliação passa a valer para
+  o novo término.
 
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.

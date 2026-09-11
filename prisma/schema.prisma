@@ -67,6 +67,8 @@ enum ChaveTemplate {
   reserva_reagendada
   lembrete_13h
   lembrete_3h
+  /// Agradecimento + convite para avaliar, 1 hora DEPOIS do termino.
+  avaliacao_pos_uso
 }
 
 /// De quanto em quanto tempo uma serie se repete (Fase 9).
@@ -237,6 +239,12 @@ model Reserva {
   lembrete3hEnviadoEm  DateTime? @map("lembrete_3h_enviado_em") @db.Timestamptz(3)
   lembrete13hNaoAplicavel Boolean @default(false) @map("lembrete_13h_nao_aplicavel")
   lembrete3hNaoAplicavel  Boolean @default(false) @map("lembrete_3h_nao_aplicavel")
+
+  /// Convite para avaliar, 1 hora DEPOIS do termino. Mesma mecanica dos
+  /// lembretes: data preenchida = ja foi; "nao aplicavel" = nunca vai sair
+  /// (a reserva terminou ha tempo demais quando o sistema viu).
+  avaliacaoEnviadaEm   DateTime? @map("avaliacao_enviada_em") @db.Timestamptz(3)
+  avaliacaoNaoAplicavel Boolean  @default(false) @map("avaliacao_nao_aplicavel")
 
   /// Lista de alteracoes da reserva (reagendamentos, cancelamento).
   historicoAlteracoes Json @default("[]") @map("historico_alteracoes")
