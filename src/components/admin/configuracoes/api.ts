@@ -97,6 +97,7 @@ export type SalaDoPainel = {
   duracaoMaximaMinutos: number | null;
   ordem: number;
   reservasFuturas: number;
+  fotos: FotoDaSala[];
 };
 
 export type DadosDeSala = {
@@ -113,7 +114,9 @@ export type DadosDeSala = {
   ordem: number;
 };
 
-export function buscarSalas(sinal?: AbortSignal): Promise<{ salas: SalaDoPainel[] }> {
+export function buscarSalas(
+  sinal?: AbortSignal,
+): Promise<{ salas: SalaDoPainel[]; envioDeFotosDisponivel: boolean }> {
   return pedir("/api/admin/salas", { signal: sinal });
 }
 
@@ -302,4 +305,63 @@ export function trocarMinhaSenha(dados: {
   novaSenha: string;
 }): Promise<{ trocada: true }> {
   return pedir("/api/admin/eu/senha", { method: "PATCH", body: JSON.stringify(dados) });
+}
+
+// -----------------------------------------------------------------------------
+// Fotos da sala
+// -----------------------------------------------------------------------------
+
+export type FotoDaSala = { id: string; url: string; ordem: number };
+
+export function buscarFotos(
+  salaId: string,
+  sinal?: AbortSignal,
+): Promise<{ fotos: FotoDaSala[]; envioDisponivel: boolean }> {
+  return pedir(`/api/admin/salas/${salaId}/fotos`, { signal: sinal });
+}
+
+/**
+ * Envia o arquivo para a NOSSA rota, que repassa ao Cloudinary.
+ *
+ * Vai como formulario, e nao como JSON: o "pedir" comum manda JSON e poria o
+ * cabecalho errado, entao aqui o fetch e feito na mao.
+ */
+export async function enviarFoto(
+  salaId: string,
+  arquivo: File,
+): Promise<{ fotos: FotoDaSala[] }> {
+  const corpo = new FormData();
+  corpo.append("arquivo", arquivo);
+
+  const resposta = await fetch(`/api/admin/salas/${salaId}/fotos`, {
+    method: "POST",
+    body: corpo,
+    cache: "no-store",
+  });
+
+  const dados: unknown = await resposta.json().catch(() => null);
+
+  if (!resposta.ok) {
+    const { erro } = (dados ?? {}) as { erro?: string };
+    throw new ErroDaApi(resposta.status, erro ?? "Não foi possível enviar a foto.");
+  }
+
+  return dados as { fotos: FotoDaSala[] };
+}
+
+export function removerFoto(
+  salaId: string,
+  fotoId: string,
+): Promise<{ fotos: FotoDaSala[]; aviso: string | null }> {
+  return pedir(`/api/admin/salas/${salaId}/fotos/${fotoId}`, { method: "DELETE" });
+}
+
+export function reordenarFotos(
+  salaId: string,
+  ids: string[],
+): Promise<{ fotos: FotoDaSala[] }> {
+  return pedir(`/api/admin/salas/${salaId}/fotos`, {
+    method: "PUT",
+    body: JSON.stringify({ ids }),
+  });
 }

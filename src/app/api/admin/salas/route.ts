@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { lerCorpo, respostaErro } from "@/lib/api";
+import { cloudinaryConfigurado } from "@/lib/cloudinary";
 import { criarSala, listarSalas } from "@/lib/salas-admin";
 
 import { operadorDaRequisicao } from "../operador";
@@ -32,7 +33,11 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
   }
 
-  return NextResponse.json({ salas: await listarSalas() });
+  return NextResponse.json({
+    salas: await listarSalas(),
+    // A tela precisa saber para mostrar o aviso no lugar do botao de enviar.
+    envioDeFotosDisponivel: cloudinaryConfigurado(),
+  });
 }
 
 /** POST /api/admin/salas — cadastra uma sala nova. */

@@ -21,6 +21,7 @@ import {
   rascunhoDaSala,
   type Rascunho,
 } from "./formulario-de-sala";
+import { FotosDaSala } from "./fotos-da-sala";
 import { BarraDeSalvar, Secao, type Situacao } from "./pecas";
 
 function mensagemDe(erro: unknown, padrao: string): string {
@@ -29,6 +30,7 @@ function mensagemDe(erro: unknown, padrao: string): string {
 
 export function AbaDeSalas() {
   const [salas, setSalas] = useState<SalaDoPainel[] | null>(null);
+  const [envioDisponivel, setEnvioDisponivel] = useState(false);
   const [erroAoCarregar, setErroAoCarregar] = useState<string | null>(null);
   const [cadastrando, setCadastrando] = useState(false);
   const [salvandoNova, setSalvandoNova] = useState(false);
@@ -40,6 +42,7 @@ export function AbaDeSalas() {
     try {
       const resposta = await buscarSalas(sinal);
       setSalas(resposta.salas);
+      setEnvioDisponivel(resposta.envioDeFotosDisponivel);
     } catch (erro) {
       if (sinal?.aborted) {
         return;
@@ -88,7 +91,12 @@ export function AbaDeSalas() {
   return (
     <div className="flex flex-col gap-4">
       {salas.map((sala) => (
-        <CartaoDaSala key={sala.id} sala={sala} aoAtualizar={trocarNaLista} />
+        <CartaoDaSala
+          key={sala.id}
+          sala={sala}
+          envioDisponivel={envioDisponivel}
+          aoAtualizar={trocarNaLista}
+        />
       ))}
 
       {cadastrando ? (
@@ -123,9 +131,11 @@ export function AbaDeSalas() {
 /** Uma sala: os campos, o aviso de reservas futuras e o botao de ligar/desligar. */
 function CartaoDaSala({
   sala,
+  envioDisponivel,
   aoAtualizar,
 }: {
   sala: SalaDoPainel;
+  envioDisponivel: boolean;
   aoAtualizar: (sala: SalaDoPainel) => void;
 }) {
   const [rascunho, setRascunho] = useState<Rascunho>(() => rascunhoDaSala(sala));
@@ -196,6 +206,14 @@ function CartaoDaSala({
             setSituacao({ tipo: "parado" });
           }}
           rotulo="Salvar sala"
+        />
+
+        <FotosDaSala
+          salaId={sala.id}
+          nomeDaSala={sala.nome}
+          fotos={sala.fotos}
+          envioDisponivel={envioDisponivel}
+          aoMudar={(fotos) => aoAtualizar({ ...sala, fotos })}
         />
 
         <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
