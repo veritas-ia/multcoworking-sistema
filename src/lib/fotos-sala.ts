@@ -7,13 +7,11 @@
  * porque a tela pode ser contornada.
  */
 import {
-  MAXIMO_DE_FOTOS,
-  TAMANHO_MAXIMO_BYTES,
-  TIPOS_ACEITOS,
   apagarImagem,
   cloudinaryConfigurado,
   enviarImagem,
 } from "@/lib/cloudinary";
+import { MAXIMO_DE_FOTOS, TAMANHO_MAXIMO_BYTES, TIPOS_ACEITOS } from "@/lib/fotos";
 import { prisma } from "@/lib/prisma";
 
 export type FotoDaSala = {

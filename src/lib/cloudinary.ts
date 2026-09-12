@@ -15,14 +15,15 @@
  */
 import { createHash } from "node:crypto";
 
-/** Quanto cada arquivo pode ter. Foto de sala nao precisa de mais que isso. */
-export const TAMANHO_MAXIMO_BYTES = 5 * 1024 * 1024;
-
-/** Quantas fotos cada sala aceita. */
-export const MAXIMO_DE_FOTOS = 5;
-
-/** Os unicos tipos aceitos. */
-export const TIPOS_ACEITOS = ["image/jpeg", "image/png", "image/webp"] as const;
+// Os limites e a montagem do endereco vivem em "fotos.ts", que o NAVEGADOR
+// tambem carrega. Este arquivo usa a criptografia do Node e so roda no
+// servidor; reexportamos para quem ja importava daqui continuar funcionando.
+export {
+  MAXIMO_DE_FOTOS,
+  TAMANHO_MAXIMO_BYTES,
+  TIPOS_ACEITOS,
+  enderecoDaFoto,
+} from "@/lib/fotos";
 
 /** A pasta onde as fotos ficam la dentro, para nao se misturarem a outras. */
 const PASTA = "mult-coworking/salas";
@@ -171,25 +172,4 @@ export async function apagarImagem(publicId: string): Promise<boolean> {
 function mensagemDeErro(dados: unknown): string {
   const erro = (dados as { error?: { message?: string } } | null)?.error?.message;
   return erro ? `O Cloudinary recusou: ${erro}` : "O Cloudinary recusou o envio.";
-}
-
-/**
- * O endereco da foto no tamanho que a tela precisa.
- *
- * O Cloudinary redimensiona e escolhe o formato pelo proprio endereco
- * ("f_auto,q_auto,w_800"). E melhor do que otimizar aqui: o trabalho fica com
- * quem ja o faz bem, e o celular baixa uma imagem do tamanho do celular.
- */
-export function enderecoDaFoto(url: string, largura: number): string {
-  const marca = "/upload/";
-  const corte = url.indexOf(marca);
-
-  // Endereco fora do formato esperado volta como veio: melhor a foto grande
-  // do que a foto quebrada.
-  if (corte === -1) {
-    return url;
-  }
-
-  const inicio = corte + marca.length;
-  return `${url.slice(0, inicio)}f_auto,q_auto,w_${largura}/${url.slice(inicio)}`;
 }

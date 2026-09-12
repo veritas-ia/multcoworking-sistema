@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { ErroDaApi } from "@/components/reserva/api";
-import { MAXIMO_DE_FOTOS, TIPOS_ACEITOS, enderecoDaFoto } from "@/lib/cloudinary";
+import { MAXIMO_DE_FOTOS, TIPOS_ACEITOS, enderecoDaFoto } from "@/lib/fotos";
 
 import { enviarFoto, removerFoto, reordenarFotos, type FotoDaSala } from "./api";
 

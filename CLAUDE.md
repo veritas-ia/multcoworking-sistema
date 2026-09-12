@@ -225,6 +225,31 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Ao reagendar, o campo é zerado junto com os lembretes: a avaliação passa a valer para
   o novo término.
 
+### Fotos das salas (carrossel)
+- Cada sala aceita até **5 fotos**, enviadas em Configurações → Salas e mostradas ao
+  cliente num carrossel, no cartão da sala, antes de reservar.
+- Os arquivos ficam no **Cloudinary**; o banco guarda só a referência (`public_id`,
+  endereço e ordem). O `public_id` é o que permite apagar o arquivo de lá depois.
+- **O upload passa pelo servidor.** O API Secret nunca vai ao navegador: a tela manda o
+  arquivo para a nossa rota, e a rota assina o pedido. Quem tem esse segredo apaga tudo.
+- Credenciais em variáveis de ambiente (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+  `CLOUDINARY_API_SECRET`). **Vazias é um estado normal, não um erro:** o painel avisa
+  que o envio está indisponível, as fotos que já existem continuam aparecendo, e todo o
+  resto do sistema funciona.
+- Sem biblioteca do Cloudinary nem de carrossel: a API deles é um POST assinado, feito
+  com `fetch` e a criptografia do próprio Node; o carrossel é rolagem com encaixe
+  (`scroll-snap`), que o celular e o tablet já fazem nativamente.
+- O redimensionamento é pedido ao próprio Cloudinary pelo endereço
+  (`f_auto,q_auto,w_800`) — o celular baixa uma imagem de celular.
+- Validação no **servidor**: só JPG, PNG ou WEBP, até 5 MB por arquivo, no máximo 5 por
+  sala. A tela também confere, mas só para avisar cedo.
+- Remover a foto no painel **apaga também no Cloudinary**. Se o Cloudinary recusar, a
+  foto sai do site mesmo assim e a tela avisa que o arquivo pode ter ficado lá: uma
+  instabilidade não pode deixar no ar uma foto que a equipe quer fora.
+- **Sala sem foto não mostra carrossel nem espaço vazio** — o cartão fica como sempre foi.
+- A reordenação no painel é por botões de mover, e não arrastando: arrastar é ruim no
+  tablet, que é onde a recepção mexe, e não funciona pelo teclado.
+
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.
 

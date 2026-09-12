@@ -9,20 +9,26 @@
  *     precisa funcionar sem Cloudinary;
  *  3. o endereco da foto sai com o redimensionamento pedido, e um endereco
  *     fora do formato esperado volta inteiro em vez de virar link quebrado.
+ *
+ * Os limites e o endereco moram em "fotos.ts", separado de proposito: o
+ * navegador tambem carrega aquele arquivo, e "cloudinary.ts" usa a
+ * criptografia do Node — junto, quebra a construcao do site inteira.
  */
 import { createHash } from "node:crypto";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  MAXIMO_DE_FOTOS,
-  TAMANHO_MAXIMO_BYTES,
-  TIPOS_ACEITOS,
   assinar,
   cloudinaryConfigurado,
   credenciais,
-  enderecoDaFoto,
 } from "@/lib/cloudinary";
+import {
+  MAXIMO_DE_FOTOS,
+  TAMANHO_MAXIMO_BYTES,
+  TIPOS_ACEITOS,
+  enderecoDaFoto,
+} from "@/lib/fotos";
 
 const ORIGINAIS = {
   nome: process.env.CLOUDINARY_CLOUD_NAME,

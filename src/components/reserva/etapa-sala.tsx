@@ -2,11 +2,17 @@
 
 import { cn } from "@/lib/utils";
 
+import { CarrosselDeFotos } from "./carrossel-de-fotos";
 import { emReais } from "./datas";
 import { TituloDaEtapa } from "./pecas";
 import type { Sala } from "./tipos";
 
-/** Etapa 1 — cartoes de sala com nome, capacidade e preco por hora. */
+/**
+ * Etapa 1 — cartoes de sala com fotos, nome, capacidade e preco por hora.
+ *
+ * Sala sem foto nao ganha moldura vazia: o carrossel simplesmente nao e
+ * desenhado, e o cartao fica igual ao que sempre foi.
+ */
 export function EtapaSala({
   salas,
   salaEscolhida,
@@ -30,17 +36,29 @@ export function EtapaSala({
           const escolhida = sala.id === salaEscolhida;
 
           return (
-            <li key={sala.id}>
+            /* O carrossel e o botao sao IRMAOS dentro do cartao, e nao um
+               dentro do outro. Botao dentro de botao e HTML invalido: o
+               teclado e o leitor de tela se perdem, e o toque na seta
+               escolheria a sala sem querer. A moldura do cartao fica no <li>,
+               entao visualmente continua sendo uma peca so. */
+            <li
+              key={sala.id}
+              className={cn(
+                "overflow-hidden rounded-xl border transition-colors duration-150",
+                escolhida
+                  ? "border-black bg-brand"
+                  : "border-border bg-bg-primary hover:border-black",
+              )}
+            >
+              <CarrosselDeFotos fotos={sala.fotos} nomeDaSala={sala.nome} />
+
               <button
                 type="button"
                 aria-pressed={escolhida}
                 onClick={() => aoEscolher(sala.id)}
                 className={cn(
-                  "flex w-full flex-col gap-2 rounded-xl border p-4 text-left transition-colors duration-150",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black",
-                  escolhida
-                    ? "border-black bg-brand"
-                    : "border-border bg-bg-primary hover:border-black",
+                  "flex w-full flex-col gap-2 p-4 text-left",
+                  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-black",
                 )}
               >
                 <span className="text-lg font-bold text-text-primary">
