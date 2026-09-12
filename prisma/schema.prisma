@@ -124,12 +124,36 @@ model Sala {
   criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
+  fotos       FotoDaSala[]
   reservas    Reserva[]
   bloqueios   Bloqueio[]
   recorrencias Recorrencia[]
   ocupacoes   OcupacaoSala[]
 
   @@map("salas")
+}
+
+/// Fotos da sala, mostradas ao cliente antes de reservar (carrossel).
+///
+/// Os arquivos ficam no Cloudinary; aqui guardamos so a referencia. O
+/// "publicId" e o que permite apagar de la depois — sem ele, remover a foto
+/// do site deixaria o arquivo orfao para sempre.
+model FotoDaSala {
+  id     String @id @default(uuid(7))
+  salaId String @map("sala_id")
+  sala   Sala   @relation(fields: [salaId], references: [id], onDelete: Cascade)
+
+  /// Identificador no Cloudinary. E por ele que se apaga o arquivo de la.
+  publicId String @map("public_id")
+  /// Endereco da imagem, como o Cloudinary devolveu.
+  url      String
+  /// Ordem no carrossel. 1 aparece primeiro.
+  ordem    Int
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([salaId, ordem])
+  @@map("fotos_sala")
 }
 
 model HorarioFuncionamento {
