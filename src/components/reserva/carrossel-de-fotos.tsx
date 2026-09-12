@@ -13,6 +13,21 @@ import { useRef, useState } from "react";
  *
  * Sala SEM foto nao chega aqui: quem chama nao desenha o carrossel. Assim
  * nao sobra moldura vazia nem espaco reservado para nada.
+ *
+ * A ALTURA VEM DE UMA PROPORCAO, e nao de um numero fixo de pixels.
+ *
+ * Com altura fixa, o recorte mudava conforme a largura da tela: os mesmos 176
+ * pixels davam um corte de 1,86:1 no celular e de 2,14:1 no tablet, onde o
+ * cartao e mais largo. A foto "sumia" mais justamente na tela maior, que e
+ * onde havia espaco de sobra.
+ *
+ * Com proporcao, o recorte e o MESMO em qualquer tela. E a proporcao muda de
+ * proposito entre uma e outra: 4:3 no celular, onde o cartao e estreito e uma
+ * imagem mais alta custa poucos pixels; 3:2 a partir do tablet, onde o cartao
+ * e largo e manter 4:3 faria a foto dominar a tela inteira.
+ *
+ * 4:3 e a proporcao em que a maioria dos celulares fotografa, entao no
+ * celular a foto aparece praticamente inteira.
  */
 export function CarrosselDeFotos({
   fotos,
@@ -62,7 +77,7 @@ export function CarrosselDeFotos({
             <img
               src={foto.url}
               alt={`${nomeDaSala} — foto ${indice + 1} de ${fotos.length}`}
-              className="h-44 w-full bg-bg-secondary object-cover sm:h-56"
+              className="aspect-[4/3] w-full bg-bg-secondary object-cover sm:aspect-[3/2]"
               loading="lazy"
             />
           </li>
