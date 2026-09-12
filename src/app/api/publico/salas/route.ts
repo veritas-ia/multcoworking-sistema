@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { enderecoDaFoto } from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export async function GET(): Promise<NextResponse> {
       pessoasParaGrupo: true,
       aceitaDiaria: true,
       precoDiaria: true,
+      fotos: { orderBy: { ordem: "asc" }, select: { id: true, url: true } },
     },
   });
 
@@ -41,6 +43,12 @@ export async function GET(): Promise<NextResponse> {
       pessoasParaGrupo: sala.pessoasParaGrupo,
       aceitaDiaria: sala.aceitaDiaria,
       precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
+      // O endereco ja sai pedindo o tamanho ao Cloudinary: o celular baixa
+      // uma imagem de celular, e nao a foto original inteira.
+      fotos: sala.fotos.map((foto) => ({
+        id: foto.id,
+        url: enderecoDaFoto(foto.url, 800),
+      })),
     })),
   });
 }

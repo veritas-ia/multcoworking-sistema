@@ -45,6 +45,8 @@ export type SalaDoPainel = {
   ordem: number;
   /** Quantas reservas ativas ainda estao por vir nesta sala. */
   reservasFuturas: number;
+  /** As fotos do carrossel, na ordem. */
+  fotos: { id: string; url: string; ordem: number }[];
 };
 
 export type FalhaDeSala = {
@@ -242,6 +244,10 @@ export async function listarSalas(): Promise<SalaDoPainel[]> {
   const salas = await prisma.sala.findMany({
     orderBy: [{ ordem: "asc" }, { nome: "asc" }],
     include: {
+      fotos: {
+        orderBy: { ordem: "asc" },
+        select: { id: true, url: true, ordem: true },
+      },
       _count: {
         select: {
           reservas: {
@@ -271,6 +277,7 @@ export async function listarSalas(): Promise<SalaDoPainel[]> {
     duracaoMaximaMinutos: sala.duracaoMaximaMinutos,
     ordem: sala.ordem,
     reservasFuturas: sala._count.reservas,
+    fotos: sala.fotos,
   }));
 }
 

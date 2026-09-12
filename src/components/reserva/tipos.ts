@@ -15,6 +15,8 @@ export type Sala = {
   pessoasParaGrupo: number | null;
   aceitaDiaria: boolean;
   precoDiaria: string | null;
+  /** Fotos do carrossel, na ordem. Vazio = a sala nao tem foto. */
+  fotos: { id: string; url: string }[];
 };
 
 export type DiaDeExpediente = {

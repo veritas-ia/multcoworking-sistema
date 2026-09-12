@@ -125,11 +125,13 @@ describe("GET /api/publico/salas", () => {
     // por esta linha, e porque alguem expos dado que a area publica nao pode
     // mostrar. O "slug" entrou na Fase 5, para o link ?sala=... funcionar; as
     // tarifas entraram no bloco de precos por faixa, para a tela calcular a
-    // estimativa com o mesmo codigo do servidor. Preco nao e sigilo — nome,
-    // telefone e motivo de bloqueio e que nao podem aparecer aqui.
+    // estimativa com o mesmo codigo do servidor; as fotos entraram para o
+    // carrossel. Preco e foto nao sao sigilo — nome, telefone e motivo de
+    // bloqueio e que nao podem aparecer aqui.
     expect(Object.keys(corpo.salas[0] ?? {}).sort()).toEqual([
       "aceitaDiaria",
       "capacidade",
+      "fotos",
       "id",
       "nome",
       "pessoasParaGrupo",

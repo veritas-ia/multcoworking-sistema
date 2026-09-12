@@ -107,6 +107,7 @@ describe("valor estimado", () => {
       pessoasParaGrupo: null,
       aceitaDiaria: false,
       precoDiaria: null,
+      fotos: [],
     };
   }
 
