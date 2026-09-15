@@ -14,20 +14,25 @@ import { useRef, useState } from "react";
  * Sala SEM foto nao chega aqui: quem chama nao desenha o carrossel. Assim
  * nao sobra moldura vazia nem espaco reservado para nada.
  *
- * A ALTURA VEM DE UMA PROPORCAO, e nao de um numero fixo de pixels.
+ * A FOTO APARECE INTEIRA, sem cortar nada ("object-contain").
  *
- * Com altura fixa, o recorte mudava conforme a largura da tela: os mesmos 176
- * pixels davam um corte de 1,86:1 no celular e de 2,14:1 no tablet, onde o
- * cartao e mais largo. A foto "sumia" mais justamente na tela maior, que e
- * onde havia espaco de sobra.
+ * Decisao do dono: o que importa e o cliente ver a sala por completo, e nao a
+ * moldura ficar perfeitamente preenchida. Quando a proporcao da foto nao bate
+ * com a da moldura, sobram faixas — em cima e embaixo numa foto mais larga,
+ * dos lados numa foto em pe. Elas ficam no cinza claro do sistema
+ * (--bg-secondary), que e neutro e nao briga com o cartao. Preto ficaria
+ * pesado e chamaria mais atencao do que a propria foto.
  *
- * Com proporcao, o recorte e o MESMO em qualquer tela. E a proporcao muda de
- * proposito entre uma e outra: 4:3 no celular, onde o cartao e estreito e uma
- * imagem mais alta custa poucos pixels; 3:2 a partir do tablet, onde o cartao
- * e largo e manter 4:3 faria a foto dominar a tela inteira.
+ * A MOLDURA continua com proporcao fixa, e nao altura fixa, para todos os
+ * cartoes terem o mesmo tamanho e a lista nao ficar irregular. A proporcao
+ * muda entre celular e tablet de proposito: 4:3 no celular, onde o cartao e
+ * estreito e uma moldura mais alta custa poucos pixels; 3:2 a partir do
+ * tablet, onde o cartao e largo e manter 4:3 faria a foto dominar a tela.
  *
- * 4:3 e a proporcao em que a maioria dos celulares fotografa, entao no
- * celular a foto aparece praticamente inteira.
+ * SE AS FAIXAS INCOMODAREM: e a proporcao da moldura que decide o tamanho
+ * delas, na classe da imagem logo abaixo. Uma moldura mais parecida com a das
+ * fotos deixa faixas menores — 3:2 nos dois tamanhos, por exemplo, se as
+ * fotos forem de camera de celular na horizontal.
  */
 export function CarrosselDeFotos({
   fotos,
@@ -77,7 +82,7 @@ export function CarrosselDeFotos({
             <img
               src={foto.url}
               alt={`${nomeDaSala} — foto ${indice + 1} de ${fotos.length}`}
-              className="aspect-[4/3] w-full bg-bg-secondary object-cover sm:aspect-[3/2]"
+              className="aspect-[4/3] w-full bg-bg-secondary object-contain sm:aspect-[3/2]"
               loading="lazy"
             />
           </li>
