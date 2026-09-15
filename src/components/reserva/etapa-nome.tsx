@@ -4,7 +4,11 @@ import { useId, useState } from "react";
 
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
-import { PROFISSOES } from "@/lib/profissoes";
+import {
+  AVISO_PROFISSAO_BLOQUEADA,
+  PROFISSOES,
+  profissaoBloqueada,
+} from "@/lib/profissoes";
 
 import { TituloDaEtapa } from "./pecas";
 
@@ -44,6 +48,8 @@ export function EtapaNome({
   const [erroDeProfissao, setErroDeProfissao] = useState<string | null>(null);
   const idProfissao = useId();
 
+  const bloqueada = profissaoBloqueada(profissao);
+
   return (
     <form
       className="flex flex-col gap-5"
@@ -61,6 +67,13 @@ export function EtapaNome({
 
         if (profissao === "") {
           setErroDeProfissao("Escolha a sua área de atuação.");
+          return;
+        }
+
+        // A trava do contrato de exclusividade. O servidor recusa de
+        // qualquer jeito; aqui e so para o cliente nao preencher o resto a
+        // toa e levar a recusa so no fim.
+        if (profissaoBloqueada(profissao)) {
           return;
         }
 
@@ -144,7 +157,18 @@ export function EtapaNome({
         )}
       </div>
 
-      <Botao type="submit">Continuar</Botao>
+      {bloqueada ? (
+        <p
+          role="status"
+          className="rounded-lg border border-destructive bg-bg-primary p-4 text-sm leading-relaxed text-text-primary"
+        >
+          {AVISO_PROFISSAO_BLOQUEADA}
+        </p>
+      ) : null}
+
+      <Botao type="submit" disabled={bloqueada}>
+        Continuar
+      </Botao>
     </form>
   );
 }

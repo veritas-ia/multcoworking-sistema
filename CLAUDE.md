@@ -250,6 +250,25 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - A reordenação no painel é por botões de mover, e não arrastando: arrastar é ruim no
   tablet, que é onde a recepção mexe, e não funciona pelo teclado.
 
+### Categorias de profissão bloqueadas
+- **A área jurídica não pode reservar.** Motivo: o coworking tem contrato de
+  exclusividade com uma empresa de advocacia, então não aceita reservas de outros
+  advogados.
+- O aviso mostrado é: *"No momento não realizamos reservas para a área jurídica. Para
+  mais informações, entre em contato com a recepção."*
+- Vale para o **cliente no site** e para a **recepção no painel**. A recepção fura regra
+  comercial (antecedência, duração, expediente), mas esta não é regra comercial: é
+  compromisso com outra empresa.
+- A recusa é do **servidor**, nas três portas que criam reserva: site, recepção e série
+  recorrente. A tela também bloqueia, mas só para a pessoa não preencher o resto à toa —
+  esconder o botão não para quem manda o pedido direto.
+- **Reservas de Jurídico que já existem não são afetadas:** continuam de pé, e a equipe
+  continua podendo remarcar e cancelar. A regra vale só para reserva nova.
+- As outras categorias (Marketing, Contábil, Área da Saúde, Outros) reservam normalmente.
+- **O contrato tem prazo.** Quando acabar, é só esvaziar `PROFISSOES_BLOQUEADAS` em
+  `src/lib/profissoes.ts` — a lista e o texto do aviso moram lá, num lugar só, e nada
+  mais precisa mudar.
+
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.
 

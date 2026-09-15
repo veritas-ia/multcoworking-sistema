@@ -25,6 +25,7 @@ import {
   type SemanaDoMes,
 } from "@/lib/datas-recorrencia";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
+import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import { historicoCom } from "@/lib/historico-reserva";
 import { prisma } from "@/lib/prisma";
@@ -71,6 +72,12 @@ export async function criarSerie(entrada: {
   dataFim: string;
   operador: Operador;
 }): Promise<Resultado<RelatorioDaSerie>> {
+  // A trava do contrato de exclusividade. Uma serie cria MUITAS reservas de
+  // uma vez; deixar passar aqui seria a maior brecha das tres portas.
+  if (profissaoBloqueada(entrada.profissao)) {
+    return { ok: false, falha: { codigo: "REGRA", motivo: AVISO_PROFISSAO_BLOQUEADA } };
+  }
+
   if (entrada.diasDaSemana.length === 0) {
     return { ok: false, falha: { codigo: "REGRA", motivo: "Escolha pelo menos um dia da semana." } };
   }

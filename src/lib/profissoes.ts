@@ -27,6 +27,39 @@ export const PROFISSOES: readonly OpcaoDeProfissao[] = [
 /** Como o relatorio chama as reservas antigas, anteriores a este campo. */
 export const NAO_INFORMADO = "Não informado";
 
+// -----------------------------------------------------------------------------
+// Categorias que NAO podem reservar
+// -----------------------------------------------------------------------------
+
+/**
+ * AS CATEGORIAS BLOQUEADAS, e o aviso que aparece no lugar.
+ *
+ * POR QUE existe: o coworking tem contrato de exclusividade com uma empresa de
+ * advocacia, entao nao pode aceitar reservas de outros advogados.
+ *
+ * O contrato TEM PRAZO. No dia em que acabar, desbloquear e esvaziar a lista
+ * abaixo — uma linha, neste arquivo, e nada mais. Por isso a lista e o texto
+ * moram juntos aqui, e nao espalhados pelas telas e pelas rotas.
+ *
+ * Isto NAO mexe em reserva que ja existe: vale so para reserva nova. Quem ja
+ * reservou como Juridico continua com a reserva de pe, e a equipe continua
+ * podendo remarcar e cancelar normalmente.
+ */
+export const PROFISSOES_BLOQUEADAS: readonly CategoriaProfissao[] = ["JURIDICO"];
+
+export const AVISO_PROFISSAO_BLOQUEADA =
+  "No momento não realizamos reservas para a área jurídica. Para mais informações, entre em contato com a recepção.";
+
+/**
+ * Esta categoria pode reservar?
+ *
+ * Aceita texto solto de proposito: as telas trabalham com o valor do <select>,
+ * que e string, e nao com o tipo do banco. Uma so funcao serve aos dois lados.
+ */
+export function profissaoBloqueada(valor: string | null): boolean {
+  return valor !== null && (PROFISSOES_BLOQUEADAS as readonly string[]).includes(valor);
+}
+
 export function ehProfissaoValida(valor: string): valor is CategoriaProfissao {
   return PROFISSOES.some((opcao) => opcao.valor === valor);
 }

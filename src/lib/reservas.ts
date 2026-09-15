@@ -11,6 +11,7 @@
 import { StatusReserva } from "@/generated/prisma/enums";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
+import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
 import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { minutosEntre } from "@/lib/tempo";
@@ -64,6 +65,21 @@ export async function criarReservaPublica(entrada: {
   /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
   profissao: CategoriaProfissao;
 }): Promise<ResultadoCriacao> {
+  // A trava do contrato de exclusividade vem ANTES de qualquer outra conta:
+  // nao ha por que conferir horario e preco de uma reserva que nao pode
+  // existir. E e aqui, no servidor, que ela vale — esconder o botao na tela
+  // nao para quem manda o pedido direto.
+  if (profissaoBloqueada(entrada.profissao)) {
+    return {
+      criada: false,
+      falha: {
+        tipo: "REGRA",
+        codigo: "PROFISSAO_BLOQUEADA",
+        motivo: AVISO_PROFISSAO_BLOQUEADA,
+      },
+    };
+  }
+
   const categoria = entrada.categoria ?? "HORA";
 
   const validacao = await validarReserva({

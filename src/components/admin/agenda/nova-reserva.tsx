@@ -9,7 +9,11 @@ import { AvisoDeErro } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
 import { serieporExtenso, type SemanaDoMes } from "@/lib/datas-recorrencia";
-import { PROFISSOES } from "@/lib/profissoes";
+import {
+  AVISO_PROFISSAO_BLOQUEADA,
+  PROFISSOES,
+  profissaoBloqueada,
+} from "@/lib/profissoes";
 import { formatarEnquantoDigita } from "@/lib/telefone";
 import { cn } from "@/lib/utils";
 
@@ -91,6 +95,9 @@ export function NovaReserva({
     nome.trim().length < 2 ||
     telefone.length < 14 ||
     profissao === "" ||
+    // A trava do contrato de exclusividade vale para a recepcao tambem: nao
+    // e regra comercial (que ela fura), e compromisso com outra empresa.
+    profissaoBloqueada(profissao) ||
     faltaAlgoDaSerie;
 
   async function salvar(): Promise<void> {
@@ -211,6 +218,15 @@ export function NovaReserva({
           <span className="text-sm text-text-secondary">
             Entra no relatório do painel. Não muda o valor da reserva.
           </span>
+
+          {profissaoBloqueada(profissao) ? (
+            <span
+              role="status"
+              className="rounded-lg border border-destructive bg-bg-primary p-3 text-sm leading-relaxed text-text-primary"
+            >
+              {AVISO_PROFISSAO_BLOQUEADA}
+            </span>
+          ) : null}
         </label>
 
         <Campo

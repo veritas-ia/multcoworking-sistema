@@ -25,6 +25,7 @@ import {
 } from "@/lib/disponibilidade";
 import { historicoCom, type Momento } from "@/lib/historico-reserva";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
+import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
 import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
@@ -208,6 +209,16 @@ export async function criarReservaNaRecepcao(entrada: {
   profissao: CategoriaProfissao;
   operador: Operador;
 }): Promise<Resultado<{ id: string; sala: string; valor: string }>> {
+  // A trava do contrato de exclusividade vale TAMBEM para a recepcao. Ela
+  // fura regra comercial (antecedencia, duracao, expediente), mas esta nao e
+  // regra comercial: e compromisso com outra empresa.
+  if (profissaoBloqueada(entrada.profissao)) {
+    return {
+      ok: false,
+      falha: { codigo: "REGRA", motivo: AVISO_PROFISSAO_BLOQUEADA },
+    };
+  }
+
   // Modo ADMIN: sem antecedencia minima, sem limite de duracao, pode no passado.
   const validacao = await validarReserva({
     salaId: entrada.salaId,
