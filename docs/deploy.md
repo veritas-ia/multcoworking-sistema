@@ -511,6 +511,45 @@ mostrar a imagem — sem erro nenhum na tela.
 
 ---
 
+## Anexo: regerar as artes da placa
+
+A placa da marca (cabeçalho do site e tela de login) é montada com **dois
+arquivos gerados** a partir dos originais que estão em `public/`:
+
+| Gerado | A partir de | O que é |
+| --- | --- | --- |
+| `logotipo-multcoworking-recorte.png` | `logotipo-multcoworking-v1.png` | Só a escrita preta, com fundo transparente |
+| `fundo-textura-container-placa.jpg` | `fundo-textura-container.png` | Um pedaço limpo da parede de container, já na proporção da placa |
+
+Se a logo ou a textura forem trocadas, rode isto na raiz do projeto para
+gerar os dois de novo:
+
+```bash
+node -e "
+const sharp=require('sharp'); const P='public/';
+(async()=>{
+  const L=1191, A=288;
+  const { data } = await sharp(P+'logotipo-multcoworking-v1.png')
+    .extract({left:0,top:144,width:L,height:A}).greyscale().raw().toBuffer({resolveWithObject:true});
+  const alfa = Buffer.alloc(data.length);
+  for (let i=0;i<data.length;i++) alfa[i] = Math.max(0, Math.min(255, Math.round(255*(170-data[i])/110)));
+  await sharp({create:{width:L,height:A,channels:3,background:'#000000'}})
+    .joinChannel(alfa,{raw:{width:L,height:A,channels:1}})
+    .png({compressionLevel:9}).toFile(P+'logotipo-multcoworking-recorte.png');
+  await sharp(P+'fundo-textura-container.png')
+    .extract({left:0,top:400,width:800,height:193}).resize(600)
+    .jpeg({quality:82, mozjpeg:true}).toFile(P+'fundo-textura-container-placa.jpg');
+})();
+"
+```
+
+Os números descrevem os arquivos ATUAIS: `top:144,height:288` é a faixa da
+logo onde está a escrita, e `top:400` na textura pula a faixa escura do topo
+(a beirada do container). Arte nova, com outro enquadramento, pede outros
+números — e vale conferir o resultado abrindo os arquivos antes de publicar.
+
+---
+
 ## Anexo: o que a imagem tem dentro
 
 Para quem cuida do código, um resumo do que o `Dockerfile` monta:

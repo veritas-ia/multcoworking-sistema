@@ -3,56 +3,34 @@ import Image from "next/image";
 import { NOME_DA_MARCA } from "@/lib/marca";
 
 /**
- * A LOGO DO MULT COWORKING.
+ * A LOGO DO MULT COWORKING, sobre a textura de container.
  *
- * O arquivo tem fundo AMARELO solido — o mesmo amarelo da marca —, e nao
- * fundo transparente. Isso muda o jeito de usar: em vez de tentar disfarcar o
- * retangulo (o que sempre parece adesivo colado), a logo e tratada como uma
- * PLACA da marca, com cantos arredondados iguais aos dos cartoes do sistema.
- * Como o amarelo dela e o mesmo do botao e da barra de progresso da pagina, a
- * placa le como parte do sistema, e nao como corpo estranho.
+ * A placa e montada em DUAS CAMADAS:
  *
- * POR QUE HA UM RECORTE
+ *   1. o fundo: um pedaco da foto da parede de container amarelo;
+ *   2. por cima: a escrita "MULT. COWORKING" em preto, recortada, com o
+ *      fundo transparente.
  *
- * O arquivo original (1191x595) tem MUITA folga amarela em volta do desenho:
- * a escrita ocupa so cerca de um terco da altura. Usado inteiro num cabecalho
- * de 32 pixels, o "COWORKING" ficaria com uns 4 pixels de altura — ilegivel.
+ * POR QUE A ESCRITA PRECISOU SER RECORTADA
  *
- * Entao a placa mostra so a faixa do meio. Os numeros abaixo nao sao chute:
- * a tinta preta do arquivo foi MEDIDA pixel a pixel e vai de y=204 a y=371.
- * A faixa foi escolhida para deixar a escrita no centro exato, com 60 pixels
- * de folga em cima e embaixo — proporcao parecida com a folga lateral que a
- * propria arte ja traz (137 pixels de cada lado).
+ * A arte original tem fundo amarelo SOLIDO (e um JPEG, sem transparencia).
+ * Posta por cima da textura, ela simplesmente tapava tudo — a textura ficava
+ * escondida atras de um retangulo amarelo chapado. Entao o recorte
+ * ("logotipo-multcoworking-recorte.png") guarda so a escrita, e a textura
+ * aparece em volta e entre as letras.
  *
- * O arquivo NAO foi alterado: o recorte e so de exibicao.
+ * CONTRASTE: medido, nao chutado. Contra o ponto mais ESCURO da textura, o
+ * preto da escrita da 5,5:1; contra o mais claro, 15,2:1. O minimo exigido
+ * para texto e 4,5:1, entao a leitura passa com folga e nao foi preciso
+ * clarear nem escurecer a foto.
  *
- * SE A LOGO FOR TROCADA: meça a tinta da arte nova e ajuste estes numeros.
- * Uma arte com outra folga fica torta com os valores daqui.
+ * SE A LOGO OU A TEXTURA FOREM TROCADAS: os dois arquivos acima sao GERADOS a
+ * partir dos originais, que continuam em public/. O comando que os gerou esta
+ * em docs/deploy.md, na secao "Regerar as artes da placa".
  */
 
-/** Tamanho do arquivo, em pixels. */
-const LARGURA_DO_ARQUIVO = 1191;
-const ALTURA_DO_ARQUIVO = 595;
-
-/**
- * A faixa vertical que aparece na placa: do pixel 144 ao 432.
- * Centro da faixa: 288. Centro da tinta medida: 287,5 — batendo.
- */
-const TOPO_DA_FAIXA = 144;
-const ALTURA_DA_FAIXA = 288;
-
-/** Proporcao da placa (largura / altura). */
-const PROPORCAO = LARGURA_DO_ARQUIVO / ALTURA_DA_FAIXA;
-
-/**
- * Onde a faixa comeca, em porcentagem da sobra recortada — e isso que o
- * "object-position" espera. Sai das medidas acima; nao e um numero chutado.
- */
-const POSICAO_VERTICAL = (() => {
-  const alturaVisivel = ALTURA_DA_FAIXA / ALTURA_DO_ARQUIVO;
-  const inicioDaFaixa = TOPO_DA_FAIXA / ALTURA_DO_ARQUIVO;
-  return `${((inicioDaFaixa / (1 - alturaVisivel)) * 100).toFixed(1)}%`;
-})();
+/** Proporcao da placa: a mesma do recorte da escrita (1191 x 288). */
+const PROPORCAO = 1191 / 288;
 
 export function Logotipo({
   className,
@@ -68,23 +46,35 @@ export function Logotipo({
       className={`relative block shrink-0 overflow-hidden rounded-lg ${className ?? ""}`}
       style={{ aspectRatio: PROPORCAO }}
     >
-      {/* "unoptimized": o arquivo e servido como esta, sem passar pelo
-          otimizador de imagens do Next.
-
-          O otimizador depende do "sharp", que hoje esta no projeto so por
-          tabela — nao e dependencia declarada — e pode nao sobreviver ao
-          empacotamento de producao. O sintoma seria a logo sumir NO AR e
-          funcionar no computador de quem programa. Para 48 KB exibidos em
-          130 pixels de largura, a otimizacao nao paga esse risco. */}
+      {/* A textura. "alt" vazio de proposito: e enfeite, e quem usa leitor de
+          tela nao ganha nada ouvindo "parede de container". O nome da marca
+          vem na camada de cima. */}
       <Image
-        src="/logotipo-multcoworking-v1.png"
-        alt={NOME_DA_MARCA}
+        src="/fundo-textura-container-placa.jpg"
+        alt=""
         fill
         unoptimized
         priority={prioridade}
         sizes="260px"
         className="object-cover"
-        style={{ objectPosition: `center ${POSICAO_VERTICAL}` }}
+      />
+
+      {/* A escrita. Recortada na mesma proporcao da placa, entao "contain"
+          encaixa exato — sem faixa sobrando nem corte.
+
+          "unoptimized": as duas sao servidas como estao, sem o otimizador de
+          imagens do Next. Ele depende do "sharp", que hoje esta no projeto so
+          por tabela e pode nao sobreviver ao empacotamento de producao — e o
+          sintoma seria a logo sumir NO AR funcionando no computador de quem
+          programa. Sao 19 KB somadas; a otimizacao nao paga esse risco. */}
+      <Image
+        src="/logotipo-multcoworking-recorte.png"
+        alt={NOME_DA_MARCA}
+        fill
+        unoptimized
+        priority={prioridade}
+        sizes="260px"
+        className="object-contain"
       />
     </span>
   );
