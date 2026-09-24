@@ -172,7 +172,7 @@ function CartaoDaMensagem({
 const EXEMPLO: Record<string, string> = {
   nome: "Maria",
   sala: "Sala de Reunião",
-  data: "2026-09-15",
+  data: "15/09 (terça-feira)",
   inicio: "09:00",
   fim: "11:00",
   valor: "R$ 160,00",

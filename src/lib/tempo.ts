@@ -49,6 +49,38 @@ export function dataLocalDe(instante: Date): DataLocal {
   return formatInTimeZone(instante, FUSO, "yyyy-MM-dd");
 }
 
+/** Como o cliente le o dia da semana nas mensagens de WhatsApp. */
+const DIAS_POR_EXTENSO = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+] as const;
+
+/**
+ * Instante universal -> "15/09 (terça-feira)", no relogio de Sao Paulo.
+ *
+ * E assim que a data aparece nas mensagens de WhatsApp. O formato do banco
+ * ("2026-09-15") e otimo para o sistema e frio para quem le no celular; e o
+ * dia da semana e o que faz a pessoa se situar sem abrir o calendario.
+ *
+ * Sem o ano de proposito: as reservas ficam a no maximo 60 dias de distancia
+ * (antecedencia maxima), entao o ano so ocuparia espaco.
+ *
+ * O FUSO importa aqui. Uma reserva das 21h de segunda e, em UTC, meia-noite
+ * de terca — se a conversa fosse feita no fuso do servidor, a mensagem diria
+ * o dia errado, e justamente nas reservas do fim da tarde.
+ */
+export function dataAmigavelDe(instante: Date): string {
+  const data = dataLocalDe(instante);
+  const [, mes, dia] = data.split("-");
+
+  return `${dia}/${mes} (${DIAS_POR_EXTENSO[diaDaSemanaDe(data)]})`;
+}
+
 /**
  * Dia da semana de uma data local: 0 = domingo ... 6 = sabado.
  * Usa o meio-dia para nao esbarrar em viradas de horario de verao,

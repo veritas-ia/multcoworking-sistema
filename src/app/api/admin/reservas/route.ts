@@ -7,7 +7,7 @@ import { criarReservaNaRecepcao } from "@/lib/agenda-admin";
 import { lerCorpo, respostaErro } from "@/lib/api";
 import { horarioDaDiaria } from "@/lib/disponibilidade";
 import { normalizarTelefone } from "@/lib/telefone";
-import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
+import { dataAmigavelDe, dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { dispararMensagem } from "@/lib/whatsapp";
 
 import { operadorDaRequisicao, statusDaFalhaAdmin } from "../operador";
@@ -100,7 +100,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     variaveis: {
       nome: corpo.data.nome,
       sala: resultado.dados.sala,
-      data: dataLocalDe(inicio),
+      data: dataAmigavelDe(inicio),
       inicio: horaLocalDe(inicio),
       fim: horaLocalDe(fim),
       valor: `R$ ${resultado.dados.valor.replace(".", ",")}`,

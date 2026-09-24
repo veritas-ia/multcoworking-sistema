@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { criarReservaPublica } from "@/lib/reservas";
 import { telefoneDaSessao } from "@/lib/sessao-cliente";
 import { horarioDaDiaria } from "@/lib/disponibilidade";
-import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
+import { dataAmigavelDe, dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { dispararMensagem } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -116,7 +116,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     variaveis: {
       nome: corpo.data.nome,
       sala: sala?.nome ?? "",
-      data: dataLocalDe(inicio),
+      data: dataAmigavelDe(inicio),
       inicio: horaLocalDe(inicio),
       fim: horaLocalDe(fim),
       valor: `R$ ${resultado.valor.replace(".", ",")}`,

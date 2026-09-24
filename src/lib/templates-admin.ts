@@ -78,11 +78,17 @@ export const TEMPLATES: readonly DefinicaoDeTemplate[] = [
   },
 ] as const;
 
-/** Valores de mentira, so para a equipe ver como a mensagem vai ficar. */
-const EXEMPLO: Record<string, string> = {
+/**
+ * Valores de mentira, so para a equipe ver como a mensagem vai ficar.
+ *
+ * A data segue o MESMO formato do envio de verdade ("15/09 (terça-feira)"),
+ * senao a previa ensinaria a equipe a esperar uma coisa e o cliente receberia
+ * outra.
+ */
+export const EXEMPLO_DA_PREVIA: Record<string, string> = {
   nome: "Maria",
   sala: "Sala de Reunião",
-  data: "2026-09-15",
+  data: "15/09 (terça-feira)",
   inicio: "09:00",
   fim: "11:00",
   valor: "R$ 160,00",
@@ -113,7 +119,7 @@ function definicaoDe(chave: ChaveTemplate): DefinicaoDeTemplate | undefined {
 
 /** Prévia com valores de exemplo, para conferir antes de salvar. */
 export function previaDe(texto: string): string {
-  return renderizarTemplate(texto, EXEMPLO);
+  return renderizarTemplate(texto, EXEMPLO_DA_PREVIA);
 }
 
 /**

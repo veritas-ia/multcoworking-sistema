@@ -5,7 +5,7 @@ import { ChaveTemplate } from "@/generated/prisma/enums";
 import { respostaErro } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { cancelarSerie } from "@/lib/recorrencias";
-import { dataLocalDe, horaLocalDe } from "@/lib/tempo";
+import { dataAmigavelDe, horaLocalDe } from "@/lib/tempo";
 import { dispararMensagem } from "@/lib/whatsapp";
 
 import { operadorDaRequisicao } from "../../../operador";
@@ -58,7 +58,7 @@ export async function POST(
       variaveis: {
         nome: reserva.nomeCliente,
         sala: reserva.sala.nome,
-        data: dataLocalDe(reserva.inicio),
+        data: dataAmigavelDe(reserva.inicio),
         inicio: horaLocalDe(reserva.inicio),
         fim: horaLocalDe(reserva.fim),
       },

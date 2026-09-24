@@ -22,7 +22,7 @@
  */
 import { ChaveTemplate, StatusReserva } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { dataLocalDe, horaLocalDe } from "@/lib/tempo";
+import { dataAmigavelDe, horaLocalDe } from "@/lib/tempo";
 import { lerLinkDeAvaliacao } from "@/lib/templates-admin";
 import { enviarMensagem } from "@/lib/whatsapp";
 
@@ -127,7 +127,7 @@ async function rodarLembrete(
       variaveis: {
         nome: reserva.nomeCliente,
         sala: reserva.sala.nome,
-        data: dataLocalDe(reserva.inicio),
+        data: dataAmigavelDe(reserva.inicio),
         inicio: horaLocalDe(reserva.inicio),
         fim: horaLocalDe(reserva.fim),
         link: linkDasReservas(),
@@ -234,7 +234,7 @@ export async function avaliacaoPosUso(agora = new Date()): Promise<ResultadoDaRo
       variaveis: {
         nome: reserva.nomeCliente,
         sala: reserva.sala.nome,
-        data: dataLocalDe(reserva.inicio),
+        data: dataAmigavelDe(reserva.inicio),
         link,
       },
     });
