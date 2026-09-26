@@ -19,7 +19,17 @@ services:
     ports:
       # 5434 no computador -> 5432 dentro do container.
       # A porta 5432 ja esta ocupada por outro projeto nesta maquina.
-      - "5434:5432"
+      #
+      # O "127.0.0.1" na frente NAO e enfeite: sem ele o Docker publica a
+      # porta para a internet inteira, e a senha deste banco esta escrita
+      # aqui em cima. Esta maquina tambem roda a producao, entao um Postgres
+      # aberto no mundo e risco de verdade. Com o endereco na frente, so
+      # quem ja esta dentro da maquina conecta — quem trabalha de fora chega
+      # pelo tunel do SSH, que entra como se fosse local.
+      #
+      # Ligar o ufw NAO substitui isto: o Docker escreve as proprias regras
+      # de rede antes do firewall, e a porta publicada passaria assim mesmo.
+      - "127.0.0.1:5434:5432"
     volumes:
       - coworking_postgres_data:/var/lib/postgresql/data
     healthcheck:
