@@ -1,5 +1,6 @@
 "use client";
 
+import { Botao } from "@/components/ui/botao";
 import { cn } from "@/lib/utils";
 
 import { CarrosselDeFotos } from "./carrossel-de-fotos";
@@ -12,6 +13,12 @@ import type { Sala } from "./tipos";
  *
  * Sala sem foto nao ganha moldura vazia: o carrossel simplesmente nao e
  * desenhado, e o cartao fica igual ao que sempre foi.
+ *
+ * Quem avanca e o botao "Reservar agora", e nao o cartao inteiro. Antes o
+ * cartao era um <button> gigante; com um botao dentro dele o HTML ficaria
+ * invalido (botao dentro de botao), o teclado pararia duas vezes no mesmo
+ * cartao e o leitor de tela anunciaria duas acoes iguais. Uma acao visivel
+ * por cartao e mais clara do que uma area invisivel que faz a mesma coisa.
  */
 export function EtapaSala({
   salas,
@@ -36,11 +43,6 @@ export function EtapaSala({
           const escolhida = sala.id === salaEscolhida;
 
           return (
-            /* O carrossel e o botao sao IRMAOS dentro do cartao, e nao um
-               dentro do outro. Botao dentro de botao e HTML invalido: o
-               teclado e o leitor de tela se perdem, e o toque na seta
-               escolheria a sala sem querer. A moldura do cartao fica no <li>,
-               entao visualmente continua sendo uma peca so. */
             <li
               key={sala.id}
               className={cn(
@@ -52,54 +54,62 @@ export function EtapaSala({
             >
               <CarrosselDeFotos fotos={sala.fotos} nomeDaSala={sala.nome} />
 
-              <button
-                type="button"
-                aria-pressed={escolhida}
-                onClick={() => aoEscolher(sala.id)}
-                className={cn(
-                  "flex w-full flex-col gap-2 p-4 text-left",
-                  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-black",
-                )}
-              >
+              <div className="flex flex-col gap-2 p-4">
                 <span className="text-lg font-bold text-text-primary">
                   {sala.nome}
                 </span>
 
-                <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                  <span
-                    className={
-                      escolhida ? "font-semibold text-black" : "text-text-secondary"
-                    }
-                  >
-                    {emReais(Math.round(Number(sala.precoPorHora) * 100))} por hora
+                {/* No celular o botao desce e ocupa a largura toda; a partir
+                    do "sm" ele fica a direita, na mesma linha dos precos. */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                  <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+                    <span
+                      className={
+                        escolhida ? "font-semibold text-black" : "text-text-secondary"
+                      }
+                    >
+                      {emReais(Math.round(Number(sala.precoPorHora) * 100))} por hora
+                    </span>
+
+                    {/* O preco muda depois do horario da faixa noturna. Mostrar
+                        so o de dia faria o cliente descobrir a diferenca na
+                        etapa do resumo, ja com o horario escolhido. */}
+                    {sala.precoPorHoraNoturno !== sala.precoPorHora ? (
+                      <span
+                        className={
+                          escolhida ? "text-black" : "text-text-secondary"
+                        }
+                      >
+                        {emReais(Math.round(Number(sala.precoPorHoraNoturno) * 100))} após
+                        as {horaInicioNoturno.slice(0, 2)}h
+                      </span>
+                    ) : null}
+
+                    {sala.capacidade !== null ? (
+                      <span
+                        className={
+                          escolhida ? "text-black" : "text-text-secondary"
+                        }
+                      >
+                        até {sala.capacidade}{" "}
+                        {sala.capacidade === 1 ? "pessoa" : "pessoas"}
+                      </span>
+                    ) : null}
                   </span>
 
-                  {/* O preco muda depois do horario da faixa noturna. Mostrar
-                      so o de dia faria o cliente descobrir a diferenca na
-                      etapa do resumo, ja com o horario escolhido. */}
-                  {sala.precoPorHoraNoturno !== sala.precoPorHora ? (
-                    <span
-                      className={
-                        escolhida ? "text-black" : "text-text-secondary"
-                      }
-                    >
-                      {emReais(Math.round(Number(sala.precoPorHoraNoturno) * 100))} após
-                      as {horaInicioNoturno.slice(0, 2)}h
-                    </span>
-                  ) : null}
-
-                  {sala.capacidade !== null ? (
-                    <span
-                      className={
-                        escolhida ? "text-black" : "text-text-secondary"
-                      }
-                    >
-                      até {sala.capacidade}{" "}
-                      {sala.capacidade === 1 ? "pessoa" : "pessoas"}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
+                  {/* Cartao escolhido fica amarelo: o botao amarelo sumiria
+                      dentro dele, entao vira o branco de borda preta. */}
+                  <Botao
+                    aparencia={escolhida ? "secundario" : "primario"}
+                    largura="conteudo"
+                    aria-label={`Reservar a ${sala.nome}`}
+                    onClick={() => aoEscolher(sala.id)}
+                    className="w-full shrink-0 sm:w-auto"
+                  >
+                    Reservar agora
+                  </Botao>
+                </div>
+              </div>
             </li>
           );
         })}
