@@ -225,6 +225,38 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   nenhuma, e as formas são simples o bastante. Todo gráfico escreve o número por extenso
   ao lado — nenhuma informação depende só do desenho.
 
+### Métricas por cliente no dashboard (28/09/2026)
+- **Horas por cliente**: ranking de quanto tempo cada cliente usou no período, do
+  maior para o menor. Conta **CONFIRMADA, REAGENDADA e CONCLUIDA**; **cancelada não
+  conta** — hora desmarcada não é hora usada, e somá-la faria o ranking premiar quem
+  mais desmarca.
+- O agrupamento é pelo **telefone**, nunca pelo nome: o telefone é o identificador
+  único e validado, enquanto a mesma pessoa escreve o nome diferente a cada reserva
+  ("Maria", "Maria Silva", "maria"). Na tela aparece o nome da reserva mais recente.
+- **Busca de cliente**: o telefone manda (normalizado, aceita qualquer formatação) e
+  devolve um cliente só; o nome é busca auxiliar, sem diferenciar maiúscula nem
+  acento, e devolve a lista para a equipe escolher. Procura apenas entre quem tem
+  reserva **no período** — o campo filtra o relatório, não vasculha a base inteira.
+- Quem só tem reserva **cancelada** no período ainda aparece na busca, com zero horas:
+  sem isso a equipe não conseguiria achar essa pessoa.
+- Com um cliente aberto, o relatório **geral some da tela**. Os dois juntos são dois
+  conjuntos de números parecidos — um do coworking inteiro e outro de uma pessoa — e a
+  equipe leria um achando que é o outro.
+- **Uma reserva conta no dia em que COMEÇA, sem fatiar.** Uma reserva das 21h às 22h de
+  segunda é, em UTC, meia-noite de terça: somar no fuso do banco jogaria as horas para
+  o dia (e o mês) seguinte, e o relatório discordaria da agenda. Dividir horas entre
+  dois dias criaria um número que não bate com nada. Há teste na virada do dia e na
+  virada do mês.
+- **O telefone aparece inteiro** nesta tela (`telefoneVisivel`), diferente do resto do
+  sistema, que mascara. É a equipe olhando os próprios clientes, atrás de login — e sem
+  o telefone ela não distingue dois clientes de mesmo nome.
+- A **profissão fica na reserva**, não no cliente: quem marcou "Marketing" uma vez e
+  "Outros" noutra não tem resposta única. Mostramos a **mais usada** e avisamos que há
+  divergência, em vez de escolher em silêncio.
+- Continua valendo tudo do dashboard: **só leitura** e **sem dinheiro**. Os campos novos
+  (`fim`, `nomeCliente`, `telefone`) entraram na mesma lista fechada; `valor` continua
+  fora dela. Há teste procurando dinheiro no texto cru das três respostas da rota.
+
 ### Mensagem de avaliação (1 hora após o término)
 - Oitavo template, `avaliacao_pos_uso`: agradecimento pelo uso + convite para avaliar
   no Google. Variáveis: {{nome}}, {{sala}}, {{data}} e {{link}}.

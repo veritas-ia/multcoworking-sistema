@@ -3,7 +3,12 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { respostaErro } from "@/lib/api";
-import { compararPeriodos, diasNoPeriodo } from "@/lib/relatorios";
+import {
+  compararPeriodos,
+  diasNoPeriodo,
+  montarDetalheDoCliente,
+  procurarClientes,
+} from "@/lib/relatorios";
 
 import { operadorDaRequisicao } from "../operador";
 
@@ -22,6 +27,10 @@ const Busca = z.object({
   /** Periodo de comparacao. Sem ele, vale o periodo anterior do mesmo tamanho. */
   compararDe: DATA.optional(),
   compararAte: DATA.optional(),
+  /** Texto do campo de busca: telefone ou nome. */
+  cliente: z.string().max(120).optional(),
+  /** Telefone do cliente ja escolhido, para o relatorio individual. */
+  telefone: z.string().max(30).optional(),
 });
 
 /**
@@ -46,6 +55,8 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     ate: parametros.get("ate") ?? "",
     compararDe: parametros.get("compararDe") ?? undefined,
     compararAte: parametros.get("compararAte") ?? undefined,
+    cliente: parametros.get("cliente") ?? undefined,
+    telefone: parametros.get("telefone") ?? undefined,
   });
 
   if (!busca.success) {
@@ -60,6 +71,22 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
 
   if (diasNoPeriodo(periodo) > MAXIMO_DE_DIAS) {
     return respostaErro(422, "Escolha um período de no máximo um ano.");
+  }
+
+  // --- relatorio de UM cliente -----------------------------------------------
+  if (busca.data.telefone) {
+    const detalhe = await montarDetalheDoCliente(periodo, busca.data.telefone);
+
+    return detalhe
+      ? NextResponse.json({ detalheDoCliente: detalhe })
+      : respostaErro(404, "Nenhuma reserva desse cliente neste período.");
+  }
+
+  // --- busca de clientes, para a equipe escolher -----------------------------
+  if (busca.data.cliente) {
+    return NextResponse.json({
+      clientes: await procurarClientes(periodo, busca.data.cliente),
+    });
   }
 
   const comparacao =

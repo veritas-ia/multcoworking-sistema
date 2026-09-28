@@ -7,6 +7,7 @@ import { AvisoDeErro, Carregando } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
 
 import { buscarRelatorio, type Comparacao, type Periodo } from "./api";
+import { BuscaDeCliente, horasPorExtenso } from "./busca-de-cliente";
 import {
   BarrasHorizontais,
   BarrasVerticais,
@@ -31,6 +32,13 @@ export function PainelDeRelatorios({ hoje }: { hoje: string }) {
   const [dados, setDados] = useState<Comparacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  /**
+   * Com um cliente aberto, o relatorio GERAL sai da tela. Os dois juntos
+   * confundem: sao dois conjuntos de numeros parecidos, um do coworking
+   * inteiro e outro de uma pessoa, e a equipe leria o de cima achando que e
+   * o de baixo.
+   */
+  const [clienteAberto, setClienteAberto] = useState(false);
 
   const carregar = useCallback(async (alvo: Periodo, sinal?: AbortSignal) => {
     setCarregando(true);
@@ -80,7 +88,15 @@ export function PainelDeRelatorios({ hoje }: { hoje: string }) {
 
       {carregando && !dados ? <Carregando texto="Somando as reservas…" /> : null}
 
-      {dados ? <Numeros dados={dados} carregando={carregando} /> : null}
+      {/* A busca fica ACIMA dos numeros gerais: quem chega aqui atras de um
+          cliente especifico nao deveria ter que rolar a pagina inteira. */}
+      {dados ? (
+        <BuscaDeCliente periodo={periodo} aoAbrirCliente={setClienteAberto} />
+      ) : null}
+
+      {dados && !clienteAberto ? (
+        <Numeros dados={dados} carregando={carregando} />
+      ) : null}
     </div>
   );
 }
@@ -239,6 +255,20 @@ function Numeros({ dados, carregando }: { dados: Comparacao; carregando: boolean
           largo
         >
           <BarrasHorizontais barras={atual.porProfissao} />
+        </Cartao>
+
+        <Cartao
+          titulo="Horas por cliente"
+          apoio="Do que mais usou para o que menos usou. Reservas canceladas não contam como hora usada."
+          largo
+        >
+          <BarrasHorizontais
+            barras={atual.horasPorCliente.map((cliente) => ({
+              rotulo: cliente.nome,
+              total: cliente.horas,
+              valorFormatado: horasPorExtenso(cliente.horas),
+            }))}
+          />
         </Cartao>
       </div>
 

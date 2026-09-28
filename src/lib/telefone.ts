@@ -57,6 +57,25 @@ export function mascararTelefone(telefone: string): string {
 }
 
 /**
+ * Telefone INTEIRO, formatado para ler: "(11) 90000-0789".
+ *
+ * Diferente de "mascararTelefone", que esconde o meio. Este e para a tela do
+ * PAINEL, onde a equipe precisa identificar de quem e a reserva — atras de
+ * login, e nao na area publica.
+ * Devolve o proprio texto quando ele nao esta no formato esperado.
+ */
+export function telefoneVisivel(telefone: string): string {
+  const digitos = apenasDigitos(telefone);
+  const semPais = digitos.startsWith("55") ? digitos.slice(2) : digitos;
+
+  if (semPais.length !== 11) {
+    return telefone;
+  }
+
+  return `(${semPais.slice(0, 2)}) ${semPais.slice(2, 7)}-${semPais.slice(7)}`;
+}
+
+/**
  * Vai formatando o que a pessoa digita: "11987654321" -> "(11) 98765-4321".
  * Aceita numero incompleto, porque roda a cada tecla.
  */

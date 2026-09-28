@@ -17,8 +17,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   compararPeriodos,
   diasNoPeriodo,
+  montarDetalheDoCliente,
   montarRelatorio,
   periodoAnterior,
+  procurarClientes,
   somarDias,
 } from "@/lib/relatorios";
 import { GET as getRelatorios } from "@/app/api/admin/relatorios/route";
@@ -62,8 +64,13 @@ beforeAll(async () => {
   cookie = `${COOKIE_ADMIN}=${await assinarToken(admin.id)}`;
 });
 
+/** Um segundo cliente, para o ranking ter com quem comparar. */
+const TELEFONE_B = "+5511900000788";
+
 async function limpar(): Promise<void> {
-  await bancoDeTeste.reserva.deleteMany({ where: { telefone: TELEFONE } });
+  await bancoDeTeste.reserva.deleteMany({
+    where: { telefone: { in: [TELEFONE, TELEFONE_B] } },
+  });
 }
 
 afterEach(limpar);
@@ -82,16 +89,23 @@ async function reserva(entrada: {
   salaId?: string;
   status?: "CONFIRMADA" | "CANCELADA" | "CONCLUIDA" | "REAGENDADA";
   profissao?: "MARKETING" | "JURIDICO" | "CONTABIL" | "SAUDE" | "OUTROS" | null;
+  nome?: string;
+  telefone?: string;
 }) {
   return bancoDeTeste.reserva.create({
     data: {
       salaId: entrada.salaId ?? salaCI,
-      nomeCliente: "Cliente de Teste",
-      telefone: TELEFONE,
+      nomeCliente: entrada.nome ?? "Cliente de Teste",
+      telefone: entrada.telefone ?? TELEFONE,
       profissao: entrada.profissao === undefined ? "MARKETING" : entrada.profissao,
       inicio: instanteDe(entrada.dia, entrada.inicio),
       fim: instanteDe(entrada.dia, entrada.fim),
-      duracaoMinutos: 60,
+      // O banco exige que a duracao bata com o horario (trava
+      // "reserva_duracao_bate_com_horario"), entao ela sai do proprio par.
+      duracaoMinutos:
+        (instanteDe(entrada.dia, entrada.fim).getTime() -
+          instanteDe(entrada.dia, entrada.inicio).getTime()) /
+        60_000,
       valor: "40.00",
       status: entrada.status ?? "CONFIRMADA",
       // O banco exige a data do cancelamento junto com o status CANCELADA
@@ -255,6 +269,215 @@ describe("sem dinheiro", () => {
     expect(texto).not.toContain("40.00");
     expect(texto).not.toMatch(/receita|faturamento/i);
   });
+
+  it("o relatório de UM cliente também não devolve dinheiro", async () => {
+    // A porta nova. O detalhe do cliente lista as reservas dele uma a uma —
+    // e o lugar mais facil de o valor escapar sem ninguem reparar.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const texto = JSON.stringify(detalhe);
+
+    expect(texto).not.toContain("valor");
+    expect(texto).not.toContain("40.00");
+    expect(texto).not.toMatch(/receita|faturamento|preco/i);
+  });
+
+  it("a busca de clientes também não devolve dinheiro", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Maria" });
+
+    const texto = JSON.stringify(
+      await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "maria"),
+    );
+
+    expect(texto).not.toContain("valor");
+    expect(texto).not.toContain("40.00");
+  });
+});
+
+describe("horas por cliente", () => {
+  it("soma as horas certas e DEIXA A CANCELADA DE FORA", async () => {
+    // 1h + 2h30 contam; a cancelada de 1h, nao.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+    await reserva({ dia: SEGUNDA, inicio: "14:00", fim: "16:30" });
+    await reserva({ dia: SEGUNDA, inicio: "17:00", fim: "18:00", status: "CANCELADA" });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const cliente = relatorio.horasPorCliente.find((c) => c.telefone === TELEFONE);
+
+    expect(cliente?.horas).toBe(3.5);
+    expect(cliente?.reservas).toBe(2);
+  });
+
+  it("conta REAGENDADA e CONCLUIDA como tempo usado", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", status: "REAGENDADA" });
+    await reserva({ dia: SEGUNDA, inicio: "11:00", fim: "12:00", status: "CONCLUIDA" });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorCliente[0]?.horas).toBe(2);
+  });
+
+  it("ordena do cliente com MAIS horas para o com menos", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "17:00",
+      telefone: TELEFONE_B, nome: "Outro Cliente", salaId: salaContainer,
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorCliente[0]?.telefone).toBe(TELEFONE_B);
+    expect(relatorio.horasPorCliente[0]?.horas).toBe(3);
+    expect(relatorio.horasPorCliente[1]?.horas).toBe(1);
+  });
+
+  it("junta o mesmo telefone mesmo com o nome escrito diferente", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "maria" });
+    await reserva({ dia: SEGUNDA, inicio: "11:00", fim: "12:00", nome: "Maria Silva" });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    // Uma linha so, com as duas horas somadas e o nome MAIS RECENTE.
+    expect(relatorio.horasPorCliente).toHaveLength(1);
+    expect(relatorio.horasPorCliente[0]?.horas).toBe(2);
+    expect(relatorio.horasPorCliente[0]?.nome).toBe("Maria Silva");
+  });
+
+  it("A RESERVA DAS 21H DE SEGUNDA conta na segunda, e não na terça", async () => {
+    // Em UTC isto e 2026-11-03T00:00Z — ja e TERCA. Somar no fuso do banco
+    // jogaria as horas para o dia seguinte, e o relatorio discordaria da
+    // agenda. Mesma armadilha na virada de mes.
+    await reserva({ dia: SEGUNDA, inicio: "21:00", fim: "22:00" });
+
+    const naSegunda = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const naTerca = await montarRelatorio({ de: TERCA, ate: TERCA });
+
+    expect(naSegunda.horasPorCliente[0]?.horas).toBe(1);
+    expect(naTerca.horasPorCliente).toHaveLength(0);
+  });
+
+  it("na virada do MÊS, a reserva das 21h fica no mês em que começou", async () => {
+    // 2026-11-30 e uma segunda; as 21h locais viram 2026-12-01 em UTC.
+    await reserva({ dia: "2026-11-30", inicio: "21:00", fim: "22:00" });
+
+    const novembro = await montarRelatorio({ de: "2026-11-01", ate: "2026-11-30" });
+    const dezembro = await montarRelatorio({ de: "2026-12-01", ate: "2026-12-31" });
+
+    expect(novembro.horasPorCliente[0]?.horas).toBe(1);
+    expect(dezembro.horasPorCliente).toHaveLength(0);
+  });
+});
+
+describe("busca de cliente", () => {
+  it("acha pelo telefone em qualquer formato digitado", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Maria" });
+
+    // Os tres jeitos que a equipe digita o mesmo numero.
+    for (const digitado of ["+5511900000789", "11900000789", "(11) 90000-0789"]) {
+      const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, digitado);
+
+      expect(achados).toHaveLength(1);
+      expect(achados[0]?.telefone).toBe(TELEFONE);
+      expect(achados[0]?.nome).toBe("Maria");
+    }
+  });
+
+  it("acha pelo nome sem diferenciar maiúscula nem acento", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "João Antônio" });
+
+    for (const digitado of ["joao", "JOÃO", "antonio"]) {
+      const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, digitado);
+      expect(achados[0]?.telefone).toBe(TELEFONE);
+    }
+  });
+
+  it("devolve VÁRIOS quando o nome bate com mais de um cliente", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Ana Paula" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00",
+      nome: "Ana Beatriz", telefone: TELEFONE_B, salaId: salaContainer,
+    });
+
+    const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "ana");
+
+    expect(achados).toHaveLength(2);
+  });
+
+  it("acha quem só tem reserva cancelada, com zero horas", async () => {
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00",
+      nome: "Pedro", status: "CANCELADA",
+    });
+
+    const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "pedro");
+
+    expect(achados).toHaveLength(1);
+    expect(achados[0]?.horas).toBe(0);
+  });
+
+  it("não devolve nada com menos de 2 letras, nem para quem não tem reserva no período", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Maria" });
+
+    expect(await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "m")).toHaveLength(0);
+    expect(await procurarClientes({ de: TERCA, ate: TERCA }, "maria")).toHaveLength(0);
+  });
+});
+
+describe("relatório de um cliente", () => {
+  it("traz horas, reservas, salas e a lista do período", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:30", nome: "Maria" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00",
+      nome: "Maria", salaId: salaContainer,
+    });
+    await reserva({
+      dia: SEGUNDA, inicio: "17:00", fim: "18:00",
+      nome: "Maria", status: "CANCELADA",
+    });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.nome).toBe("Maria");
+    // 1h30 + 1h. A cancelada nao soma, mas aparece na contagem e na lista.
+    expect(detalhe?.horas).toBe(2.5);
+    expect(detalhe?.totalDeReservas).toBe(3);
+    expect(detalhe?.porSala).toHaveLength(2);
+    expect(detalhe?.reservas).toHaveLength(3);
+    expect(detalhe?.reservas[0]).toMatchObject({
+      data: SEGUNDA,
+      inicio: "09:00",
+      fim: "10:30",
+      duracaoHoras: 1.5,
+    });
+  });
+
+  it("mostra a profissão mais usada e avisa quando há divergência", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", profissao: "MARKETING" });
+    await reserva({ dia: SEGUNDA, inicio: "11:00", fim: "12:00", profissao: "MARKETING" });
+    await reserva({ dia: SEGUNDA, inicio: "14:00", fim: "15:00", profissao: "OUTROS" });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.profissao).toBe("Marketing");
+    expect(detalhe?.profissaoDivergente).toBe(true);
+  });
+
+  it("não avisa divergência quando a profissão é sempre a mesma", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", profissao: "SAUDE" });
+    await reserva({ dia: SEGUNDA, inicio: "11:00", fim: "12:00", profissao: "SAUDE" });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.profissaoDivergente).toBe(false);
+  });
+
+  it("devolve nulo para telefone inválido ou sem reserva no período", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+
+    expect(await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, "abc")).toBeNull();
+    expect(await montarDetalheDoCliente({ de: TERCA, ate: TERCA }, TELEFONE)).toBeNull();
+  });
 });
 
 // =============================================================================
@@ -281,6 +504,75 @@ describe("GET /api/admin/relatorios", () => {
 
     expect(corpo.atual.total).toBe(1);
     expect(corpo.anterior.total).toBe(0);
+  });
+
+  it("a rota de busca e a de UM cliente exigem sessão de admin", async () => {
+    // As portas novas. Uma delas devolve nome e telefone de cliente — nao pode
+    // responder para quem nao esta logado no painel.
+    const busca = await getRelatorios(
+      pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, cliente: "maria" }),
+    );
+    const detalhe = await getRelatorios(
+      pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE }),
+    );
+
+    expect(busca.status).toBe(401);
+    expect(detalhe.status).toBe(401);
+  });
+
+  it("NENHUMA resposta da rota carrega dinheiro, nem a de cliente", async () => {
+    // A garantia real: o texto cru que sai pela rede. Se o valor escapar da
+    // lista fechada de campos, ele aparece aqui — e nao adianta a tela nao
+    // desenhar o numero.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Maria" });
+
+    const respostas = await Promise.all([
+      getRelatorios(pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA }, { cookie })),
+      getRelatorios(
+        pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, cliente: "maria" }, { cookie }),
+      ),
+      getRelatorios(
+        pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE }, { cookie }),
+      ),
+    ]);
+
+    for (const resposta of respostas) {
+      const texto = JSON.stringify(await resposta.json());
+
+      expect(texto).not.toContain("valor");
+      expect(texto).not.toContain("40.00");
+      expect(texto).not.toMatch(/receita|faturamento|preco/i);
+    }
+  });
+
+  it("a busca por telefone pela rota devolve o cliente certo", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Maria" });
+
+    const corpo = await (
+      await getRelatorios(
+        pedidoGet(
+          "/api/admin/relatorios",
+          { de: SEGUNDA, ate: SEGUNDA, cliente: "(11) 90000-0789" },
+          { cookie },
+        ),
+      )
+    ).json();
+
+    expect(corpo.clientes).toHaveLength(1);
+    expect(corpo.clientes[0].nome).toBe("Maria");
+    expect(corpo.clientes[0].horas).toBe(2);
+  });
+
+  it("devolve 404 para cliente sem reserva no período", async () => {
+    const resposta = await getRelatorios(
+      pedidoGet(
+        "/api/admin/relatorios",
+        { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE },
+        { cookie },
+      ),
+    );
+
+    expect(resposta.status).toBe(404);
   });
 
   it("recusa periodo invertido", async () => {

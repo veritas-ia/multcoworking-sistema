@@ -52,7 +52,16 @@ export function SemDados() {
 
 // -----------------------------------------------------------------------------
 
-export type Barra = { rotulo: string; total: number; cor?: string };
+export type Barra = {
+  rotulo: string;
+  total: number;
+  cor?: string;
+  /**
+   * O que aparece escrito ao lado da barra, quando o numero cru nao serve.
+   * Horas, por exemplo, precisam de virgula e unidade: "3,5 h" em vez de 3.5.
+   */
+  valorFormatado?: string;
+};
 
 /**
  * Barras HORIZONTAIS.
@@ -94,8 +103,12 @@ export function BarrasHorizontais({
             />
           </span>
 
-          <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-text-primary">
-            {barra.total}
+          <span
+            className={`${
+              visiveis.some((outra) => outra.valorFormatado) ? "w-16" : "w-10"
+            } shrink-0 text-right text-sm font-semibold tabular-nums text-text-primary`}
+          >
+            {barra.valorFormatado ?? barra.total}
           </span>
         </li>
       ))}

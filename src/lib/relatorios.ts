@@ -24,6 +24,7 @@ import { StatusReserva } from "@/generated/prisma/enums";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { PROFISSOES, rotuloDaProfissao } from "@/lib/profissoes";
+import { normalizarTelefone } from "@/lib/telefone";
 import {
   dataLocalDe,
   diaDaSemanaDe,
@@ -50,6 +51,54 @@ export type Relatorio = {
   porDiaDaSemana: BarraDoDia[];
   porHora: Fatia[];
   porProfissao: Fatia[];
+  /** Ranking de horas usadas. Canceladas nao entram. */
+  horasPorCliente: HorasDoCliente[];
+};
+
+/**
+ * Quanto tempo um cliente usou no periodo.
+ *
+ * Agrupado pelo TELEFONE, nunca pelo nome: o telefone e o identificador unico
+ * do sistema (formato internacional, validado na gravacao), enquanto a mesma
+ * pessoa escreve o nome de formas diferentes a cada reserva — "Maria",
+ * "Maria Silva", "maria silva". Agrupar por nome quebraria a soma dela em
+ * varias linhas.
+ */
+export type HorasDoCliente = {
+  telefone: string;
+  /** O nome da reserva MAIS RECENTE dele no periodo. */
+  nome: string;
+  horas: number;
+  reservas: number;
+};
+
+/** Uma reserva na lista do cliente escolhido. */
+export type ReservaDoCliente = {
+  data: DataLocal;
+  sala: string;
+  inicio: string;
+  fim: string;
+  duracaoHoras: number;
+  status: string;
+};
+
+export type DetalheDoCliente = {
+  periodo: Periodo;
+  telefone: string;
+  nome: string;
+  /**
+   * A area de atuacao mais usada por ele. A profissao fica na RESERVA, e nao
+   * no cliente, entao quem marcou "Marketing" numa vez e "Outros" noutra nao
+   * tem uma resposta unica: mostramos a mais frequente e avisamos.
+   */
+  profissao: string;
+  profissaoDivergente: boolean;
+  horas: number;
+  /** Contando TODAS as situacoes, inclusive canceladas. */
+  totalDeReservas: number;
+  porSala: FatiaColorida[];
+  porStatus: Fatia[];
+  reservas: ReservaDoCliente[];
 };
 
 export type Comparacao = {
@@ -117,11 +166,21 @@ export function periodoAnterior(periodo: Periodo): Periodo {
 // A consulta
 // -----------------------------------------------------------------------------
 
-/** So o que o relatorio precisa. Nenhum campo de dinheiro sai daqui. */
+/**
+ * So o que o relatorio precisa. Nenhum campo de dinheiro sai daqui.
+ *
+ * "valor" existe na tabela e NAO entra nesta lista, de proposito. E esta lista
+ * que garante a decisao do dono de nao haver faturamento no relatorio — nao o
+ * fato de a tela nao desenhar o numero. Ha teste procurando dinheiro dentro da
+ * resposta da rota.
+ */
 type ReservaContada = {
   inicio: Date;
+  fim: Date;
   status: StatusReserva;
   profissao: CategoriaProfissao | null;
+  nomeCliente: string;
+  telefone: string;
   sala: { nome: string; cor: string };
 };
 
@@ -138,8 +197,11 @@ async function reservasDoPeriodo(periodo: Periodo): Promise<ReservaContada[]> {
     // Lista fechada: o "valor" da reserva NAO entra no relatorio.
     select: {
       inicio: true,
+      fim: true,
       status: true,
       profissao: true,
+      nomeCliente: true,
+      telefone: true,
       sala: { select: { nome: true, cor: true } },
     },
     orderBy: { inicio: "asc" },
@@ -257,6 +319,212 @@ function contarPorProfissao(reservas: ReservaContada[]): Fatia[] {
     });
 }
 
+
+// -----------------------------------------------------------------------------
+// Clientes
+// -----------------------------------------------------------------------------
+
+/**
+ * As situacoes que contam como tempo USADO.
+ *
+ * Cancelada fica de fora: hora desmarcada nao e hora usada, e somá-la faria o
+ * ranking premiar quem mais desmarca. REAGENDADA entra porque a reserva
+ * continua de pe — so mudou de horario.
+ */
+const SITUACOES_QUE_CONTAM: StatusReserva[] = [
+  StatusReserva.CONFIRMADA,
+  StatusReserva.REAGENDADA,
+  StatusReserva.CONCLUIDA,
+];
+
+function contouComoUso(reserva: ReservaContada): boolean {
+  return SITUACOES_QUE_CONTAM.includes(reserva.status);
+}
+
+/** Duracao em horas, com meia hora valendo 0,5. */
+function horasDe(reserva: ReservaContada): number {
+  return (reserva.fim.getTime() - reserva.inicio.getTime()) / 3_600_000;
+}
+
+/** Arredonda para uma casa, para 1.5000000000000002 nao chegar na tela. */
+function umaCasa(horas: number): number {
+  return Math.round(horas * 10) / 10;
+}
+
+/**
+ * Quantas horas cada cliente usou, do maior para o menor.
+ *
+ * As reservas ja vem ordenadas por inicio crescente, entao a ultima que o laco
+ * encontra e a mais recente — e e dela que sai o nome mostrado.
+ */
+function somarHorasPorCliente(reservas: ReservaContada[]): HorasDoCliente[] {
+  const mapa = new Map<string, { nome: string; horas: number; reservas: number }>();
+
+  for (const reserva of reservas) {
+    if (!contouComoUso(reserva)) {
+      continue;
+    }
+
+    const atual = mapa.get(reserva.telefone);
+    mapa.set(reserva.telefone, {
+      nome: reserva.nomeCliente,
+      horas: (atual?.horas ?? 0) + horasDe(reserva),
+      reservas: (atual?.reservas ?? 0) + 1,
+    });
+  }
+
+  return [...mapa.entries()]
+    .map(([telefone, dados]) => ({
+      telefone,
+      nome: dados.nome,
+      horas: umaCasa(dados.horas),
+      reservas: dados.reservas,
+    }))
+    .sort(
+      (a, b) => b.horas - a.horas || a.nome.localeCompare(b.nome, "pt-BR"),
+    );
+}
+
+/** A area de atuacao mais usada pelo cliente, e se houve mais de uma. */
+function profissaoPredominante(
+  reservas: ReservaContada[],
+): { rotulo: string; divergente: boolean } {
+  const contagem = new Map<string, number>();
+
+  for (const reserva of reservas) {
+    const rotulo = rotuloDaProfissao(reserva.profissao);
+    contagem.set(rotulo, (contagem.get(rotulo) ?? 0) + 1);
+  }
+
+  if (contagem.size === 0) {
+    return { rotulo: rotuloDaProfissao(null), divergente: false };
+  }
+
+  const ordenadas = [...contagem.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"),
+  );
+
+  return { rotulo: ordenadas[0]![0], divergente: contagem.size > 1 };
+}
+
+/**
+ * Procura clientes por telefone ou por nome.
+ *
+ * O TELEFONE manda: se o que foi digitado vira um celular valido, a busca e
+ * exata e devolve no maximo um cliente. Nome e auxiliar, porque dois clientes
+ * podem se chamar igual — nesse caso devolve a lista e quem escolhe e a
+ * equipe.
+ *
+ * So procura entre quem TEM reserva no periodo: o campo serve para filtrar o
+ * relatorio, nao para vasculhar a base inteira.
+ */
+export async function procurarClientes(
+  periodo: Periodo,
+  termo: string,
+): Promise<HorasDoCliente[]> {
+  const procurado = termo.trim();
+
+  if (procurado.length < 2) {
+    return [];
+  }
+
+  const reservas = await reservasDoPeriodo(periodo);
+  const telefone = normalizarTelefone(procurado);
+
+  if (telefone) {
+    return somarHorasPorCliente(
+      reservas.filter((reserva) => reserva.telefone === telefone),
+    );
+  }
+
+  // Busca por nome: sem diferenciar maiuscula nem acento, porque ninguem
+  // digita "Joao" e "João" do mesmo jeito duas vezes seguidas.
+  const alvo = semAcento(procurado);
+  const encontrados = reservas.filter((reserva) =>
+    semAcento(reserva.nomeCliente).includes(alvo),
+  );
+
+  // O ranking soma so o que contou como uso; um cliente que aparece no periodo
+  // apenas com reserva cancelada sumiria da busca. Por isso ele e reposto aqui
+  // com zero horas — a equipe precisa conseguir achar essa pessoa.
+  const comHoras = somarHorasPorCliente(encontrados);
+  const jaListados = new Set(comHoras.map((cliente) => cliente.telefone));
+
+  for (const reserva of encontrados) {
+    if (!jaListados.has(reserva.telefone)) {
+      jaListados.add(reserva.telefone);
+      comHoras.push({
+        telefone: reserva.telefone,
+        nome: reserva.nomeCliente,
+        horas: 0,
+        reservas: 0,
+      });
+    }
+  }
+
+  return comHoras;
+}
+
+function semAcento(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+/**
+ * O relatorio de UM cliente no periodo.
+ *
+ * Devolve nulo quando o telefone nao tem nenhuma reserva ali — inclusive
+ * quando o telefone nem existe no sistema. A tela nao distingue os dois casos
+ * de proposito: o painel e de relatorio, nao um lugar de descobrir se um
+ * numero qualquer e cliente da casa.
+ */
+export async function montarDetalheDoCliente(
+  periodo: Periodo,
+  telefoneBruto: string,
+): Promise<DetalheDoCliente | null> {
+  const telefone = normalizarTelefone(telefoneBruto);
+
+  if (!telefone) {
+    return null;
+  }
+
+  const todas = (await reservasDoPeriodo(periodo)).filter(
+    (reserva) => reserva.telefone === telefone,
+  );
+
+  if (todas.length === 0) {
+    return null;
+  }
+
+  const usadas = todas.filter(contouComoUso);
+  const profissao = profissaoPredominante(todas);
+
+  return {
+    periodo,
+    telefone,
+    // A ultima reserva do periodo, que e a mais recente: a lista vem ordenada.
+    nome: todas[todas.length - 1]!.nomeCliente,
+    profissao: profissao.rotulo,
+    profissaoDivergente: profissao.divergente,
+    horas: umaCasa(usadas.reduce((soma, reserva) => soma + horasDe(reserva), 0)),
+    totalDeReservas: todas.length,
+    porSala: contarPorSala(todas),
+    porStatus: contarPorStatus(todas),
+    reservas: todas.map((reserva) => ({
+      // O dia em que a reserva COMECA, no relogio de Sao Paulo. Uma reserva nao
+      // e fatiada entre dois dias: o numero precisa bater com a agenda.
+      data: dataLocalDe(reserva.inicio),
+      sala: reserva.sala.nome,
+      inicio: horaLocalDe(reserva.inicio),
+      fim: horaLocalDe(reserva.fim),
+      duracaoHoras: umaCasa(horasDe(reserva)),
+      status: NOMES_DOS_STATUS[reserva.status] ?? reserva.status,
+    })),
+  };
+}
+
 // -----------------------------------------------------------------------------
 // Montagem
 // -----------------------------------------------------------------------------
@@ -273,6 +541,7 @@ export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
     porDiaDaSemana: contarPorDiaDaSemana(reservas),
     porHora: contarPorHora(reservas),
     porProfissao: contarPorProfissao(reservas),
+    horasPorCliente: somarHorasPorCliente(reservas),
   };
 }
 
