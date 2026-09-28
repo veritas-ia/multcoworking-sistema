@@ -120,13 +120,19 @@ export async function lerParametros(): Promise<ParametroNaTela[]> {
   });
 }
 
-/** O intervalo entre reservas, que a tela mostra sem deixar editar. */
+/**
+ * O intervalo entre reservas, que a tela mostra sem deixar editar.
+ *
+ * Hoje vale ZERO: reservas coladas sao permitidas. O numero continua vindo do
+ * banco, e nao escrito no codigo, porque a trava do Postgres le o MESMO
+ * registro — se um dia a folga voltar, os dois mudam juntos.
+ */
 export async function lerIntervaloEntreReservas(): Promise<number> {
   const linha = await prisma.configuracao.findUnique({
     where: { chave: "intervaloMinutos" },
   });
 
-  return linha ? Number(linha.valor) : 30;
+  return linha ? Number(linha.valor) : 0;
 }
 
 function validarUm(

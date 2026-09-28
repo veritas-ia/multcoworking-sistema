@@ -418,6 +418,54 @@ começo: você escolhe a hora de publicar, e não no meio do movimento.
 
 ---
 
+## Conferir o intervalo entre reservas (depois de publicar)
+
+Em 28/09/2026 a folga obrigatória de 30 minutos entre duas reservas da mesma
+sala foi removida — passou a ser **zero**. A mudança entra sozinha na
+publicação, junto com as outras migrações. Este comando confere se deu certo.
+
+No **Terminal** do serviço `sistema`:
+
+```sh
+npm run conferir-intervalo
+```
+
+Ele **só lê**: não grava, não apaga e não altera nenhuma reserva. Pode rodar a
+qualquer hora, quantas vezes quiser.
+
+O resultado esperado:
+
+```
+CONFERENCIA DO INTERVALO ENTRE RESERVAS
+
+1. Parametro no banco ........................ 0 min          OK
+2. Folga que a trava usa ..................... 00:00:00       OK
+3. Reservas com a folga antiga ............... 0 de 37        OK
+4. Trava de SOBREPOSICAO ..................... presente       OK
+5. Trava de intervalo ........................ presente       OK
+
+TUDO CERTO. Reserva colada e permitida e sobreposicao continua barrada pelo banco.
+```
+
+O número da direita no item 3 é quantas reservas ativas ou futuras existem no
+banco — ele varia. O que importa é o número da **esquerda ser zero**.
+
+**A linha 3 é a que realmente importa.** A folga de cada reserva é calculada na
+hora de gravar e fica guardada na própria reserva. Se a migração não tivesse
+recalculado as reservas já marcadas, elas continuariam com a folga antiga e a
+agenda ficaria com duas regras ao mesmo tempo. Zero ali quer dizer que todas
+foram acertadas.
+
+**As linhas 4 e 5 são a garantia de segurança:** as duas travas do banco
+continuam de pé. Duas reservas no mesmo horário na mesma sala seguem
+impossíveis — quem impede é o próprio PostgreSQL, não a tela.
+
+Se aparecer `ALGO NAO CONFERE`, **não mexa no banco**: tire uma foto da tela e
+mostre para quem cuida do sistema.
+
+Se aparecer `Missing script`, a imagem publicada é anterior a este comando —
+clique em **Deploy** e tente de novo.
+
 ## Backup do banco
 
 **Isto não é opcional.** As reservas do coworking vivem só ali.

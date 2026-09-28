@@ -151,8 +151,9 @@ async function criarHorarios(): Promise<void> {
 const CONFIGURACOES = [
   {
     chave: "intervaloMinutos",
-    valor: "30",
-    descricao: "Minutos de folga obrigatórios entre duas reservas da mesma sala.",
+    valor: "0",
+    descricao:
+      "Minutos de folga obrigatórios entre duas reservas da mesma sala. Zero: reservas podem ficar coladas.",
   },
   {
     chave: "duracaoMinimaMinutos",

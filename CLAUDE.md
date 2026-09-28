@@ -22,9 +22,12 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   seg-qui 08:00-18:00 | sex fechado | sáb 09:00-13:00 | dom fechado
 - Grade de seleção: blocos de 30 minutos.
 - Duração mínima: 60 minutos. Máxima: até o horário de fechamento do dia.
-- Intervalo obrigatório de 30 min entre reservas da MESMA sala, simétrico (antes e depois).
-- O intervalo NÃO se aplica contra abertura/fechamento: reserva pode terminar no horário de fechamento.
-- Bloqueios administrativos NÃO exigem intervalo de 30 min.
+- SEM intervalo obrigatório entre reservas da MESMA sala (era 30 min até set/2026).
+  Uma reserva pode começar no minuto exato em que a outra termina. O único horário
+  que some antes de uma reserva é a meia hora imediatamente anterior — e some por
+  SOBREPOSIÇÃO, não por folga: com 1h de duração mínima, começar ali obrigaria a
+  invadir a reserva seguinte.
+- Proibido sobrepor: isso continua garantido pelo próprio PostgreSQL.
 - A recepção (origem ADMIN) pode lançar reserva AVULSA em dia fechado e fora do
   horário de funcionamento — é para evento pontual que a equipe sabe que vai abrir.
   O CLIENTE na área pública continua sem poder. Uma RECORRÊNCIA, porém, PULA os dias
@@ -81,7 +84,7 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 ## Decisões confirmadas (fonte da verdade — não reabrir sem pedir)
 
 ### Horários e disponibilidade
-- Bloqueio administrativo é espaço ocupado puro: o intervalo de 30 min só existe entre DUAS reservas de cliente. Uma reserva pode começar no minuto exato em que um bloqueio termina, e vice-versa.
+- Bloqueio administrativo é espaço ocupado puro. Uma reserva pode começar no minuto exato em que um bloqueio termina, e vice-versa — hoje isso vale entre quaisquer dois compromissos, já que o intervalo entre reservas é zero.
 - Duração máxima da reserva: configurável por sala. Padrões no seed: Sala de Reunião 2h; Sala Container e Sala CI liberadas (até o fechamento do dia). Editável pela equipe no painel.
 - Antecedência mínima para reservar: 1 hora (configurável). Antecedência máxima: 60 dias à frente (configurável).
 - Feriados: tratados como bloqueio de dia inteiro criado pela equipe. Sem calendário automático no MVP.
@@ -128,9 +131,8 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   sai um relatório do que entrou e do que ficou de fora, com o motivo.
 - Cada ocorrência é uma reserva normal ligada à série. Dá para cancelar uma só ou a
   série inteira — o sistema pergunta qual.
-- O que a recepção NUNCA contorna, nem avulso nem em série: sobreposição de horário e
-  o intervalo de 30 min entre reservas. Isso é integridade da agenda, garantida pelo
-  próprio PostgreSQL.
+- O que a recepção NUNCA contorna, nem avulso nem em série: sobreposição de horário.
+  Isso é integridade da agenda, garantida pelo próprio PostgreSQL.
 
 ### Rotinas automáticas (Fase 10)
 - Lembretes de 13h e 3h, com janela de tolerância de 15 minutos para cada lado. A
@@ -156,11 +158,10 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   nas reservas já marcadas, e a última sala ativa não pode ser desligada.
   O endereço da sala no site (slug) nasce do nome na criação e NUNCA muda depois:
   é ele que está nos QR codes impressos.
-- O intervalo de 30 min entre reservas NÃO é editável no painel: aparece só para
-  leitura. É integridade da agenda, garantida por uma trava do próprio Postgres, e
-  o banco lê esse número no momento de gravar cada reserva — mudá-lo deixaria as
-  reservas antigas com a folga velha e as novas com a folga nova. Trocar exige
-  alteração no sistema, recalculando as reservas futuras junto.
+- O intervalo entre reservas (hoje ZERO) NÃO é editável no painel: aparece só para
+  leitura. O banco lê esse número no momento de gravar cada reserva e o congela na
+  linha — mudá-lo deixaria as reservas antigas com a folga velha e as novas com a
+  folga nova. Trocar exige migração, recalculando as reservas já marcadas junto.
 - Os limites de envio do código de WhatsApp (1/min e 5/h por número, 20/h por IP,
   5 tentativas, bloqueio de 15 min, validade de 10 min) ficam no código e aparecem
   no painel apenas para leitura. São freios contra abuso, não preferência
@@ -172,6 +173,26 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   esqueceu a dela) e ligar/desligar acesso. Desligar em vez de excluir, porque
   bloqueios e feriados guardam quem os criou. Quem é desligado perde o acesso na
   hora, mesmo com o cookie ainda no prazo. Ninguém desliga o próprio acesso.
+
+### Intervalo entre reservas: ZERO (mudado em 28/09/2026)
+- **Decisão do dono: acabou a folga obrigatória de 30 min entre duas reservas da
+  mesma sala.** O parâmetro `intervaloMinutos` passou de 30 para 0. Motivo: a folga
+  queimava meia hora vendável antes e depois de cada reserva, e a equipe prefere
+  encaixar clientes colados a proteger o tempo de arrumação.
+- O que continua PROIBIDO é a sobreposição de verdade, garantida pela exclusion
+  constraint `ocupacao_sem_sobreposicao` — dois clientes no mesmo horário na mesma
+  sala segue impossível, e a trava é do banco, não da aplicação.
+- Com uma reserva das 10:00 às 11:00: o 09:00 fica LIVRE (encosta, não invade), o
+  09:30 fica BLOQUEADO (com 1h de mínimo, iria até 10:30 e invadiria) e o 11:00 fica
+  LIVRE. A duração mínima continua 60 minutos — não foi tocada.
+- A trava `ocupacao_intervalo_entre_reservas` **continua existindo** de propósito. Com
+  folga zero ela vira uma cópia da trava de sobreposição restrita a reservas: não
+  atrapalha e não custa nada. Se um dia a folga voltar, basta mudar o número em
+  `configuracoes` — sem mudança de estrutura.
+- A migração `20260928100000_intervalo_entre_reservas_zero` **recalcula as reservas
+  já existentes**. Sem isso a mudança valeria só para reserva nova: o período
+  esticado é calculado pelo gatilho na hora de gravar e fica congelado na linha, então
+  as reservas antigas continuariam carregando a folga de 30 min.
 
 ### Categoria de profissão e relatórios
 - Toda reserva guarda a **categoria de profissão** do cliente: Marketing, Jurídico,
@@ -274,7 +295,7 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 
 - Fase 0 — Alinhamento (resumo, dúvidas, riscos). Sem código.
 - Fase 1 — Esqueleto: Next.js 15, TypeScript, Tailwind, shadcn/ui, cores da marca, docker-compose com Postgres, Prisma, Vitest, git, página inicial.
-- Fase 2 — Banco de dados: schema Prisma (Sala, HorarioFuncionamento, Reserva, CodigoVerificacao, SessaoCliente, TemplateMensagem, LogMensagem, Bloqueio, Recorrencia, Usuario, Configuracao); exclusion constraints em SQL (sobreposição + intervalo de 30 min); seed.
+- Fase 2 — Banco de dados: schema Prisma (Sala, HorarioFuncionamento, Reserva, CodigoVerificacao, SessaoCliente, TemplateMensagem, LogMensagem, Bloqueio, Recorrencia, Usuario, Configuracao); exclusion constraints em SQL (sobreposição + intervalo entre reservas); seed.
 - Fase 3 — Motor de disponibilidade (módulo puro, sem UI) com testes exaustivos. Fase mais crítica.
 - Fase 4 — API pública + cliente Evolution + verificação por código.
 - Fase 5 — Interface pública de reserva (mobile-first, verificação embutida na etapa 5).

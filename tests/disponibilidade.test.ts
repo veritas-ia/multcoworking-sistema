@@ -315,25 +315,36 @@ describe("sábado — o dia curto", () => {
   });
 });
 
-describe("intervalo de 30 minutos entre reservas", () => {
+describe("reservas coladas — o intervalo entre reservas é zero", () => {
+  // Decisao do dono: nao existe mais folga obrigatoria entre duas reservas da
+  // mesma sala. Uma pode comecar no minuto exato em que a outra termina. O que
+  // continua proibido e a sobreposicao de verdade.
   beforeEach(async () => {
     // Reserva de referencia: terca, 10:00 as 11:00, na Sala CI.
     await criarReserva(salaCI, TERCA, "10:00", "11:00");
   });
 
-  it("recusa reserva colada logo DEPOIS da existente (11:00)", async () => {
+  it("aceita reserva colada logo DEPOIS da existente (11:00 às 12:00)", async () => {
     const resultado = await validarReserva({
       salaId: salaCI,
       inicio: instanteDe(TERCA, "11:00"),
       fim: instanteDe(TERCA, "12:00"),
     });
 
-    expect(resultado.valido).toBe(false);
-    expect(resultado.codigo).toBe("INTERVALO_ENTRE_RESERVAS");
-    expect(resultado.motivo).toContain("30");
+    expect(resultado.valido).toBe(true);
   });
 
-  it("aceita reserva com exatamente 30 min de folga depois (11:30)", async () => {
+  it("aceita reserva colada logo ANTES da existente (09:00 às 10:00)", async () => {
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "09:00"),
+      fim: instanteDe(TERCA, "10:00"),
+    });
+
+    expect(resultado.valido).toBe(true);
+  });
+
+  it("aceita reserva afastada depois (11:30 às 12:30)", async () => {
     const resultado = await validarReserva({
       salaId: salaCI,
       inicio: instanteDe(TERCA, "11:30"),
@@ -343,18 +354,7 @@ describe("intervalo de 30 minutos entre reservas", () => {
     expect(resultado.valido).toBe(true);
   });
 
-  it("recusa reserva colada logo ANTES da existente (09:00 às 10:00)", async () => {
-    const resultado = await validarReserva({
-      salaId: salaCI,
-      inicio: instanteDe(TERCA, "09:00"),
-      fim: instanteDe(TERCA, "10:00"),
-    });
-
-    expect(resultado.valido).toBe(false);
-    expect(resultado.codigo).toBe("INTERVALO_ENTRE_RESERVAS");
-  });
-
-  it("aceita reserva com exatamente 30 min de folga antes (08:30 às 09:30)", async () => {
+  it("aceita reserva afastada antes (08:30 às 09:30)", async () => {
     const resultado = await validarReserva({
       salaId: salaCI,
       inicio: instanteDe(TERCA, "08:30"),
@@ -362,6 +362,19 @@ describe("intervalo de 30 minutos entre reservas", () => {
     });
 
     expect(resultado.valido).toBe(true);
+  });
+
+  it("recusa a meia hora imediatamente anterior, que invadiria (09:30 às 10:30)", async () => {
+    // O UNICO horario que some antes da reserva. Com 1h de duracao minima,
+    // comecar as 09:30 obriga a terminar 10:30 — dentro da reserva existente.
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "09:30"),
+      fim: instanteDe(TERCA, "10:30"),
+    });
+
+    expect(resultado.valido).toBe(false);
+    expect(resultado.codigo).toBe("HORARIO_OCUPADO");
   });
 
   it("recusa reserva por cima da existente", async () => {
@@ -375,11 +388,36 @@ describe("intervalo de 30 minutos entre reservas", () => {
     expect(resultado.codigo).toBe("HORARIO_OCUPADO");
   });
 
-  it("a grade do dia esconde os blocos sem folga suficiente", async () => {
-    // Reserva 10:00-11:00 -> some 09:00, 09:30, 10:00, 10:30 e 11:00.
+  it("recusa o MESMO horário exato (dois clientes na mesma sala)", async () => {
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "10:00"),
+      fim: instanteDe(TERCA, "11:00"),
+    });
+
+    expect(resultado.valido).toBe(false);
+    expect(resultado.codigo).toBe("HORARIO_OCUPADO");
+  });
+
+  it("a duração mínima de 1h continua valendo", async () => {
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "08:00"),
+      fim: instanteDe(TERCA, "08:30"),
+    });
+
+    expect(resultado.valido).toBe(false);
+    expect(resultado.codigo).toBe("DURACAO_MINIMA");
+  });
+
+  it("a grade do dia só esconde os blocos que invadiriam a reserva", async () => {
+    // Reserva 10:00-11:00 -> somem APENAS 09:30, 10:00 e 10:30.
+    // O 09:00 volta a aparecer: 09:00-10:00 encosta, mas nao invade.
     expect(await iniciosDisponiveis(salaCI, TERCA)).toEqual([
       "08:00",
       "08:30",
+      "09:00",
+      "11:00",
       "11:30",
       "12:00",
       "12:30",
@@ -441,6 +479,54 @@ describe("intervalo de 30 minutos entre reservas", () => {
     });
 
     expect(resultado.valido).toBe(true);
+  });
+});
+
+describe("reservas coladas — segundo exemplo (reserva das 12:00 às 13:00)", () => {
+  beforeEach(async () => {
+    await criarReserva(salaCI, TERCA, "12:00", "13:00");
+  });
+
+  it("11:30 fica bloqueado, porque invadiria", async () => {
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "11:30"),
+      fim: instanteDe(TERCA, "12:30"),
+    });
+
+    expect(resultado.valido).toBe(false);
+    expect(resultado.codigo).toBe("HORARIO_OCUPADO");
+  });
+
+  it("13:00 fica livre, colado no fim", async () => {
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "13:00"),
+      fim: instanteDe(TERCA, "14:00"),
+    });
+
+    expect(resultado.valido).toBe(true);
+  });
+
+  it("13:30 fica livre", async () => {
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "13:30"),
+      fim: instanteDe(TERCA, "14:30"),
+    });
+
+    expect(resultado.valido).toBe(true);
+  });
+
+  it("a grade do dia perde só 11:30, 12:00 e 12:30", async () => {
+    const livres = await iniciosDisponiveis(salaCI, TERCA);
+
+    expect(livres).toContain("11:00");
+    expect(livres).not.toContain("11:30");
+    expect(livres).not.toContain("12:00");
+    expect(livres).not.toContain("12:30");
+    expect(livres).toContain("13:00");
+    expect(livres).toContain("13:30");
   });
 });
 

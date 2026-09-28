@@ -336,25 +336,25 @@ describe("criar reserva pela recepcao", () => {
     await expect(resposta.json()).resolves.toMatchObject({ codigo: "HORARIO_TOMADO" });
   });
 
-  it("NAO escapa do intervalo de 30 min entre reservas", async () => {
+  it("NAO escapa da sobreposição de horário", async () => {
     await reservaNoBanco({ data: QUARTA, inicio: "10:00", fim: "11:00" });
 
-    // 11:00 as 12:00 encosta na anterior: falta a folga de 30 min.
-    const resposta = await criarPelaRecepcao({
+    // 10:30 as 11:30 entra por cima da anterior: recusado, mesmo para a recepcao.
+    const porCima = await criarPelaRecepcao({
+      data: QUARTA,
+      inicio: "10:30",
+      fim: "11:30",
+    });
+
+    expect(porCima.status).not.toBe(201);
+
+    // Colada no fim, porem, passa: nao existe mais folga obrigatoria.
+    const colada = await criarPelaRecepcao({
       data: QUARTA,
       inicio: "11:00",
       fim: "12:00",
     });
-
-    expect(resposta.status).not.toBe(201);
-
-    // Com a folga, passa.
-    const comFolga = await criarPelaRecepcao({
-      data: QUARTA,
-      inicio: "11:30",
-      fim: "12:30",
-    });
-    expect(comFolga.status).toBe(201);
+    expect(colada.status).toBe(201);
   });
 
   it("DEIXA marcar em dia fechado (regra mudou na Fase 9)", async () => {

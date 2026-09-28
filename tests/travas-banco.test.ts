@@ -137,9 +137,10 @@ describe("trava 1 — nada se sobrepoe na mesma sala", () => {
   });
 });
 
-describe("trava 2 — 30 minutos de folga entre duas reservas", () => {
-  it("recusa reserva colada no fim da anterior (folga zero)", async () => {
-    // 10:00-11:00 e depois 11:00-12:00 -> nao sobra folga.
+describe("trava 2 — reservas coladas passaram a ser permitidas (folga zero)", () => {
+  // A trava continua existindo, mas com o intervalo em 0 ela so barra
+  // sobreposicao de verdade. Encostar uma reserva na outra e permitido.
+  it("ACEITA reserva colada no fim da anterior (11:00 depois de 10:00-11:00)", async () => {
     await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 });
 
     await expect(
@@ -148,11 +149,10 @@ describe("trava 2 — 30 minutos de folga entre duas reservas", () => {
         inicio: maisMinutos(DEZ_HORAS, 60),
         minutos: 60,
       }),
-    ).rejects.toThrow(/ocupacao_/);
+    ).resolves.toBeTypeOf("string");
   });
 
-  it("aceita reserva com exatamente 30 min de folga depois", async () => {
-    // 10:00-11:00 e depois 11:30-12:30.
+  it("aceita reserva afastada depois (11:30-12:30)", async () => {
     await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 });
 
     await expect(
@@ -164,8 +164,7 @@ describe("trava 2 — 30 minutos de folga entre duas reservas", () => {
     ).resolves.toBeTypeOf("string");
   });
 
-  it("aceita reserva com exatamente 30 min de folga antes (regra simetrica)", async () => {
-    // Primeiro cria a das 10:00; depois tenta a das 08:30-09:30.
+  it("aceita reserva afastada antes (08:30-09:30)", async () => {
     await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 });
 
     await expect(
@@ -177,14 +176,34 @@ describe("trava 2 — 30 minutos de folga entre duas reservas", () => {
     ).resolves.toBeTypeOf("string");
   });
 
-  it("recusa reserva que termina 30 min depois de comecar a anterior (folga insuficiente antes)", async () => {
-    // Reserva das 10:00-11:00 ja existe; tenta 09:00-10:00 -> folga zero antes.
+  it("ACEITA reserva colada no inicio da anterior (09:00-10:00 antes de 10:00-11:00)", async () => {
     await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 });
 
     await expect(
       criarReserva({
         salaId: salaA,
         inicio: maisMinutos(DEZ_HORAS, -60),
+        minutos: 60,
+      }),
+    ).resolves.toBeTypeOf("string");
+  });
+
+  it("CONTINUA recusando o mesmo horário exato (dois clientes, uma sala)", async () => {
+    // A protecao que nao pode cair de jeito nenhum.
+    await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 });
+
+    await expect(
+      criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 }),
+    ).rejects.toThrow(/ocupacao_/);
+  });
+
+  it("CONTINUA recusando sobreposição parcial (10:30 por cima de 10:00-11:00)", async () => {
+    await criarReserva({ salaId: salaA, inicio: DEZ_HORAS, minutos: 60 });
+
+    await expect(
+      criarReserva({
+        salaId: salaA,
+        inicio: maisMinutos(DEZ_HORAS, 30),
         minutos: 60,
       }),
     ).rejects.toThrow(/ocupacao_/);
@@ -411,9 +430,11 @@ describe("folga configuravel no painel", () => {
         }),
       ).resolves.toBeTypeOf("string");
     } finally {
+      // Devolve ZERO, que e o valor de hoje. Devolver 30 aqui fazia os
+      // outros arquivos de teste falharem quando rodam na mesma passada.
       await bancoDeTeste.configuracao.update({
         where: { chave: "intervaloMinutos" },
-        data: { valor: "30" },
+        data: { valor: "0" },
       });
     }
   });

@@ -121,7 +121,7 @@ describe("leitura", () => {
     const resposta = await getParametros(pedidoGet("/api/admin/parametros", {}, { cookie }));
     const corpo = await resposta.json();
 
-    expect(corpo.intervaloMinutos).toBe(30);
+    expect(corpo.intervaloMinutos).toBe(0);
     expect(corpo.codigoWhatsapp.maximoDeTentativas).toBe(5);
     expect(corpo.codigoWhatsapp.minutosDeBloqueio).toBe(15);
     expect(corpo.codigoWhatsapp.porHoraPorIp).toBe(20);

@@ -144,16 +144,30 @@ export function AbaDeParametros() {
       >
         <div className="flex flex-col gap-3">
           <CaixaInformativa
-            titulo={`Intervalo entre reservas: ${dados.intervaloMinutos} minutos`}
+            titulo={
+              dados.intervaloMinutos === 0
+                ? "Intervalo entre reservas: nenhum"
+                : `Intervalo entre reservas: ${dados.intervaloMinutos} minutos`
+            }
           >
+            {dados.intervaloMinutos === 0 ? (
+              <p>
+                Não existe folga obrigatória entre duas reservas da mesma sala: uma
+                pode começar no minuto exato em que a outra termina. O que o banco
+                de dados continua impedindo, na hora de gravar, é duas reservas no
+                mesmo horário na mesma sala.
+              </p>
+            ) : (
+              <p>
+                Toda reserva precisa dessa folga antes e depois, na mesma sala. É o
+                próprio banco de dados que garante isso, no momento de gravar.
+              </p>
+            )}
             <p>
-              Toda reserva precisa dessa folga antes e depois, na mesma sala. É o
-              próprio banco de dados que garante isso, no momento de gravar.
-            </p>
-            <p>
-              Mudar esse número deixaria as reservas já marcadas com a folga antiga e
-              as novas com a folga nova — duas regras na mesma agenda. Por isso a
-              troca é feita no sistema, recalculando as reservas futuras junto.
+              Mudar esse número exige alteração no sistema, e não um ajuste por aqui:
+              cada reserva guarda a folga que valia quando foi gravada, então a troca
+              precisa recalcular as reservas já marcadas junto — senão a agenda
+              ficaria com duas regras ao mesmo tempo.
             </p>
           </CaixaInformativa>
 
