@@ -256,34 +256,27 @@ describe("comparacao entre periodos", () => {
   });
 });
 
-describe("sem dinheiro", () => {
-  it("o relatorio nao devolve valor, receita nem faturamento", async () => {
+describe("dinheiro: só no relatório de UM cliente", () => {
+  // Em 07/10/2026 o dono liberou o faturamento — e SO no relatorio individual.
+  // Ate entao o dashboard inteiro era proibido de devolver dinheiro. Estes
+  // testes nao foram apagados: viraram a vigia da fronteira nova. O geral e a
+  // busca continuam sem valor nenhum, e o individual devolve APENAS o total.
+
+  it("o relatório GERAL continua sem valor, receita nem faturamento", async () => {
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
 
     const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
     const texto = JSON.stringify(relatorio);
 
     // A reserva vale R$40 no banco. Se esse numero aparecer aqui, alguem
-    // abriu a porta do dinheiro sem querer.
+    // abriu a porta do dinheiro no lugar errado.
     expect(texto).not.toContain("valor");
     expect(texto).not.toContain("40.00");
+    expect(texto).not.toContain("4000");
     expect(texto).not.toMatch(/receita|faturamento/i);
   });
 
-  it("o relatório de UM cliente também não devolve dinheiro", async () => {
-    // A porta nova. O detalhe do cliente lista as reservas dele uma a uma —
-    // e o lugar mais facil de o valor escapar sem ninguem reparar.
-    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
-
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
-    const texto = JSON.stringify(detalhe);
-
-    expect(texto).not.toContain("valor");
-    expect(texto).not.toContain("40.00");
-    expect(texto).not.toMatch(/receita|faturamento|preco/i);
-  });
-
-  it("a busca de clientes também não devolve dinheiro", async () => {
+  it("a BUSCA de clientes continua sem dinheiro", async () => {
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Maria" });
 
     const texto = JSON.stringify(
@@ -292,6 +285,23 @@ describe("sem dinheiro", () => {
 
     expect(texto).not.toContain("valor");
     expect(texto).not.toContain("40.00");
+    expect(texto).not.toContain("4000");
+    expect(texto).not.toMatch(/receita|faturamento/i);
+  });
+
+  it("o relatório de UM cliente devolve o faturamento — e SÓ o total", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    // O total aparece, em centavos.
+    expect(detalhe?.faturamentoCentavos).toBe(4_000);
+
+    // Mas a lista de reservas NAO carrega o valor de cada uma: o dono
+    // liberou a metrica, e nao o preco reserva a reserva.
+    for (const linha of detalhe?.reservas ?? []) {
+      expect(Object.keys(linha)).not.toContain("valor");
+    }
   });
 });
 
@@ -424,6 +434,105 @@ describe("busca de cliente", () => {
   });
 });
 
+describe("faturamento do cliente", () => {
+  // O helper grava R$40 em toda reserva, entao o teste manda o valor na mao
+  // quando precisa de precos diferentes.
+  async function reservaCom(valor: string, extra: Parameters<typeof reserva>[0]) {
+    const criada = await reserva(extra);
+    await bancoDeTeste.reserva.update({ where: { id: criada.id }, data: { valor } });
+    return criada;
+  }
+
+  it("soma o valor GRAVADO de várias reservas, em salas e horários diferentes", async () => {
+    await reservaCom("40.00", { dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+    await reservaCom("150.00", {
+      dia: SEGUNDA, inicio: "14:00", fim: "16:00", salaId: salaContainer,
+    });
+    await reservaCom("265.00", { dia: SEGUNDA, inicio: "17:00", fim: "20:00" });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    // 40 + 150 + 265 = R$455,00
+    expect(detalhe?.faturamentoCentavos).toBe(45_500);
+  });
+
+  it("a CANCELADA não entra, igual às horas", async () => {
+    await reservaCom("100.00", { dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+    await reservaCom("999.00", {
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", status: "CANCELADA",
+    });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.faturamentoCentavos).toBe(10_000);
+    // A cancelada continua aparecendo na contagem e na lista — so nao soma.
+    expect(detalhe?.totalDeReservas).toBe(2);
+  });
+
+  it("conta REAGENDADA e CONCLUIDA, como as horas", async () => {
+    await reservaCom("70.00", {
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", status: "REAGENDADA",
+    });
+    await reservaCom("30.00", {
+      dia: SEGUNDA, inicio: "11:00", fim: "12:00", status: "CONCLUIDA",
+    });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.faturamentoCentavos).toBe(10_000);
+  });
+
+  it("NÃO recalcula: muda o preço da sala e o faturamento não se mexe", async () => {
+    // O ponto que justifica somar o valor gravado em vez de recalcular. Se o
+    // relatorio recalculasse, este numero mudaria sozinho quando a equipe
+    // mexesse no preco — e discordaria do que a reserva guarda.
+    await reservaCom("40.00", { dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+
+    const antes = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    expect(antes?.faturamentoCentavos).toBe(4_000);
+
+    await bancoDeTeste.sala.update({
+      where: { id: salaCI },
+      data: { precoPorHora: "500.00" },
+    });
+
+    try {
+      const depois = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+      expect(depois?.faturamentoCentavos).toBe(4_000);
+    } finally {
+      await bancoDeTeste.sala.update({
+        where: { id: salaCI },
+        data: { precoPorHora: "40.00" },
+      });
+    }
+  });
+
+  it("soma centavos sem acumular diferença", async () => {
+    // Tres reservas de R$33,33 dao R$99,99 — e nao R$99,98 nem R$100,00.
+    for (const hora of ["09:00", "11:00", "13:00"]) {
+      await reservaCom("33.33", {
+        dia: SEGUNDA,
+        inicio: hora,
+        fim: `${String(Number(hora.slice(0, 2)) + 1).padStart(2, "0")}:00`,
+      });
+    }
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.faturamentoCentavos).toBe(9_999);
+  });
+
+  it("cliente só com reserva cancelada tem faturamento zero", async () => {
+    await reservaCom("80.00", {
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", status: "CANCELADA",
+    });
+
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+
+    expect(detalhe?.faturamentoCentavos).toBe(0);
+  });
+});
+
 describe("relatório de um cliente", () => {
   it("traz horas, reservas, salas e a lista do período", async () => {
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:30", nome: "Maria" });
@@ -520,29 +629,38 @@ describe("GET /api/admin/relatorios", () => {
     expect(detalhe.status).toBe(401);
   });
 
-  it("NENHUMA resposta da rota carrega dinheiro, nem a de cliente", async () => {
+  it("pela ROTA, só a resposta de um cliente carrega dinheiro", async () => {
     // A garantia real: o texto cru que sai pela rede. Se o valor escapar da
-    // lista fechada de campos, ele aparece aqui — e nao adianta a tela nao
-    // desenhar o numero.
+    // lista fechada no relatorio geral ou na busca, ele aparece aqui — e nao
+    // adianta a tela nao desenhar o numero.
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Maria" });
 
-    const respostas = await Promise.all([
+    const semDinheiro = await Promise.all([
       getRelatorios(pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA }, { cookie })),
       getRelatorios(
         pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, cliente: "maria" }, { cookie }),
       ),
-      getRelatorios(
-        pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE }, { cookie }),
-      ),
     ]);
 
-    for (const resposta of respostas) {
+    for (const resposta of semDinheiro) {
       const texto = JSON.stringify(await resposta.json());
 
       expect(texto).not.toContain("valor");
       expect(texto).not.toContain("40.00");
-      expect(texto).not.toMatch(/receita|faturamento|preco/i);
+      expect(texto).not.toContain("4000");
+      expect(texto).not.toMatch(/receita|faturamento/i);
     }
+
+    // O individual, sim: liberado pelo dono em 07/10/2026.
+    const corpo = await (
+      await getRelatorios(
+        pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE }, { cookie }),
+      )
+    ).json();
+
+    expect(corpo.detalheDoCliente.faturamentoCentavos).toBe(4_000);
+    // E so o total: o preco de cada reserva continua fora da resposta.
+    expect(JSON.stringify(corpo.detalheDoCliente.reservas)).not.toContain("valor");
   });
 
   it("a busca por telefone pela rota devolve o cliente certo", async () => {

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErroDaApi } from "@/components/reserva/api";
 import { AvisoDeErro } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
+import { comoDinheiro } from "@/lib/precos";
 import { telefoneVisivel } from "@/lib/telefone";
 
 import {
@@ -215,6 +216,15 @@ function DetalheDoClienteEscolhido({
             </span>
 
             <span className="flex flex-col">
+              <span className="text-3xl font-bold tabular-nums text-text-primary">
+                {comoDinheiro(dados.faturamentoCentavos)}
+              </span>
+              <span className="text-sm text-text-secondary">
+                faturamento gerado no período (canceladas não contam)
+              </span>
+            </span>
+
+            <span className="flex flex-col">
               <span className="text-base font-semibold text-text-primary">
                 {dados.profissao}
               </span>
@@ -225,6 +235,15 @@ function DetalheDoClienteEscolhido({
               </span>
             </span>
           </div>
+
+          {/* O sistema nao processa pagamento: o numero acima e a soma do que
+              as reservas valem, e nao do que entrou em caixa. Sem esta linha a
+              equipe leria como dinheiro recebido. */}
+          <p className="text-sm text-text-secondary">
+            O faturamento é a soma do valor das reservas, congelado quando cada
+            uma foi criada. Não é pagamento confirmado — o sistema não processa
+            pagamento.
+          </p>
 
           <Botao aparencia="secundario" largura="conteudo" onClick={aoFechar}>
             Voltar ao relatório geral

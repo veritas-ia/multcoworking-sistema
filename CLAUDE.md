@@ -256,9 +256,11 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   reservas e área de atuação.
 - O dashboard é **só leitura**: não existe rota de escrita nele, e nada ali altera reserva,
   sala ou configuração.
-- **Sem faturamento, receita ou valor em lugar nenhum** — decisão do dono. A garantia não é
-  esconder na tela: a consulta traz uma lista fechada de campos e `valor` não está nela.
-  Há teste procurando o valor dentro da resposta.
+- **Sem faturamento, receita ou valor no relatório GERAL e na BUSCA de clientes** —
+  decisão do dono. A garantia não é esconder na tela: a consulta traz uma lista fechada
+  de campos e `valor` não está nela. Há teste procurando o valor dentro da resposta.
+  *(Até 07/10/2026 isto valia para o dashboard inteiro; ver a exceção autorizada em
+  "Faturamento no relatório individual".)*
 - Uma reserva entra no período quando **o horário dela** cai ali, em qualquer situação
   (confirmada, cancelada, concluída ou remarcada). O gráfico por situação mostra a divisão.
 - O período de comparação tem sempre o **mesmo número de dias** do atual, colado antes.
@@ -298,9 +300,40 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - A **profissão fica na reserva**, não no cliente: quem marcou "Marketing" uma vez e
   "Outros" noutra não tem resposta única. Mostramos a **mais usada** e avisamos que há
   divergência, em vez de escolher em silêncio.
-- Continua valendo tudo do dashboard: **só leitura** e **sem dinheiro**. Os campos novos
-  (`fim`, `nomeCliente`, `telefone`) entraram na mesma lista fechada; `valor` continua
-  fora dela. Há teste procurando dinheiro no texto cru das três respostas da rota.
+- Continua valendo **só leitura**. Sobre dinheiro, ver a seção seguinte: o relatório
+  individual passou a mostrar faturamento em 07/10/2026; o geral e a busca continuam
+  sem valor nenhum.
+
+### Faturamento no relatório individual (liberado em 07/10/2026)
+- **MUDANÇA AUTORIZADA PELO DONO, reabrindo de propósito a decisão anterior.** Até
+  07/10/2026 valia "sem faturamento em lugar nenhum" no dashboard. O dono mudou de
+  ideia e liberou o faturamento **somente no relatório de um cliente específico**.
+  Isto está registrado como mudança de regra, e não como exceção aberta por engano.
+- **O relatório GERAL do coworking e a BUSCA de clientes continuam sem dinheiro
+  nenhum.** A fronteira é essa, e é o que os testes vigiam.
+- O número é a **soma do valor JÁ GRAVADO** em cada reserva não cancelada do cliente
+  no período. **Nunca um recálculo.** O preço fica congelado na reserva no momento da
+  criação; recalcular no relatório criaria uma segunda fonte de verdade — a tela
+  mostraria um número e a reserva guardaria outro assim que um preço mudasse no painel.
+  Há teste que muda o preço da sala e confere que o faturamento **não se mexe**.
+- **Cancelada não entra**, igual às horas. REAGENDADA e CONCLUIDA entram.
+- Guardado e somado **em centavos**: somar reais em ponto flutuante acumula diferença
+  de um centavo ao longo de muitas reservas. Há teste com três reservas de R$ 33,33
+  que precisam dar R$ 99,99.
+- **Só o total sai na resposta**, nunca o preço de cada reserva. O dono liberou a
+  métrica, e não o preço reserva a reserva — a lista de reservas do cliente continua
+  sem valor.
+- A consulta que traz dinheiro é **separada** (`reservasDoClienteNoPeriodo`), e não a
+  lista fechada compartilhada. Deixar o `valor` entrar na consulta geral faria o dado
+  circular também no relatório do coworking e na busca, e bastaria alguém mudar uma
+  linha de montagem para ele vazar sem ninguém reparar.
+- Na tela, uma legenda curta avisa que é **o valor das reservas, não pagamento
+  confirmado** — o sistema não processa pagamento.
+- Não houve necessidade de estimar nada: a coluna `valor` é **obrigatória no banco**,
+  e as 55 reservas de produção têm valor gravado. Não existe reserva sem valor.
+- **Os quatro testes que proibiam dinheiro não foram apagados** — viraram a vigia da
+  fronteira nova: geral sem dinheiro, busca sem dinheiro, individual com o total e
+  sem o preço linha a linha.
 
 ### Mensagem de avaliação (1 hora após o término)
 - Oitavo template, `avaliacao_pos_uso`: agradecimento pelo uso + convite para avaliar

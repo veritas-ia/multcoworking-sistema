@@ -20,6 +20,7 @@
  * reservas do periodo e contar em memoria custa menos do que a confusao que
  * um fuso errado causaria.
  */
+import type { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
@@ -96,6 +97,21 @@ export type DetalheDoCliente = {
   horas: number;
   /** Contando TODAS as situacoes, inclusive canceladas. */
   totalDeReservas: number;
+  /**
+   * Quanto este cliente gerou no periodo, EM CENTAVOS.
+   *
+   * E a SOMA DO VALOR JA GRAVADO em cada reserva nao cancelada — nunca um
+   * recalculo. O preco fica congelado na reserva no momento da criacao, entao
+   * recalcular aqui criaria uma segunda fonte de verdade: a tela mostraria um
+   * numero e a reserva guardaria outro assim que um preco mudasse no painel.
+   *
+   * Em centavos porque centavo nao tem fracao: somar reais em ponto flutuante
+   * acumula diferenca de um centavo aqui e ali ao longo de muitas reservas.
+   *
+   * Liberado pelo dono em 07/10/2026 e SO AQUI: o relatorio geral e a busca
+   * de clientes continuam sem dinheiro nenhum.
+   */
+  faturamentoCentavos: number;
   porSala: FatiaColorida[];
   porStatus: Fatia[];
   reservas: ReservaDoCliente[];
@@ -194,7 +210,10 @@ async function reservasDoPeriodo(periodo: Periodo): Promise<ReservaContada[]> {
         lt: instanteDe(somarDias(periodo.ate, 1), "00:00"),
       },
     },
-    // Lista fechada: o "valor" da reserva NAO entra no relatorio.
+    // LISTA FECHADA, SEM DINHEIRO. Esta consulta alimenta o relatorio GERAL
+    // e a BUSCA de clientes, e nos dois o valor continua proibido. O
+    // faturamento liberado em 07/10/2026 vale so para o relatorio de UM
+    // cliente, que tem consulta propria logo abaixo.
     select: {
       inicio: true,
       fim: true,
@@ -203,6 +222,44 @@ async function reservasDoPeriodo(periodo: Periodo): Promise<ReservaContada[]> {
       nomeCliente: true,
       telefone: true,
       sala: { select: { nome: true, cor: true } },
+    },
+    orderBy: { inicio: "asc" },
+  });
+}
+
+/** A mesma reserva, mais o valor gravado. So para o relatorio individual. */
+type ReservaDoClienteContada = ReservaContada & { valor: Prisma.Decimal };
+
+/**
+ * As reservas de UM cliente no periodo, com o valor gravado.
+ *
+ * Esta e a UNICA consulta do relatorio que traz dinheiro, e e separada da
+ * geral de proposito. Deixar o valor entrar na lista fechada compartilhada
+ * faria o dado circular tambem no relatorio do coworking inteiro e na busca,
+ * onde ele continua proibido — e bastaria alguem mudar uma linha de montagem
+ * para ele vazar sem ninguem reparar. Separado assim, a excecao e visivel.
+ */
+async function reservasDoClienteNoPeriodo(
+  periodo: Periodo,
+  telefone: string,
+): Promise<ReservaDoClienteContada[]> {
+  return prisma.reserva.findMany({
+    where: {
+      telefone,
+      inicio: {
+        gte: instanteDe(periodo.de, "00:00"),
+        lt: instanteDe(somarDias(periodo.ate, 1), "00:00"),
+      },
+    },
+    select: {
+      inicio: true,
+      fim: true,
+      status: true,
+      profissao: true,
+      nomeCliente: true,
+      telefone: true,
+      sala: { select: { nome: true, cor: true } },
+      valor: true,
     },
     orderBy: { inicio: "asc" },
   });
@@ -344,6 +401,16 @@ function contouComoUso(reserva: ReservaContada): boolean {
 /** Duracao em horas, com meia hora valendo 0,5. */
 function horasDe(reserva: ReservaContada): number {
   return (reserva.fim.getTime() - reserva.inicio.getTime()) / 3_600_000;
+}
+
+/**
+ * "150.00" do banco vira 15000 centavos.
+ *
+ * O valor vem como Decimal e e convertido UMA vez, ja em centavos, antes de
+ * somar. Somar reais em ponto flutuante vai acumulando diferenca de centavo.
+ */
+function emCentavosDoBanco(valor: Prisma.Decimal): number {
+  return Math.round(Number(valor) * 100);
 }
 
 /** Arredonda para uma casa, para 1.5000000000000002 nao chegar na tela. */
@@ -490,9 +557,7 @@ export async function montarDetalheDoCliente(
     return null;
   }
 
-  const todas = (await reservasDoPeriodo(periodo)).filter(
-    (reserva) => reserva.telefone === telefone,
-  );
+  const todas = await reservasDoClienteNoPeriodo(periodo, telefone);
 
   if (todas.length === 0) {
     return null;
@@ -510,6 +575,12 @@ export async function montarDetalheDoCliente(
     profissaoDivergente: profissao.divergente,
     horas: umaCasa(usadas.reduce((soma, reserva) => soma + horasDe(reserva), 0)),
     totalDeReservas: todas.length,
+    // Soma do valor JA GRAVADO, so das que contaram como uso. Cancelada nao
+    // entra, igual as horas: reserva desmarcada nao virou dinheiro.
+    faturamentoCentavos: usadas.reduce(
+      (soma, reserva) => soma + emCentavosDoBanco(reserva.valor),
+      0,
+    ),
     porSala: contarPorSala(todas),
     porStatus: contarPorStatus(todas),
     reservas: todas.map((reserva) => ({

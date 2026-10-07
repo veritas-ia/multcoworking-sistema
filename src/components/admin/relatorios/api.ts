@@ -32,6 +32,8 @@ export type DetalheDoCliente = {
   profissaoDivergente: boolean;
   horas: number;
   totalDeReservas: number;
+  /** Soma do valor gravado nas reservas não canceladas, em centavos. */
+  faturamentoCentavos: number;
   porSala: FatiaColorida[];
   porStatus: Fatia[];
   reservas: ReservaDoCliente[];
