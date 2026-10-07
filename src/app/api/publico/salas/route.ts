@@ -22,11 +22,14 @@ export async function GET(): Promise<NextResponse> {
       nome: true,
       capacidade: true,
       precoPorHora: true,
+      precoPorHoraGrupo: true,
       precoPorHoraNoturno: true,
       precoPorHoraNoturnoGrupo: true,
       pessoasParaGrupo: true,
       aceitaDiaria: true,
       precoDiaria: true,
+      precoDiariaGrupo: true,
+      pessoasParaGrupoDiaria: true,
       fotos: { orderBy: { ordem: "asc" }, select: { id: true, url: true } },
     },
   });
@@ -38,11 +41,14 @@ export async function GET(): Promise<NextResponse> {
       nome: sala.nome,
       capacidade: sala.capacidade,
       precoPorHora: sala.precoPorHora.toFixed(2),
+      precoPorHoraGrupo: sala.precoPorHoraGrupo?.toFixed(2) ?? null,
       precoPorHoraNoturno: sala.precoPorHoraNoturno.toFixed(2),
       precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
       pessoasParaGrupo: sala.pessoasParaGrupo,
       aceitaDiaria: sala.aceitaDiaria,
       precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
+      precoDiariaGrupo: sala.precoDiariaGrupo?.toFixed(2) ?? null,
+      pessoasParaGrupoDiaria: sala.pessoasParaGrupoDiaria,
       // O endereco ja sai pedindo o tamanho ao Cloudinary: o celular baixa
       // uma imagem de celular, e nao a foto original inteira.
       fotos: sala.fotos.map((foto) => ({

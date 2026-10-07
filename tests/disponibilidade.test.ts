@@ -632,6 +632,71 @@ describe("antecedência", () => {
   });
 });
 
+describe("capacidade da sala", () => {
+  // A Sala de Reuniao comporta 10 pessoas (coluna "capacidade"). O limite e
+  // FISICO, e nao comercial: a recepcao fura antecedencia, duracao e
+  // expediente, mas onze pessoas nao cabem na sala por decisao de ninguem.
+  it("aceita exatamente a capacidade (10 pessoas)", async () => {
+    const resultado = await validarReserva({
+      salaId: salaReuniao,
+      inicio: instanteDe(TERCA, "14:00"),
+      fim: instanteDe(TERCA, "15:00"),
+      pessoas: 10,
+    });
+
+    expect(resultado.valido).toBe(true);
+  });
+
+  it("RECUSA 11 pessoas, com mensagem clara", async () => {
+    const resultado = await validarReserva({
+      salaId: salaReuniao,
+      inicio: instanteDe(TERCA, "14:00"),
+      fim: instanteDe(TERCA, "15:00"),
+      pessoas: 11,
+    });
+
+    expect(resultado.valido).toBe(false);
+    expect(resultado.codigo).toBe("CAPACIDADE_EXCEDIDA");
+    expect(resultado.motivo).toContain("10");
+  });
+
+  it("recusa 11 pessoas TAMBÉM pela recepção", async () => {
+    const resultado = await validarReserva({
+      salaId: salaReuniao,
+      inicio: instanteDe(TERCA, "14:00"),
+      fim: instanteDe(TERCA, "15:00"),
+      pessoas: 11,
+      modo: "ADMIN",
+    });
+
+    expect(resultado.valido).toBe(false);
+    expect(resultado.codigo).toBe("CAPACIDADE_EXCEDIDA");
+  });
+
+  it("sem informar pessoas, nao ha o que barrar", async () => {
+    const resultado = await validarReserva({
+      salaId: salaReuniao,
+      inicio: instanteDe(TERCA, "14:00"),
+      fim: instanteDe(TERCA, "15:00"),
+      pessoas: null,
+    });
+
+    expect(resultado.valido).toBe(true);
+  });
+
+  it("sala com capacidade em branco nao tem teto", async () => {
+    // A Sala CI e a Container nao tem capacidade cadastrada.
+    const resultado = await validarReserva({
+      salaId: salaCI,
+      inicio: instanteDe(TERCA, "14:00"),
+      fim: instanteDe(TERCA, "15:00"),
+      pessoas: 50,
+    });
+
+    expect(resultado.valido).toBe(true);
+  });
+});
+
 describe("cálculo do valor", () => {
   // Os precos vem do banco (migracao "precos_por_faixa_e_diaria"):
   // Privativa/ex-CI e Reuniao a R$40 de dia, Container a R$35, todas a R$75

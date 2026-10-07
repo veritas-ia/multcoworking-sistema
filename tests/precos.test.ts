@@ -4,10 +4,12 @@
  * O que estes testes protegem:
  *  1. cada bloco de 30 min e cobrado pela faixa em que COMECA — inclusive
  *     quando a reserva atravessa a fronteira das 18h;
- *  2. o preco de grupo so vale A NOITE e so ACIMA do numero configurado. De
- *     dia, o numero de pessoas nao muda nada;
+ *  2. o preco de grupo vale NAS DUAS FAIXAS (dia e noite), sempre ACIMA do
+ *     numero configurado. Ate set/2026 o tamanho do grupo so era consultado a
+ *     noite — era um defeito, e de dia o preco nao variava;
  *  3. sala sem regra de grupo ignora o numero de pessoas;
- *  4. a diaria e preco fechado, nao depende das horas;
+ *  4. a diaria e preco fechado (nao depende das horas), mas tem o PROPRIO
+ *     corte de pessoas — diferente do corte do calculo por hora;
  *  5. a fronteira da noite vem da configuracao, nao esta chumbada em 18h.
  *
  * Nao precisa de banco: o modulo e puro.
@@ -23,20 +25,26 @@ import {
 
 /** A Sala de Reuniao: tem preco de grupo e diaria. */
 const REUNIAO: TarifasDaSala = {
-  precoPorHora: "40.00",
-  precoPorHoraNoturno: "75.00",
-  precoPorHoraNoturnoGrupo: "95.00",
-  pessoasParaGrupo: 4,
-  precoDiaria: "350.00",
+  precoPorHora: "40.00",        // 1 a 4 pessoas, ate as 18h
+  precoPorHoraGrupo: "75.00",   // 5 a 10 pessoas, ate as 18h
+  precoPorHoraNoturno: "75.00", // 1 a 4 pessoas, apos as 18h
+  precoPorHoraNoturnoGrupo: "95.00", // 5 a 10 pessoas, apos as 18h
+  pessoasParaGrupo: 4,          // ACIMA de 4
+  precoDiaria: "350.00",        // 1 a 5 pessoas
+  precoDiariaGrupo: "450.00",   // 6 a 10 pessoas
+  pessoasParaGrupoDiaria: 5,    // ACIMA de 5 — corte DIFERENTE do de cima
 };
 
 /** A Container: sem regra de grupo, sem diaria. */
 const CONTAINER: TarifasDaSala = {
   precoPorHora: "35.00",
+  precoPorHoraGrupo: null,
   precoPorHoraNoturno: "75.00",
   precoPorHoraNoturnoGrupo: null,
   pessoasParaGrupo: null,
   precoDiaria: null,
+  precoDiariaGrupo: null,
+  pessoasParaGrupoDiaria: null,
 };
 
 function pedido(parcial: Partial<PedidoDePreco>): PedidoDePreco {
@@ -103,18 +111,19 @@ describe("numero de pessoas", () => {
     );
   });
 
-  it("de dia o numero de pessoas nao muda nada", () => {
-    const sozinho = valorEmCentavos(pedido({ inicio: "09:00", fim: "11:00", pessoas: 1 }));
-    const lotado = valorEmCentavos(pedido({ inicio: "09:00", fim: "11:00", pessoas: 20 }));
+  it("DE DIA o grupo grande tambem paga mais", () => {
+    // Era o defeito: ate set/2026 os dois davam R$80.
+    const pequeno = valorEmCentavos(pedido({ inicio: "09:00", fim: "11:00", pessoas: 4 }));
+    const grande = valorEmCentavos(pedido({ inicio: "09:00", fim: "11:00", pessoas: 5 }));
 
-    expect(sozinho).toBe(8_000);
-    expect(lotado).toBe(8_000);
+    expect(pequeno).toBe(8_000); // 2h x R$40
+    expect(grande).toBe(15_000); // 2h x R$75
   });
 
-  it("atravessando a fronteira, so a parte da noite fica mais cara", () => {
-    // 17h-20h com 5 pessoas = 40 (dia) + 95 + 95 (noite, grupo) = R$230
+  it("atravessando a fronteira, cada faixa usa o preco DELA ja com o grupo", () => {
+    // 17h-20h com 5 pessoas = 75 (dia, grupo) + 95 + 95 (noite, grupo) = R$265
     expect(valorEmReais(pedido({ inicio: "17:00", fim: "20:00", pessoas: 5 }))).toBe(
-      "230.00",
+      "265.00",
     );
   });
 
@@ -133,6 +142,67 @@ describe("numero de pessoas", () => {
   });
 });
 
+describe("os casos confirmados pelo dono (Sala de Reunião)", () => {
+  const conta = (parcial: Partial<PedidoDePreco>) => valorEmReais(pedido(parcial));
+
+  it("1) 4 pessoas, 14h-17h (3h de dia) = R$120", () => {
+    expect(conta({ inicio: "14:00", fim: "17:00", pessoas: 4 })).toBe("120.00");
+  });
+
+  it("2) 6 pessoas, 14h-16h (2h de dia) = R$150", () => {
+    expect(conta({ inicio: "14:00", fim: "16:00", pessoas: 6 })).toBe("150.00");
+  });
+
+  it("3) 3 pessoas, 19h-21h (2h de noite) = R$150", () => {
+    expect(conta({ inicio: "19:00", fim: "21:00", pessoas: 3 })).toBe("150.00");
+  });
+
+  it("4) 6 pessoas, 19h-21h (2h de noite) = R$190", () => {
+    expect(conta({ inicio: "19:00", fim: "21:00", pessoas: 6 })).toBe("190.00");
+  });
+
+  it("5) 5 pessoas, 17h-20h (cruza as 18h) = R$265", () => {
+    // 1h x R$75 de dia (grupo) + 2h x R$95 de noite (grupo).
+    expect(conta({ inicio: "17:00", fim: "20:00", pessoas: 5 })).toBe("265.00");
+  });
+
+  it("6) diaria com 4 pessoas = R$350", () => {
+    expect(conta({ categoria: "DIARIA", inicio: "08:00", fim: "18:00", pessoas: 4 })).toBe("350.00");
+  });
+
+  it("7) diaria com 5 pessoas = R$350", () => {
+    expect(conta({ categoria: "DIARIA", inicio: "08:00", fim: "18:00", pessoas: 5 })).toBe("350.00");
+  });
+
+  it("8) diaria com 6 pessoas = R$450", () => {
+    expect(conta({ categoria: "DIARIA", inicio: "08:00", fim: "18:00", pessoas: 6 })).toBe("450.00");
+  });
+
+  it("a fronteira exata do corte por hora: 4 paga base, 5 paga grupo", () => {
+    expect(conta({ inicio: "14:00", fim: "15:00", pessoas: 4 })).toBe("40.00");
+    expect(conta({ inicio: "14:00", fim: "15:00", pessoas: 5 })).toBe("75.00");
+  });
+});
+
+describe("as outras salas nao mudaram", () => {
+  it("Container de dia continua R$35/h, com qualquer numero de pessoas", () => {
+    const conta = (pessoas: number | null) =>
+      valorEmReais(pedido({ tarifas: CONTAINER, inicio: "14:00", fim: "16:00", pessoas }));
+
+    expect(conta(null)).toBe("70.00");
+    expect(conta(2)).toBe("70.00");
+    expect(conta(30)).toBe("70.00");
+  });
+
+  it("Container a noite continua R$75/h, sem preco de grupo", () => {
+    const conta = (pessoas: number | null) =>
+      valorEmReais(pedido({ tarifas: CONTAINER, inicio: "19:00", fim: "21:00", pessoas }));
+
+    expect(conta(null)).toBe("150.00");
+    expect(conta(30)).toBe("150.00");
+  });
+});
+
 describe("diaria", () => {
   it("e preco fechado, nao depende das horas", () => {
     const cheia = valorEmReais(
@@ -142,10 +212,18 @@ describe("diaria", () => {
     expect(cheia).toBe("350.00");
   });
 
-  it("nao muda com o numero de pessoas", () => {
-    expect(
-      valorEmReais(pedido({ categoria: "DIARIA", inicio: "08:00", fim: "18:00", pessoas: 20 })),
-    ).toBe("350.00");
+  it("tem o PROPRIO corte de pessoas, diferente do calculo por hora", () => {
+    const diaria = (pessoas: number | null) =>
+      valorEmReais(pedido({ categoria: "DIARIA", inicio: "08:00", fim: "18:00", pessoas }));
+
+    // O PEGA-RATAO: por hora o pulo e entre 4 e 5; na diaria, entre 5 e 6.
+    // Se alguem unificar os cortes, e aqui que estoura — a diaria de 5
+    // pessoas sairia por R$450.
+    expect(diaria(4)).toBe("350.00");
+    expect(diaria(5)).toBe("350.00");
+    expect(diaria(6)).toBe("450.00");
+    expect(diaria(10)).toBe("450.00");
+    expect(diaria(null)).toBe("350.00");
   });
 
   it("recusa sala que nao tem preco de diaria", () => {
@@ -223,9 +301,12 @@ describe("a Sala de Reuniao na pratica", () => {
   const naReuniao = (inicio: string, fim: string, quantas: number | null) =>
     valorEmReais(pedido({ inicio, fim, pessoas: quantas }));
 
-  it("reuniao de manha com muita gente custa o preco de dia", () => {
-    // 09:00-12:00, 12 pessoas: 3 horas a R$40. Pessoas nao contam de dia.
-    expect(naReuniao("09:00", "12:00", 12)).toBe("120.00");
+  it("reuniao de manha com muita gente paga o preco de DIA PARA GRUPO", () => {
+    // 09:00-12:00: 3 horas. Com 4 pessoas, R$40/h; com 6, R$75/h.
+    // Ate set/2026 os dois davam R$120 — o numero de pessoas era ignorado
+    // durante o dia, e era justamente o defeito.
+    expect(naReuniao("09:00", "12:00", 4)).toBe("120.00");
+    expect(naReuniao("09:00", "12:00", 6)).toBe("225.00");
   });
 
   it("reuniao a noite com quatro pessoas paga R$75 a hora", () => {
@@ -236,8 +317,14 @@ describe("a Sala de Reuniao na pratica", () => {
     expect(naReuniao("19:00", "22:00", 5)).toBe("285.00");
   });
 
-  it("comecando de tarde e virando a noite, so a noite encarece", () => {
-    // 16:00-22:00 com 5 pessoas: 2h de dia (R$80) + 4h de grupo (R$380).
-    expect(naReuniao("16:00", "22:00", 5)).toBe("460.00");
+  it("comecando de tarde e virando a noite, cada faixa cobra o preco dela", () => {
+    // 16:00-22:00 com 5 pessoas (grupo nas duas faixas):
+    //   2h de dia a R$75  = R$150
+    //   4h de noite a R$95 = R$380
+    expect(naReuniao("16:00", "22:00", 5)).toBe("530.00");
+
+    // A mesma reserva com 4 pessoas fica no preco pequeno das duas faixas:
+    //   2h x R$40 + 4h x R$75 = R$380
+    expect(naReuniao("16:00", "22:00", 4)).toBe("380.00");
   });
 });

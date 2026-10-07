@@ -26,6 +26,7 @@ export function EtapaNome({
   nome,
   pessoas,
   perguntarPessoas,
+  capacidade,
   profissao,
   aoMudar,
   aoMudarPessoas,
@@ -36,6 +37,8 @@ export function EtapaNome({
   /** Texto, para o campo poder ficar vazio enquanto a pessoa digita. */
   pessoas: string;
   perguntarPessoas: boolean;
+  /** Teto de pessoas da sala. Nulo = a sala nao tem teto cadastrado. */
+  capacidade: number | null;
   /** Vazio ate a pessoa escolher. Obrigatorio para continuar. */
   profissao: string;
   aoMudar: (nome: string) => void;
@@ -62,6 +65,19 @@ export function EtapaNome({
 
         if (perguntarPessoas && !/^[1-9]\d*$/.test(pessoas.trim())) {
           setErroDePessoas("Diga quantas pessoas vão usar a sala.");
+          return;
+        }
+
+        // O servidor recusa de qualquer jeito; aqui e so para a pessoa nao
+        // preencher o resto a toa e levar a recusa no fim.
+        if (
+          perguntarPessoas &&
+          capacidade !== null &&
+          Number(pessoas.trim()) > capacidade
+        ) {
+          setErroDePessoas(
+            `Esta sala comporta no máximo ${capacidade} pessoas. Para um grupo maior, fale com a recepção.`,
+          );
           return;
         }
 

@@ -13,11 +13,14 @@ export type Rascunho = {
   nome: string;
   capacidade: string;
   precoPorHora: string;
+  precoPorHoraGrupo: string;
   precoPorHoraNoturno: string;
   precoPorHoraNoturnoGrupo: string;
   pessoasParaGrupo: string;
   aceitaDiaria: boolean;
   precoDiaria: string;
+  precoDiariaGrupo: string;
+  pessoasParaGrupoDiaria: string;
   cor: string;
   duracaoMaximaMinutos: string;
   ordem: string;
@@ -44,6 +47,8 @@ export function rascunhoDaSala(sala: SalaDoPainel): Rascunho {
     nome: sala.nome,
     capacidade: sala.capacidade === null ? "" : String(sala.capacidade),
     precoPorHora: precoParaTexto(sala.precoPorHora),
+    precoPorHoraGrupo:
+      sala.precoPorHoraGrupo === null ? "" : precoParaTexto(sala.precoPorHoraGrupo),
     precoPorHoraNoturno: precoParaTexto(sala.precoPorHoraNoturno),
     precoPorHoraNoturnoGrupo:
       sala.precoPorHoraNoturnoGrupo === null
@@ -53,6 +58,10 @@ export function rascunhoDaSala(sala: SalaDoPainel): Rascunho {
       sala.pessoasParaGrupo === null ? "" : String(sala.pessoasParaGrupo),
     aceitaDiaria: sala.aceitaDiaria,
     precoDiaria: sala.precoDiaria === null ? "" : precoParaTexto(sala.precoDiaria),
+    precoDiariaGrupo:
+      sala.precoDiariaGrupo === null ? "" : precoParaTexto(sala.precoDiariaGrupo),
+    pessoasParaGrupoDiaria:
+      sala.pessoasParaGrupoDiaria === null ? "" : String(sala.pessoasParaGrupoDiaria),
     cor: sala.cor,
     duracaoMaximaMinutos:
       sala.duracaoMaximaMinutos === null ? "" : String(sala.duracaoMaximaMinutos),
@@ -64,11 +73,14 @@ export const RASCUNHO_VAZIO: Rascunho = {
   nome: "",
   capacidade: "",
   precoPorHora: "",
+  precoPorHoraGrupo: "",
   precoPorHoraNoturno: "",
   precoPorHoraNoturnoGrupo: "",
   pessoasParaGrupo: "",
   aceitaDiaria: false,
   precoDiaria: "",
+  precoDiariaGrupo: "",
+  pessoasParaGrupoDiaria: "",
   cor: COR_PADRAO,
   duracaoMaximaMinutos: "",
   ordem: "",
@@ -94,11 +106,20 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
     return "Escreva o preço por hora da noite como 75 ou 75,50.";
   }
 
+  // --- preco de grupo POR HORA (dia e noite, um corte so) --------------------
+  const diaGrupoEscrito = rascunho.precoPorHoraGrupo.trim();
   const grupoEscrito = rascunho.precoPorHoraNoturnoGrupo.trim();
   const pessoasEscrito = rascunho.pessoasParaGrupo.trim();
+  const temAlgumPrecoDeGrupo = diaGrupoEscrito !== "" || grupoEscrito !== "";
 
-  if ((grupoEscrito === "") !== (pessoasEscrito === "")) {
-    return "Para cobrar diferente por grupo, preencha os dois campos: o preço da noite para grupo e a partir de quantas pessoas. Deixe os dois em branco para não cobrar diferente.";
+  if (temAlgumPrecoDeGrupo !== (pessoasEscrito !== "")) {
+    return "Para cobrar diferente por grupo, preencha o preço de grupo (de dia, de noite ou os dois) e a partir de quantas pessoas. Deixe tudo em branco para não cobrar diferente.";
+  }
+
+  const precoDiaGrupo = diaGrupoEscrito === "" ? null : precoParaNumero(diaGrupoEscrito);
+
+  if (diaGrupoEscrito !== "" && precoDiaGrupo === null) {
+    return "Escreva o preço de dia para grupo como 75 ou 75,50.";
   }
 
   const precoGrupo = grupoEscrito === "" ? null : precoParaNumero(grupoEscrito);
@@ -111,6 +132,23 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
     return "O número de pessoas do grupo precisa ser um número inteiro.";
   }
 
+  const corteDaHora = pessoasEscrito === "" ? null : Number(pessoasEscrito);
+
+  if (corteDaHora !== null && (corteDaHora < 1 || corteDaHora > 10)) {
+    return "O número de pessoas do grupo precisa ser de 1 a 10.";
+  }
+
+  // Preco de grupo MENOR que o base quase sempre e um numero digitado no
+  // campo errado. O servidor recusa de qualquer jeito; aqui e so para a
+  // equipe descobrir antes de clicar em salvar.
+  if (precoDiaGrupo !== null && precoDiaGrupo < preco) {
+    return "O preço de dia para grupo não pode ser menor que o preço de dia normal. Confira se os dois não trocaram de lugar.";
+  }
+
+  if (precoGrupo !== null && precoGrupo < precoNoturno) {
+    return "O preço da noite para grupo não pode ser menor que o preço da noite normal. Confira se os dois não trocaram de lugar.";
+  }
+
   const precoDaDiaria =
     rascunho.precoDiaria.trim() === "" ? null : precoParaNumero(rascunho.precoDiaria);
 
@@ -120,6 +158,46 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
 
   if (rascunho.aceitaDiaria && precoDaDiaria === null) {
     return "Sala que aceita diária precisa ter o preço da diária preenchido.";
+  }
+
+  // --- a diaria de grupo, com o CORTE DELA -----------------------------------
+  //
+  // O corte da diaria NAO e o mesmo do calculo por hora: na Sala de Reuniao a
+  // hora pula entre 4 e 5 pessoas, e a diaria entre 5 e 6.
+  const diariaGrupoEscrito = rascunho.precoDiariaGrupo.trim();
+  const corteDiariaEscrito = rascunho.pessoasParaGrupoDiaria.trim();
+
+  if ((diariaGrupoEscrito === "") !== (corteDiariaEscrito === "")) {
+    return "Para cobrar a diária diferente por grupo, preencha os dois campos: o preço da diária para grupo e a partir de quantas pessoas. Deixe os dois em branco para cobrar um preço só.";
+  }
+
+  const precoDiariaGrupo =
+    diariaGrupoEscrito === "" ? null : precoParaNumero(diariaGrupoEscrito);
+
+  if (diariaGrupoEscrito !== "" && precoDiariaGrupo === null) {
+    return "Escreva o preço da diária para grupo como 450 ou 450,50.";
+  }
+
+  if (corteDiariaEscrito !== "" && !/^\d+$/.test(corteDiariaEscrito)) {
+    return "O número de pessoas do grupo na diária precisa ser um número inteiro.";
+  }
+
+  const corteDaDiaria = corteDiariaEscrito === "" ? null : Number(corteDiariaEscrito);
+
+  if (corteDaDiaria !== null && (corteDaDiaria < 1 || corteDaDiaria > 10)) {
+    return "O número de pessoas do grupo na diária precisa ser de 1 a 10.";
+  }
+
+  if (precoDiariaGrupo !== null && precoDaDiaria === null) {
+    return "A diária para grupo precisa do preço da diária normal preenchido.";
+  }
+
+  if (
+    precoDiariaGrupo !== null &&
+    precoDaDiaria !== null &&
+    precoDiariaGrupo < precoDaDiaria
+  ) {
+    return "A diária para grupo não pode custar menos que a diária normal. Confira se os dois não trocaram de lugar.";
   }
 
   const capacidade = rascunho.capacidade.trim();
@@ -144,11 +222,14 @@ export function lerRascunho(rascunho: Rascunho): DadosDeSala | string {
     nome,
     capacidade: capacidade === "" ? null : Number(capacidade),
     precoPorHora: preco,
+    precoPorHoraGrupo: precoDiaGrupo,
     precoPorHoraNoturno: precoNoturno,
     precoPorHoraNoturnoGrupo: precoGrupo,
-    pessoasParaGrupo: pessoasEscrito === "" ? null : Number(pessoasEscrito),
+    pessoasParaGrupo: corteDaHora,
     aceitaDiaria: rascunho.aceitaDiaria,
     precoDiaria: precoDaDiaria,
+    precoDiariaGrupo: precoDiariaGrupo,
+    pessoasParaGrupoDiaria: corteDaDiaria,
     cor: rascunho.cor,
     duracaoMaximaMinutos: duracao === "" ? null : Number(duracao),
     ordem: Number(ordem),
@@ -198,6 +279,14 @@ export function CamposDaSala({
       />
 
       <Campo
+        etiqueta="Preço por hora — de dia, para grupo (R$)"
+        inputMode="decimal"
+        value={rascunho.precoPorHoraGrupo}
+        onChange={(evento) => trocar("precoPorHoraGrupo", evento.target.value)}
+        dica="Em branco = o tamanho do grupo não muda o preço de dia."
+      />
+
+      <Campo
         etiqueta="Preço por hora — à noite, para grupo (R$)"
         inputMode="decimal"
         value={rascunho.precoPorHoraNoturnoGrupo}
@@ -212,7 +301,7 @@ export function CamposDaSala({
         onChange={(evento) =>
           trocar("pessoasParaGrupo", evento.target.value.replace(/\D/g, ""))
         }
-        dica="Com 4 aqui, 5 pessoas já pagam o preço de grupo. Só à noite."
+        dica="Com 4 aqui, 5 pessoas já pagam o preço de grupo — de dia e à noite."
       />
 
       <Campo
@@ -293,14 +382,41 @@ export function CamposDaSala({
           </span>
         </label>
 
+        {/* Os campos da diaria so aparecem com a diaria ligada: numa sala que
+            nao trabalha com dia inteiro eles seriam tres campos sem uso. */}
         {rascunho.aceitaDiaria ? (
-          <Campo
-            etiqueta="Preço da diária (R$)"
-            inputMode="decimal"
-            value={rascunho.precoDiaria}
-            onChange={(evento) => trocar("precoDiaria", evento.target.value)}
-            dica="Preço fechado do dia inteiro, independente do horário."
-          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo
+              etiqueta="Preço da diária (R$)"
+              inputMode="decimal"
+              value={rascunho.precoDiaria}
+              onChange={(evento) => trocar("precoDiaria", evento.target.value)}
+              dica="Preço fechado do dia inteiro, independente do horário."
+            />
+
+            <Campo
+              etiqueta="Preço da diária — para grupo (R$)"
+              inputMode="decimal"
+              value={rascunho.precoDiariaGrupo}
+              onChange={(evento) => trocar("precoDiariaGrupo", evento.target.value)}
+              dica="Em branco = a diária tem um preço só, qualquer que seja o grupo."
+            />
+
+            <Campo
+              etiqueta="Grupo na diária é acima de quantas pessoas"
+              inputMode="numeric"
+              value={rascunho.pessoasParaGrupoDiaria}
+              onChange={(evento) =>
+                trocar("pessoasParaGrupoDiaria", evento.target.value.replace(/\D/g, ""))
+              }
+              dica="Este número é SÓ da diária e pode ser diferente do de cima. Hoje: 5 aqui e 4 por hora."
+            />
+
+            <p className="self-end text-sm text-text-secondary sm:col-span-1">
+              O corte da diária é separado de propósito: na Sala de Reunião a
+              hora pula de preço entre 4 e 5 pessoas, e a diária entre 5 e 6.
+            </p>
+          </div>
         ) : null}
       </div>
     </div>

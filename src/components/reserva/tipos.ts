@@ -5,9 +5,11 @@ export type Sala = {
   slug: string;
   nome: string;
   capacidade: number | null;
-  /** Preco de DIA. Texto, para nao perder centavos no caminho. */
+  /** Preco de DIA para grupo pequeno. Texto, para nao perder centavos. */
   precoPorHora: string;
-  /** Preco depois do inicio da faixa noturna. */
+  /** Preco de DIA para grupo grande. Nulo = o tamanho nao muda o preco de dia. */
+  precoPorHoraGrupo: string | null;
+  /** Preco depois do inicio da faixa noturna, para grupo pequeno. */
   precoPorHoraNoturno: string;
   /** Preco noturno para grupo grande. Nulo = a sala nao cobra diferente. */
   precoPorHoraNoturnoGrupo: string | null;
@@ -15,6 +17,13 @@ export type Sala = {
   pessoasParaGrupo: number | null;
   aceitaDiaria: boolean;
   precoDiaria: string | null;
+  /** Preco da diaria para grupo grande. Nulo = diaria de valor unico. */
+  precoDiariaGrupo: string | null;
+  /**
+   * ACIMA de quantas pessoas vale a diaria de grupo. E um corte PROPRIO: na
+   * Sala de Reuniao a hora pula entre 4 e 5 pessoas, e a diaria entre 5 e 6.
+   */
+  pessoasParaGrupoDiaria: number | null;
   /** Fotos do carrossel, na ordem. Vazio = a sala nao tem foto. */
   fotos: { id: string; url: string }[];
 };

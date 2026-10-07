@@ -102,11 +102,14 @@ describe("valor estimado", () => {
       nome: "Sala",
       capacidade: null,
       precoPorHora: dia,
+      precoPorHoraGrupo: null,
       precoPorHoraNoturno: noite,
       precoPorHoraNoturnoGrupo: null,
       pessoasParaGrupo: null,
       aceitaDiaria: false,
       precoDiaria: null,
+      precoDiariaGrupo: null,
+      pessoasParaGrupoDiaria: null,
       fotos: [],
     };
   }

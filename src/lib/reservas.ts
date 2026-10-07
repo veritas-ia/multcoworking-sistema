@@ -87,6 +87,7 @@ export async function criarReservaPublica(entrada: {
     inicio: entrada.inicio,
     fim: entrada.fim,
     categoria,
+    pessoas: entrada.pessoas ?? null,
   });
 
   if (!validacao.valido) {

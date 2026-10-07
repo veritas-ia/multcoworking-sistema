@@ -118,13 +118,31 @@ describe("efeito no preco", () => {
     expect(semGrupo.valor).toBe("150.00");
   });
 
-  it("de dia, o tamanho do grupo NAO muda o valor", async () => {
-    const cheia = await reservar({ dia: DIA, inicio: "09:00", fim: "11:00", pessoas: 12 });
+  it("DE DIA o tamanho do grupo tambem muda o valor", async () => {
+    // Ate set/2026 os dois davam R$80: o numero de pessoas so era consultado
+    // a noite, e de dia o preco nao variava. Era o defeito.
+    const grupo = await reservar({ dia: DIA, inicio: "09:00", fim: "11:00", pessoas: 6 });
     await limpar();
-    const vazia = await reservar({ dia: DIA, inicio: "09:00", fim: "11:00", pessoas: 1 });
+    const poucos = await reservar({ dia: DIA, inicio: "09:00", fim: "11:00", pessoas: 1 });
 
-    expect(cheia.valor).toBe("80.00");
-    expect(vazia.valor).toBe("80.00");
+    expect(grupo.valor).toBe("150.00"); // 2h x R$75
+    expect(poucos.valor).toBe("80.00"); // 2h x R$40
+  });
+
+  it("recusa mais pessoas do que a sala comporta", async () => {
+    // A Sala de Reuniao comporta 10. Onze nao cabem — limite fisico, nao
+    // comercial, entao a recepcao tambem nao contorna.
+    // A mensagem precisa dizer o teto: um "nao criou" generico aqui poderia
+    // estar passando por outro motivo qualquer e ninguem perceberia.
+    await expect(
+      reservar({ dia: DIA, inicio: "09:00", fim: "11:00", pessoas: 11 }),
+    ).rejects.toThrow(/no máximo 10 pessoas/);
+
+    // E dez precisa continuar entrando.
+    const noLimite = await reservar({
+      dia: DIA, inicio: "09:00", fim: "11:00", pessoas: 10,
+    });
+    expect(noLimite.valor).toBe("150.00"); // 2h x R$75 (grupo de dia)
   });
 });
 

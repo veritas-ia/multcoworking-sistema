@@ -26,18 +26,24 @@ export type SalaDoPainel = {
   slug: string;
   ativa: boolean;
   capacidade: number | null;
-  /** Preco de DIA, em reais com centavos: "40.00". */
+  /** Preco de DIA para grupo pequeno, em reais com centavos: "40.00". */
   precoPorHora: string;
-  /** Preco depois do inicio da faixa noturna. */
+  /** Preco de DIA para grupo grande. Nulo = o tamanho nao muda o preco de dia. */
+  precoPorHoraGrupo: string | null;
+  /** Preco depois do inicio da faixa noturna, para grupo pequeno. */
   precoPorHoraNoturno: string;
   /** Preco noturno para grupo grande. Nulo = esta sala nao cobra diferente. */
   precoPorHoraNoturnoGrupo: string | null;
-  /** ACIMA de quantas pessoas vale o preco de grupo. */
+  /** ACIMA de quantas pessoas vale o preco de grupo POR HORA (dia e noite). */
   pessoasParaGrupo: number | null;
   /** Esta sala aceita reserva de dia inteiro? */
   aceitaDiaria: boolean;
-  /** Preco fechado da diaria. */
+  /** Preco fechado da diaria, para grupo pequeno. */
   precoDiaria: string | null;
+  /** Preco fechado da diaria para grupo grande. */
+  precoDiariaGrupo: string | null;
+  /** ACIMA de quantas pessoas vale a diaria de grupo. Corte PROPRIO. */
+  pessoasParaGrupoDiaria: number | null;
   /** Cor da sala na agenda, "#RRGGBB". */
   cor: string;
   /** Nulo = pode ir ate o fechamento do dia. */
@@ -59,17 +65,28 @@ export type Resultado<T> = { ok: true; dados: T } | { ok: false; falha: FalhaDeS
 export type DadosDeSala = {
   nome: string;
   capacidade: number | null;
-  /** Preco de DIA, em reais: 40 ou 40.5. */
+  /** Preco de DIA para grupo pequeno, em reais: 40 ou 40.5. */
   precoPorHora: number;
-  /** Preco depois do inicio da faixa noturna. */
+  /** Preco de DIA para grupo grande. Nulo = o tamanho nao muda o preco de dia. */
+  precoPorHoraGrupo: number | null;
+  /** Preco depois do inicio da faixa noturna, para grupo pequeno. */
   precoPorHoraNoturno: number;
   /** Nulo quando a sala nao cobra diferente por tamanho de grupo. */
   precoPorHoraNoturnoGrupo: number | null;
-  /** Anda junto com o preco acima: um sem o outro e regra pela metade. */
+  /** Anda junto com os precos de grupo POR HORA: um sem o outro e meia regra. */
   pessoasParaGrupo: number | null;
   aceitaDiaria: boolean;
   /** Obrigatorio quando a sala aceita diaria. */
   precoDiaria: number | null;
+  /** Diaria para grupo grande. Anda junto com o corte abaixo. */
+  precoDiariaGrupo: number | null;
+  /**
+   * ACIMA de quantas pessoas vale a diaria de grupo.
+   *
+   * E um corte PROPRIO, separado de "pessoasParaGrupo": na Sala de Reuniao a
+   * hora pula entre 4 e 5 pessoas, e a diaria entre 5 e 6.
+   */
+  pessoasParaGrupoDiaria: number | null;
   /** Cor da sala na agenda. Precisa estar na paleta do painel. */
   cor: string;
   duracaoMaximaMinutos: number | null;
@@ -133,9 +150,11 @@ async function validar(dados: DadosDeSala): Promise<string | null> {
 
   const precos: [string, number | null][] = [
     ["O preço por hora (dia)", dados.precoPorHora],
+    ["O preço por hora de dia para grupo", dados.precoPorHoraGrupo],
     ["O preço por hora à noite", dados.precoPorHoraNoturno],
     ["O preço por hora à noite para grupo", dados.precoPorHoraNoturnoGrupo],
     ["O preço da diária", dados.precoDiaria],
+    ["O preço da diária para grupo", dados.precoDiariaGrupo],
   ];
 
   for (const [rotulo, valor] of precos) {
@@ -158,24 +177,79 @@ async function validar(dados: DadosDeSala): Promise<string | null> {
 
   // Preco de grupo e numero de pessoas andam JUNTOS. Um sem o outro seria uma
   // regra pela metade, que a tela nao saberia aplicar — e o banco recusa.
-  const temPrecoDeGrupo = dados.precoPorHoraNoturnoGrupo !== null;
+  // O corte POR HORA vale para o preco de dia e o de noite.
+  const temPrecoDeGrupo =
+    dados.precoPorHoraNoturnoGrupo !== null || dados.precoPorHoraGrupo !== null;
   const temLimiteDeGrupo = dados.pessoasParaGrupo !== null;
 
   if (temPrecoDeGrupo !== temLimiteDeGrupo) {
-    return "Para cobrar diferente por grupo, preencha os dois campos: o preço e a partir de quantas pessoas. Deixe os dois em branco para não cobrar diferente.";
+    return "Para cobrar diferente por grupo, preencha o preço de grupo (de dia, de noite ou os dois) e a partir de quantas pessoas. Deixe tudo em branco para não cobrar diferente.";
   }
 
+  // Os DOIS cortes (por hora e da diaria) ficam na mesma faixa de 1 a 10:
+  // sao numeros de pessoas numa sala, e nao de um auditorio. Um corte acima
+  // de 10 nunca seria alcancado nas salas que existem — viraria preco de
+  // grupo que nao pega nunca, sem ninguem entender por que.
   if (
     dados.pessoasParaGrupo !== null &&
     (!Number.isInteger(dados.pessoasParaGrupo) ||
       dados.pessoasParaGrupo < 1 ||
-      dados.pessoasParaGrupo > 500)
+      dados.pessoasParaGrupo > 10)
   ) {
-    return "O número de pessoas do grupo precisa ser um inteiro de 1 a 500.";
+    return "O número de pessoas do grupo precisa ser um inteiro de 1 a 10.";
+  }
+
+  // Preco de grupo MENOR que o base seria cobrar menos de quem usa mais a
+  // sala. Quase sempre e um numero digitado no campo errado.
+  if (
+    dados.precoPorHoraGrupo !== null &&
+    dados.precoPorHoraGrupo < dados.precoPorHora
+  ) {
+    return "O preço de dia para grupo não pode ser menor que o preço de dia normal. Confira se os dois não trocaram de lugar.";
+  }
+
+  if (
+    dados.precoPorHoraNoturnoGrupo !== null &&
+    dados.precoPorHoraNoturnoGrupo < dados.precoPorHoraNoturno
+  ) {
+    return "O preço da noite para grupo não pode ser menor que o preço da noite normal. Confira se os dois não trocaram de lugar.";
   }
 
   if (dados.aceitaDiaria && dados.precoDiaria === null) {
     return "Sala que aceita diária precisa ter o preço da diária preenchido.";
+  }
+
+  // --- a diaria de grupo, com o CORTE DELA -----------------------------------
+  //
+  // O corte da diaria e separado do corte por hora de proposito: na Sala de
+  // Reuniao a hora pula entre 4 e 5 pessoas, e a diaria entre 5 e 6. Unificar
+  // faria a diaria de 5 pessoas sair pelo preco de grupo.
+  const temDiariaDeGrupo = dados.precoDiariaGrupo !== null;
+  const temCorteDaDiaria = dados.pessoasParaGrupoDiaria !== null;
+
+  if (temDiariaDeGrupo !== temCorteDaDiaria) {
+    return "Para cobrar a diária diferente por grupo, preencha os dois campos: o preço da diária para grupo e a partir de quantas pessoas. Deixe os dois em branco para cobrar um preço só.";
+  }
+
+  if (temDiariaDeGrupo && dados.precoDiaria === null) {
+    return "A diária para grupo precisa do preço da diária normal preenchido.";
+  }
+
+  if (
+    dados.pessoasParaGrupoDiaria !== null &&
+    (!Number.isInteger(dados.pessoasParaGrupoDiaria) ||
+      dados.pessoasParaGrupoDiaria < 1 ||
+      dados.pessoasParaGrupoDiaria > 10)
+  ) {
+    return "O número de pessoas do grupo na diária precisa ser um inteiro de 1 a 10.";
+  }
+
+  if (
+    dados.precoDiariaGrupo !== null &&
+    dados.precoDiaria !== null &&
+    dados.precoDiariaGrupo < dados.precoDiaria
+  ) {
+    return "A diária para grupo não pode custar menos que a diária normal. Confira se os dois não trocaram de lugar.";
   }
 
   // Paleta fechada: cor livre acabaria em texto ilegivel na agenda.
@@ -268,11 +342,14 @@ export async function listarSalas(): Promise<SalaDoPainel[]> {
     ativa: sala.ativa,
     capacidade: sala.capacidade,
     precoPorHora: sala.precoPorHora.toFixed(2),
+    precoPorHoraGrupo: sala.precoPorHoraGrupo?.toFixed(2) ?? null,
     precoPorHoraNoturno: sala.precoPorHoraNoturno.toFixed(2),
     precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
     pessoasParaGrupo: sala.pessoasParaGrupo,
     aceitaDiaria: sala.aceitaDiaria,
     precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
+    precoDiariaGrupo: sala.precoDiariaGrupo?.toFixed(2) ?? null,
+    pessoasParaGrupoDiaria: sala.pessoasParaGrupoDiaria,
     cor: sala.cor,
     duracaoMaximaMinutos: sala.duracaoMaximaMinutos,
     ordem: sala.ordem,
@@ -308,11 +385,14 @@ export async function criarSala(dados: DadosDeSala): Promise<Resultado<SalaDoPai
         slug: await enderecoLivre(enderecoDe(nome)),
         capacidade: dados.capacidade,
         precoPorHora: dados.precoPorHora.toFixed(2),
+        precoPorHoraGrupo: dados.precoPorHoraGrupo?.toFixed(2) ?? null,
         precoPorHoraNoturno: dados.precoPorHoraNoturno.toFixed(2),
         precoPorHoraNoturnoGrupo: dados.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
         pessoasParaGrupo: dados.pessoasParaGrupo,
         aceitaDiaria: dados.aceitaDiaria,
         precoDiaria: dados.precoDiaria?.toFixed(2) ?? null,
+        precoDiariaGrupo: dados.precoDiariaGrupo?.toFixed(2) ?? null,
+        pessoasParaGrupoDiaria: dados.pessoasParaGrupoDiaria,
         cor: dados.cor,
         duracaoMaximaMinutos: dados.duracaoMaximaMinutos,
         ordem: dados.ordem,
@@ -376,11 +456,14 @@ export async function atualizarSala(
         nome,
         capacidade: dados.capacidade,
         precoPorHora: dados.precoPorHora.toFixed(2),
+        precoPorHoraGrupo: dados.precoPorHoraGrupo?.toFixed(2) ?? null,
         precoPorHoraNoturno: dados.precoPorHoraNoturno.toFixed(2),
         precoPorHoraNoturnoGrupo: dados.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
         pessoasParaGrupo: dados.pessoasParaGrupo,
         aceitaDiaria: dados.aceitaDiaria,
         precoDiaria: dados.precoDiaria?.toFixed(2) ?? null,
+        precoDiariaGrupo: dados.precoDiariaGrupo?.toFixed(2) ?? null,
+        pessoasParaGrupoDiaria: dados.pessoasParaGrupoDiaria,
         cor: dados.cor,
         duracaoMaximaMinutos: dados.duracaoMaximaMinutos,
         ordem: dados.ordem,

@@ -159,10 +159,13 @@ export function valorEstimadoEmCentavos(entrada: {
     fim: entrada.fim,
     tarifas: {
       precoPorHora: entrada.sala.precoPorHora,
+      precoPorHoraGrupo: entrada.sala.precoPorHoraGrupo,
       precoPorHoraNoturno: entrada.sala.precoPorHoraNoturno,
       precoPorHoraNoturnoGrupo: entrada.sala.precoPorHoraNoturnoGrupo,
       pessoasParaGrupo: entrada.sala.pessoasParaGrupo,
       precoDiaria: entrada.sala.precoDiaria,
+      precoDiariaGrupo: entrada.sala.precoDiariaGrupo,
+      pessoasParaGrupoDiaria: entrada.sala.pessoasParaGrupoDiaria,
     },
     categoria: entrada.categoria ?? "HORA",
     pessoas: entrada.pessoas ?? null,

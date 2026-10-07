@@ -57,7 +57,8 @@ export type MotivoInvalido =
   | "ANTECEDENCIA_MAXIMA"
   | "HORARIO_OCUPADO"
   | "INTERVALO_ENTRE_RESERVAS"
-  | "SALA_SEM_DIARIA";
+  | "SALA_SEM_DIARIA"
+  | "CAPACIDADE_EXCEDIDA";
 
 export type ResultadoValidacao = {
   valido: boolean;
@@ -417,6 +418,8 @@ export async function validarReserva(entrada: {
   modo?: Modo;
   /** Por hora ou dia inteiro. Padrao: HORA. */
   categoria?: CategoriaReserva;
+  /** Quantas pessoas. Confrontado com a capacidade da sala. */
+  pessoas?: number | null;
 }): Promise<ResultadoValidacao> {
   const sala = await buscarSala(entrada.salaId);
 
@@ -425,6 +428,23 @@ export async function validarReserva(entrada: {
   }
   if (!sala.ativa) {
     return recusar("SALA_INATIVA", "Esta sala não está disponível para reserva.");
+  }
+
+  // CAPACIDADE DA SALA — vale para a recepcao tambem.
+  //
+  // A recepcao fura regra COMERCIAL (antecedencia, duracao, expediente), mas
+  // esta nao e comercial: e o tamanho fisico da sala. Onze pessoas nao cabem
+  // na Sala de Reuniao por decisao de ninguem. Sala com capacidade em branco
+  // nao tem teto — e o caso das outras duas.
+  if (
+    sala.capacidade !== null &&
+    entrada.pessoas != null &&
+    entrada.pessoas > sala.capacidade
+  ) {
+    return recusar(
+      "CAPACIDADE_EXCEDIDA",
+      `A ${sala.nome} comporta no máximo ${sala.capacidade} pessoas.`,
+    );
   }
 
   const data = dataLocalDe(entrada.inicio);
@@ -639,17 +659,23 @@ export async function calcularValor(
 /** Os precos da sala no formato que o modulo de calculo espera. */
 export function tarifasDe(sala: {
   precoPorHora: Prisma.Decimal;
+  precoPorHoraGrupo: Prisma.Decimal | null;
   precoPorHoraNoturno: Prisma.Decimal;
   precoPorHoraNoturnoGrupo: Prisma.Decimal | null;
   pessoasParaGrupo: number | null;
   precoDiaria: Prisma.Decimal | null;
+  precoDiariaGrupo: Prisma.Decimal | null;
+  pessoasParaGrupoDiaria: number | null;
 }): TarifasDaSala {
   return {
     precoPorHora: sala.precoPorHora.toFixed(2),
+    precoPorHoraGrupo: sala.precoPorHoraGrupo?.toFixed(2) ?? null,
     precoPorHoraNoturno: sala.precoPorHoraNoturno.toFixed(2),
     precoPorHoraNoturnoGrupo: sala.precoPorHoraNoturnoGrupo?.toFixed(2) ?? null,
     pessoasParaGrupo: sala.pessoasParaGrupo,
     precoDiaria: sala.precoDiaria?.toFixed(2) ?? null,
+    precoDiariaGrupo: sala.precoDiariaGrupo?.toFixed(2) ?? null,
+    pessoasParaGrupoDiaria: sala.pessoasParaGrupoDiaria,
   };
 }
 

@@ -194,6 +194,51 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   esticado é calculado pelo gatilho na hora de gravar e fica congelado na linha, então
   as reservas antigas continuariam carregando a folga de 30 min.
 
+### Preço da Sala de Reunião (regra definitiva — 07/10/2026)
+- O preço tem **duas dimensões ao mesmo tempo**: a faixa de horário e o tamanho do
+  grupo. As duas valem nas duas faixas.
+
+  | Por hora | 1 a 4 pessoas | 5 a 10 pessoas |
+  |---|---|---|
+  | até as 18h | R$ 40 | R$ 75 |
+  | após as 18h | R$ 75 | R$ 95 |
+
+- **Diária** (8h às 18h, valor fechado): 1 a 5 pessoas R$ 350; 6 a 10 pessoas R$ 450.
+- **O CORTE DE PESSOAS É DIFERENTE ENTRE OS DOIS MODOS, de propósito.** Por hora o
+  pulo é entre 4 e 5 (`pessoasParaGrupo` = 4); na diária é entre 5 e 6
+  (`pessoasParaGrupoDiaria` = 5). São duas colunas separadas e **não podem ser
+  unificadas**: com um corte só, a diária de 5 pessoas sairia por R$ 450. Há teste
+  cobrindo exatamente essa fronteira.
+- Reserva que **cruza as 18h**: cada faixa é cobrada pelo preço dela, já com o tamanho
+  do grupo aplicado **dentro** da faixa, e os pedaços são somados. Exemplo confirmado
+  pelo dono: 5 pessoas das 17h às 20h = 1h × R$ 75 + 2h × R$ 95 = **R$ 265**.
+- Até set/2026 o tamanho do grupo só era consultado **à noite**, e de dia o preço não
+  variava. Era um defeito, corrigido na migração
+  `20261007100000_preco_de_grupo_tambem_de_dia`.
+- **Capacidade: 10 pessoas.** O servidor recusa 11 nas três portas que criam reserva, e
+  **a recepção também não contorna** — não é regra comercial, é o tamanho físico da
+  sala. O número vem da coluna `capacidade`, que já é editável no painel e é a mesma
+  que o site mostra ("até 10 pessoas"): o que a equipe anuncia e o que o sistema barra
+  nunca discordam. Sala com capacidade em branco não tem teto.
+- **Sala Privativa e Sala Container não mudaram**: continuam sem preço de grupo, sem
+  diária e sem teto de pessoas. A faixa noturna de R$ 75 delas segue intacta.
+- Os seis preços e os dois cortes são **editáveis em Configurações → Salas**. O preço
+  de dia para grupo aparece para toda sala (em branco = o tamanho não muda o preço de
+  dia, mesmo padrão do preço de noite para grupo); os dois campos da diária de grupo
+  só aparecem quando a sala aceita diária.
+- **Validações de coerência ao salvar**, no servidor e também na tela: preço de grupo
+  não pode ser menor que o preço base da mesma faixa, nenhum preço negativo, **os dois
+  cortes de pessoas precisam ser inteiros de 1 a 10** (são pessoas numa sala, não num
+  auditório: um corte acima disso nunca seria alcançado e viraria preço de grupo que
+  não pega nunca), e preço de grupo sem o corte correspondente (ou vice-versa) é
+  recusado — seria meia regra, que a tela não saberia aplicar.
+- **Editar preço NÃO retroage.** O fluxo de salvar sala faz apenas `prisma.sala.update`
+  e não encosta na tabela de reservas. O valor fica congelado na reserva no momento da
+  criação, então mudar o preço na tela vale só para reserva nova. Há teste que dobra um
+  preço e confere que a reserva já gravada continua com o valor antigo **e que a linha
+  inteira dela ficou intacta** — se um dia alguém acrescentar um "recalcular reservas"
+  ao salvar, é ali que estoura.
+
 ### Categoria de profissão e relatórios
 - Toda reserva guarda a **categoria de profissão** do cliente: Marketing, Jurídico,
   Contábil, Área da Saúde ou Outros. O campo se chama `profissao` no banco — `categoria`

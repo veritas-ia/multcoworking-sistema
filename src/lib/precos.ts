@@ -34,16 +34,31 @@ export type CategoriaReserva = "HORA" | "DIARIA";
 
 /** Os precos da sala, como vem do banco (texto, para nao perder centavos). */
 export type TarifasDaSala = {
-  /** Preco por hora ate o inicio da faixa noturna. */
+  /** Preco por hora ate o inicio da faixa noturna, para grupo pequeno. */
   precoPorHora: string;
-  /** Preco por hora depois do inicio da faixa noturna. */
+  /** Preco de DIA para grupo grande. Nulo = o tamanho nao muda o preco de dia. */
+  precoPorHoraGrupo: string | null;
+  /** Preco por hora depois do inicio da faixa noturna, para grupo pequeno. */
   precoPorHoraNoturno: string;
   /** Preco noturno para grupo grande. Nulo = esta sala nao cobra diferente. */
   precoPorHoraNoturnoGrupo: string | null;
-  /** ACIMA de quantas pessoas vale o preco de grupo. Nulo junto com ele. */
+  /**
+   * ACIMA de quantas pessoas vale o preco de grupo POR HORA. Vale para a
+   * faixa de dia e a de noite.
+   */
   pessoasParaGrupo: number | null;
   /** Preco fechado do dia inteiro. Nulo quando a sala nao aceita diaria. */
   precoDiaria: string | null;
+  /** Preco da diaria para grupo grande. Nulo = diaria de valor unico. */
+  precoDiariaGrupo: string | null;
+  /**
+   * ACIMA de quantas pessoas vale o preco de diaria de grupo.
+   *
+   * NAO E o mesmo numero de "pessoasParaGrupo", e nao pode virar. Na Sala de
+   * Reuniao o pulo por hora e entre 4 e 5 pessoas; o da diaria, entre 5 e 6.
+   * Com um corte so, a diaria de 5 pessoas sairia pelo preco de grupo.
+   */
+  pessoasParaGrupoDiaria: number | null;
 };
 
 export type PedidoDePreco = {
@@ -84,34 +99,54 @@ function emCentavos(preco: string): number {
 }
 
 /**
+ * O grupo passou do corte?
+ *
+ * Sem o numero de pessoas a resposta e NAO, de proposito: cobrar o preco de
+ * grupo de quem nao disse quantos eram seria cobrar mais por falta de
+ * informacao. As reservas antigas, anteriores ao campo, entram por aqui.
+ */
+function ehGrupoGrande(pessoas: number | null, corte: number | null): boolean {
+  return corte !== null && pessoas !== null && pessoas > corte;
+}
+
+/**
  * O preco da hora que vale para um bloco que comeca neste minuto do dia.
  *
- * A decisao olha para o COMECO do bloco. Um bloco 17:30-18:00 e de dia
- * inteiro; o 18:00-18:30 ja e noturno. Sem essa regra, faltaria dizer o que
- * fazer com o bloco que atravessa a fronteira — e a resposta mudaria conforme
- * quem lesse.
+ * DUAS DIMENSOES, e nao uma: a FAIXA DE HORARIO (dia ou noite) e o TAMANHO DO
+ * GRUPO. As duas valem nas duas faixas. Antes o tamanho do grupo so era
+ * consultado a noite, e de dia o preco nao variava — era o defeito.
+ *
+ *   Sala de Reuniao | 1 a 4 pessoas | 5 ou mais
+ *   ate as 18h      | R$ 40         | R$ 75
+ *   apos as 18h     | R$ 75         | R$ 95
+ *
+ * A faixa olha para o COMECO do bloco. Um bloco 17:30-18:00 e de dia inteiro;
+ * o 18:00-18:30 ja e noturno. Sem essa regra, faltaria dizer o que fazer com
+ * o bloco que atravessa a fronteira — e a resposta mudaria conforme quem
+ * lesse. Numa reserva que cruza as 18h, cada faixa e cobrada pelo preco dela,
+ * ja com o tamanho do grupo aplicado DENTRO da faixa.
  */
 function precoDaHoraNoBloco(
   minutoDoBloco: number,
   pedido: PedidoDePreco,
 ): number {
   const ehNoite = minutoDoBloco >= emMinutos(pedido.horaInicioNoturno);
+  const {
+    precoPorHora,
+    precoPorHoraGrupo,
+    precoPorHoraNoturno,
+    precoPorHoraNoturnoGrupo,
+    pessoasParaGrupo,
+  } = pedido.tarifas;
 
-  if (!ehNoite) {
-    return emCentavos(pedido.tarifas.precoPorHora);
-  }
+  const grupoGrande = ehGrupoGrande(pedido.pessoas, pessoasParaGrupo);
 
-  const { precoPorHoraNoturnoGrupo, pessoasParaGrupo } = pedido.tarifas;
+  const base = ehNoite ? precoPorHoraNoturno : precoPorHora;
+  const deGrupo = ehNoite ? precoPorHoraNoturnoGrupo : precoPorHoraGrupo;
 
-  const ehGrupoGrande =
-    precoPorHoraNoturnoGrupo !== null &&
-    pessoasParaGrupo !== null &&
-    pedido.pessoas !== null &&
-    pedido.pessoas > pessoasParaGrupo;
-
-  return emCentavos(
-    ehGrupoGrande ? precoPorHoraNoturnoGrupo : pedido.tarifas.precoPorHoraNoturno,
-  );
+  // Sala sem preco de grupo naquela faixa cobra o base, mesmo com muita
+  // gente: o preco diferente e uma escolha comercial por sala.
+  return emCentavos(grupoGrande && deGrupo !== null ? deGrupo : base);
 }
 
 /**
@@ -124,10 +159,21 @@ function precoDaHoraNoBloco(
  */
 export function valorEmCentavos(pedido: PedidoDePreco): number {
   if (pedido.categoria === "DIARIA") {
-    if (pedido.tarifas.precoDiaria === null) {
+    const { precoDiaria, precoDiariaGrupo, pessoasParaGrupoDiaria } = pedido.tarifas;
+
+    if (precoDiaria === null) {
       throw new Error("Esta sala nao tem preco de diaria cadastrado.");
     }
-    return emCentavos(pedido.tarifas.precoDiaria);
+
+    // O CORTE DA DIARIA E O DELA, e nao o do calculo por hora. Na Sala de
+    // Reuniao a diaria pula de preco entre 5 e 6 pessoas, enquanto a hora
+    // pula entre 4 e 5. Usar o mesmo numero nos dois erraria justamente o
+    // caso do meio — a diaria de 5 pessoas sairia por R$ 450 em vez de R$ 350.
+    const grupoGrande = ehGrupoGrande(pedido.pessoas, pessoasParaGrupoDiaria);
+
+    return emCentavos(
+      grupoGrande && precoDiariaGrupo !== null ? precoDiariaGrupo : precoDiaria,
+    );
   }
 
   const inicio = emMinutos(pedido.inicio);

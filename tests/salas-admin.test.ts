@@ -18,7 +18,9 @@ import bcrypt from "bcryptjs";
 import { GET as getSalasPublicas } from "@/app/api/publico/salas/route";
 import { GET as getSalas, POST as postSala } from "@/app/api/admin/salas/route";
 import { PATCH as patchSala } from "@/app/api/admin/salas/[id]/route";
+import { criarReservaNaRecepcao } from "@/lib/agenda-admin";
 import { enderecoDe } from "@/lib/salas-admin";
+import { instanteDe } from "@/lib/tempo";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 
 import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
@@ -86,11 +88,14 @@ async function cadastrar(dados: Record<string, unknown>) {
         nome: `${PREFIXO} Sala`,
         capacidade: null,
         precoPorHora: 40,
+        precoPorHoraGrupo: null,
         precoPorHoraNoturno: 75,
         precoPorHoraNoturnoGrupo: null,
         pessoasParaGrupo: null,
         aceitaDiaria: false,
         precoDiaria: null,
+        precoDiariaGrupo: null,
+        pessoasParaGrupoDiaria: null,
         cor: "#FFC700",
         duracaoMaximaMinutos: null,
         ordem: 90,
@@ -159,11 +164,14 @@ describe("endereco da sala", () => {
           nome: `${PREFIXO} Nome Novo`,
           capacidade: null,
           precoPorHora: 40,
+          precoPorHoraGrupo: null,
           precoPorHoraNoturno: 75,
           precoPorHoraNoturnoGrupo: null,
           pessoasParaGrupo: null,
           aceitaDiaria: false,
           precoDiaria: null,
+          precoDiariaGrupo: null,
+          pessoasParaGrupoDiaria: null,
           cor: "#FFC700",
           duracaoMaximaMinutos: null,
           ordem: 90,
@@ -346,5 +354,217 @@ describe("cor da sala", () => {
   it("recusa texto que nem e cor", async () => {
     const { status } = await cadastrar({ nome: `${PREFIXO} Torta`, cor: "azul" });
     expect(status).toBe(422);
+  });
+});
+
+// =============================================================================
+// Preco de grupo: os campos novos e a regra de NAO RETROAGIR
+// =============================================================================
+
+describe("preços de grupo editáveis na tela", () => {
+  /** O corpo de um PATCH completo, com os campos de grupo preenchidos. */
+  function corpoComGrupo(extra: Record<string, unknown> = {}) {
+    return {
+      nome: `${PREFIXO} Com Grupo`,
+      capacidade: 10,
+      precoPorHora: 40,
+      precoPorHoraGrupo: 75,
+      precoPorHoraNoturno: 75,
+      precoPorHoraNoturnoGrupo: 95,
+      pessoasParaGrupo: 4,
+      aceitaDiaria: true,
+      precoDiaria: 350,
+      precoDiariaGrupo: 450,
+      pessoasParaGrupoDiaria: 5,
+      cor: "#FFC700",
+      duracaoMaximaMinutos: null,
+      ordem: 90,
+      ...extra,
+    };
+  }
+
+  /** Quem lanca as reservas de apoio destes testes. */
+  async function operadorDeTeste() {
+    return bancoDeTeste.usuario.findFirstOrThrow({
+      where: { usuario: USUARIO },
+      select: { id: true, nome: true },
+    });
+  }
+
+  /** Nome unico por chamada: o cadastro recusa nome repetido. */
+  let contador = 0;
+
+  async function salvar(extra: Record<string, unknown> = {}) {
+    contador += 1;
+    const nome = `${PREFIXO} Com Grupo ${contador}`;
+    const { corpo } = await cadastrar({ nome, ordem: 90 });
+
+    if (!corpo.sala) {
+      throw new Error(`Nao cadastrou a sala de apoio: ${JSON.stringify(corpo)}`);
+    }
+
+    const resposta = await patchSala(
+      pedidoPatch(
+        `/api/admin/salas/${corpo.sala.id}`,
+        corpoComGrupo({ nome, ...extra }),
+        { cookie },
+      ),
+      contexto(corpo.sala.id),
+    );
+
+    return {
+      id: corpo.sala.id,
+      nome,
+      status: resposta.status,
+      body: await resposta.json(),
+    };
+  }
+
+  /** Edita uma sala que JA existe, mantendo o mesmo id. */
+  async function reeditar(id: string, nome: string, extra: Record<string, unknown>) {
+    const resposta = await patchSala(
+      pedidoPatch(`/api/admin/salas/${id}`, corpoComGrupo({ nome, ...extra }), { cookie }),
+      contexto(id),
+    );
+
+    return { status: resposta.status, body: await resposta.json() };
+  }
+
+  it("grava os três campos novos", async () => {
+    const { status, body } = await salvar();
+
+    expect(status).toBe(200);
+    expect(body.sala.precoPorHoraGrupo).toBe("75.00");
+    expect(body.sala.precoDiariaGrupo).toBe("450.00");
+    expect(body.sala.pessoasParaGrupoDiaria).toBe(5);
+  });
+
+  it("recusa preço de grupo MENOR que o preço base", async () => {
+    const dia = await salvar({ precoPorHoraGrupo: 30 });
+    expect(dia.status).not.toBe(200);
+    expect(dia.body.erro ?? dia.body.motivo).toMatch(/menor que o preço de dia/i);
+
+    const noite = await salvar({ precoPorHoraNoturnoGrupo: 50 });
+    expect(noite.status).not.toBe(200);
+
+    const diaria = await salvar({ precoDiariaGrupo: 300 });
+    expect(diaria.status).not.toBe(200);
+    expect(diaria.body.erro ?? diaria.body.motivo).toMatch(/menos que a diária normal/i);
+  });
+
+  it("recusa corte fora da faixa 1 a 10 — nos DOIS cortes", async () => {
+    // Diaria.
+    expect((await salvar({ pessoasParaGrupoDiaria: 0 })).status).not.toBe(200);
+    expect((await salvar({ pessoasParaGrupoDiaria: 11 })).status).not.toBe(200);
+    expect((await salvar({ pessoasParaGrupoDiaria: 10 })).status).toBe(200);
+
+    // Por hora: a mesma faixa, para a tela nao ter duas regras diferentes
+    // para a mesma pergunta.
+    expect((await salvar({ pessoasParaGrupo: 0 })).status).not.toBe(200);
+    expect((await salvar({ pessoasParaGrupo: 11 })).status).not.toBe(200);
+    expect((await salvar({ pessoasParaGrupo: 10 })).status).toBe(200);
+  });
+
+  it("recusa preço negativo", async () => {
+    expect((await salvar({ precoPorHoraGrupo: -1 })).status).not.toBe(200);
+    expect((await salvar({ precoDiariaGrupo: -1 })).status).not.toBe(200);
+  });
+
+  it("recusa preço de grupo sem dizer a partir de quantas pessoas", async () => {
+    const semCorte = await salvar({ pessoasParaGrupo: null });
+    expect(semCorte.status).not.toBe(200);
+
+    const diariaSemCorte = await salvar({ pessoasParaGrupoDiaria: null });
+    expect(diariaSemCorte.status).not.toBe(200);
+  });
+
+  it("NÃO RETROAGE: a reserva já gravada mantém o valor antigo", async () => {
+    // 1) Sala com o preco de dia para grupo em R$75.
+    const { id, nome } = await salvar();
+
+    // 2) Uma reserva de 2h com 6 pessoas (grupo): 2 x R$75 = R$150.
+    const antes = await criarReservaNaRecepcao({
+      salaId: id,
+      telefone: "+5511900000777",
+      nomeCliente: "Cliente de Teste",
+      profissao: "OUTROS",
+      inicio: instanteDe("2027-05-04", "14:00"),
+      fim: instanteDe("2027-05-04", "16:00"),
+      pessoas: 6,
+      operador: await operadorDeTeste(),
+    });
+
+    if (!antes.ok) {
+      throw new Error(`Nao criou: ${antes.falha.motivo}`);
+    }
+    expect(antes.dados.valor).toBe("150.00");
+
+    // 3) A equipe DOBRA o preco de dia para grupo na tela, NESTA MESMA sala.
+    const subiu = await reeditar(id, nome, { precoPorHoraGrupo: 150 });
+    expect(subiu.status).toBe(200);
+
+    // 4) A reserva ja gravada NAO muda. O valor fica congelado na criacao, e
+    //    a edicao mexe so na tabela de salas.
+    const guardada = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: antes.dados.id },
+      select: { valor: true },
+    });
+    expect(guardada.valor.toFixed(2)).toBe("150.00");
+
+    // 5) Uma reserva NOVA, igual, ja sai pelo preco novo: 2 x R$150 = R$300.
+    const depois = await criarReservaNaRecepcao({
+      salaId: id,
+      telefone: "+5511900000777",
+      nomeCliente: "Cliente de Teste",
+      profissao: "OUTROS",
+      inicio: instanteDe("2027-05-05", "14:00"),
+      fim: instanteDe("2027-05-05", "16:00"),
+      pessoas: 6,
+      operador: await operadorDeTeste(),
+    });
+
+    if (!depois.ok) {
+      throw new Error(`Nao criou: ${depois.falha.motivo}`);
+    }
+    expect(depois.dados.valor).toBe("300.00");
+  });
+
+  it("salvar preço não escreve em NENHUMA reserva", async () => {
+    const { id, nome } = await salvar();
+
+    const criada = await criarReservaNaRecepcao({
+      salaId: id,
+      telefone: "+5511900000777",
+      nomeCliente: "Cliente de Teste",
+      profissao: "OUTROS",
+      inicio: instanteDe("2027-05-06", "14:00"),
+      fim: instanteDe("2027-05-06", "16:00"),
+      pessoas: 6,
+      operador: await operadorDeTeste(),
+    });
+
+    if (!criada.ok) {
+      throw new Error("Nao criou a reserva de apoio.");
+    }
+
+    const antes = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.dados.id },
+    });
+
+    await reeditar(id, nome, {
+      precoPorHora: 99,
+      precoPorHoraGrupo: 199,
+      precoDiaria: 999,
+      precoDiariaGrupo: 1999,
+    });
+
+    const depois = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.dados.id },
+    });
+
+    // A LINHA INTEIRA precisa estar intacta, e nao so o valor: se um dia
+    // alguem acrescentar um "recalcular reservas" ao salvar da sala, e aqui
+    // que estoura.
+    expect(depois).toEqual(antes);
   });
 });

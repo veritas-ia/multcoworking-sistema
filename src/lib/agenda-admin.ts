@@ -226,6 +226,7 @@ export async function criarReservaNaRecepcao(entrada: {
     fim: entrada.fim,
     modo: "ADMIN",
     categoria: entrada.categoria ?? "HORA",
+    pessoas: entrada.pessoas ?? null,
   });
 
   if (!validacao.valido) {
@@ -436,6 +437,9 @@ export async function reagendarComoAdmin(entrada: {
     fim: entrada.fim,
     ignorarReservaId: reserva.id,
     modo: "ADMIN",
+    // O numero de pessoas viaja com a reserva ao remarcar: se a capacidade da
+    // sala tiver diminuido desde entao, o remarcar e a hora de descobrir.
+    pessoas: reserva.pessoas,
   });
 
   if (!validacao.valido) {

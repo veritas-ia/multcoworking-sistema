@@ -310,6 +310,7 @@ export async function reagendarReserva(entrada: {
     inicio: entrada.inicio,
     fim: entrada.fim,
     ignorarReservaId: reserva.id,
+    pessoas: reserva.pessoas,
   });
 
   if (!validacao.valido) {

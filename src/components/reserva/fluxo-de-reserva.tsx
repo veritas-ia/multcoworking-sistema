@@ -501,6 +501,7 @@ export function FluxoDeReserva({
             nome={nome}
             pessoas={pessoas}
             perguntarPessoas={perguntarPessoas}
+            capacidade={sala?.capacidade ?? null}
             profissao={profissao}
             aoMudar={setNome}
             aoMudarPessoas={setPessoas}
