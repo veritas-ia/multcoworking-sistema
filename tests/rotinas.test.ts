@@ -8,13 +8,16 @@
  *  4. reserva reagendada volta a ter direito ao lembrete no horario novo;
  *  5. as duas mensagens levam o LINK de "Minhas reservas";
  *  6. concluida so pega quem terminou; cancelada nunca vira concluida;
- *  7. a faxina so apaga o que passou do prazo.
+ *  7. a faxina so apaga o que passou do prazo;
+ *  8. a CONFIRMACAO AGRUPADA: quem marca varias reservas seguidas recebe UMA
+ *     mensagem com o total, e os lembretes continuam individuais.
  *
  * Precisa do banco no ar e com o seed carregado.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST as postReagendarAdmin } from "@/app/api/admin/reservas/[id]/reagendar/route";
+import { Prisma } from "@/generated/prisma/client";
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
 import bcrypt from "bcryptjs";
 import {
@@ -22,6 +25,8 @@ import {
   HORAS_DO_PRIMEIRO_LEMBRETE,
   HORAS_DO_SEGUNDO_LEMBRETE,
   JANELA_MINUTOS,
+  confirmacoesAgrupadas,
+  variaveisDaConfirmacaoAgrupada,
   lembrete13h,
   lembrete3h,
   linkDasReservas,
@@ -409,6 +414,193 @@ describe("marcar concluídas", () => {
     await marcarConcluidas(AGORA);
 
     expect((await lerReserva(id)).status).toBe(StatusReserva.CONCLUIDA);
+  });
+});
+
+
+// =============================================================================
+// 8. Confirmacao agrupada (16/10/2026)
+// =============================================================================
+
+describe("confirmação agrupada", () => {
+  /** Reserva do SITE, com confirmacao pendente e criada ha tantos minutos. */
+  async function reservaDoSite(entrada: {
+    diasAFrente: number;
+    valor: string;
+    criadaHaMinutos: number;
+    salaId?: string;
+    telefone?: string;
+  }): Promise<string> {
+    const inicio = new Date(AGORA.getTime() + entrada.diasAFrente * 24 * 60 * 60_000);
+    const fim = new Date(inicio.getTime() + 60 * 60_000);
+
+    const reserva = await bancoDeTeste.reserva.create({
+      data: {
+        salaId: entrada.salaId ?? salaCI,
+        nomeCliente: "Cliente de Teste",
+        telefone: entrada.telefone ?? CLIENTE,
+        inicio,
+        fim,
+        duracaoMinutos: 60,
+        valor: entrada.valor,
+        status: StatusReserva.CONFIRMADA,
+        origem: OrigemReserva.PUBLICO,
+        criadoEm: new Date(AGORA.getTime() - entrada.criadaHaMinutos * 60_000),
+        confirmacaoEnviadaEm: null,
+      },
+      select: { id: true },
+    });
+
+    return reserva.id;
+  }
+
+  it("ESPERA enquanto a janela de 3 minutos está aberta", async () => {
+    await reservaDoSite({ diasAFrente: 4, valor: "40.00", criadaHaMinutos: 1 });
+
+    const resultado = await confirmacoesAgrupadas(AGORA);
+
+    expect(resultado.enviados).toBe(0);
+    expect(await mensagensEnviadas()).toHaveLength(0);
+  });
+
+  it("UMA reserva usa o texto de sempre", async () => {
+    await reservaDoSite({ diasAFrente: 4, valor: "40.00", criadaHaMinutos: 5 });
+
+    await confirmacoesAgrupadas(AGORA);
+
+    const enviadas = await mensagensEnviadas();
+    expect(enviadas).toHaveLength(1);
+    expect(enviadas[0]?.tipo).toBe("reserva_confirmada");
+  });
+
+  it("TRÊS reservas de dias diferentes viram UMA mensagem com o total", async () => {
+    // O caso real: a cliente marcou tres de uma vez, para tres dias, e
+    // recebeu tres mensagens sem nenhum total.
+    await reservaDoSite({ diasAFrente: 4, valor: "40.00", criadaHaMinutos: 6 });
+    await reservaDoSite({ diasAFrente: 5, valor: "75.00", criadaHaMinutos: 5, salaId: salaContainer });
+    await reservaDoSite({ diasAFrente: 6, valor: "35.50", criadaHaMinutos: 4, salaId: salaReuniao });
+
+    const resultado = await confirmacoesAgrupadas(AGORA);
+
+    expect(resultado.enviados).toBe(1);
+
+    const enviadas = await mensagensEnviadas();
+    expect(enviadas).toHaveLength(1);
+    expect(enviadas[0]?.tipo).toBe("reservas_confirmadas");
+  });
+
+  it("a janela é DESLIZANTE: uma reserva nova segura as anteriores", async () => {
+    // A primeira ja tem 6 minutos, mas a ultima tem 1: a pessoa ainda esta
+    // marcando. Mandar agora quebraria a leva em duas mensagens.
+    await reservaDoSite({ diasAFrente: 4, valor: "40.00", criadaHaMinutos: 6 });
+    await reservaDoSite({ diasAFrente: 5, valor: "40.00", criadaHaMinutos: 1, salaId: salaContainer });
+
+    expect((await confirmacoesAgrupadas(AGORA)).enviados).toBe(0);
+
+    // Tres minutos depois, a janela fecha e sai UMA mensagem com as duas.
+    const depois = new Date(AGORA.getTime() + 3 * 60_000);
+    expect((await confirmacoesAgrupadas(depois)).enviados).toBe(1);
+    expect(await mensagensEnviadas()).toHaveLength(1);
+  });
+
+  it("manda UMA VEZ SÓ, mesmo rodando a rotina de novo", async () => {
+    await reservaDoSite({ diasAFrente: 4, valor: "40.00", criadaHaMinutos: 5 });
+    await reservaDoSite({ diasAFrente: 5, valor: "40.00", criadaHaMinutos: 5, salaId: salaContainer });
+
+    await confirmacoesAgrupadas(AGORA);
+    await confirmacoesAgrupadas(AGORA);
+    await confirmacoesAgrupadas(AGORA);
+
+    expect(await mensagensEnviadas()).toHaveLength(1);
+  });
+
+  it("NÃO mexe nas reservas da recepção: elas já confirmaram na hora", async () => {
+    await reservaDaquiA(100); // origem ADMIN
+
+    const resultado = await confirmacoesAgrupadas(AGORA);
+
+    expect(resultado.enviados).toBe(0);
+    expect(await mensagensEnviadas()).toHaveLength(0);
+  });
+
+  it("separa por TELEFONE: duas pessoas, duas mensagens", async () => {
+    const OUTRA = "+5511900000061";
+
+    await reservaDoSite({ diasAFrente: 4, valor: "40.00", criadaHaMinutos: 5 });
+    await reservaDoSite({
+      diasAFrente: 5, valor: "40.00", criadaHaMinutos: 5,
+      salaId: salaContainer, telefone: OUTRA,
+    });
+
+    try {
+      expect((await confirmacoesAgrupadas(AGORA)).enviados).toBe(2);
+    } finally {
+      await aguardarEnviosPendentes();
+      await bancoDeTeste.logMensagem.deleteMany({ where: { telefone: OUTRA } });
+      await bancoDeTeste.reserva.deleteMany({ where: { telefone: OUTRA } });
+    }
+  });
+
+  it("O TOTAL está certo e a lista tem os três dias", () => {
+    // O numero que importa: se o total sair errado, sai errado em silencio —
+    // a mensagem continua bonita e ninguem percebe.
+    const variaveis = variaveisDaConfirmacaoAgrupada([
+      {
+        nomeCliente: "Maria",
+        inicio: instanteDe("2026-10-20", "09:00"),
+        fim: instanteDe("2026-10-20", "11:00"),
+        valor: new Prisma.Decimal("40.00"),
+        sala: { nome: "Sala Privativa" },
+      },
+      {
+        nomeCliente: "Maria",
+        inicio: instanteDe("2026-10-21", "14:00"),
+        fim: instanteDe("2026-10-21", "16:00"),
+        valor: new Prisma.Decimal("75.00"),
+        sala: { nome: "Sala Container" },
+      },
+      {
+        nomeCliente: "Maria",
+        inicio: instanteDe("2026-10-22", "09:00"),
+        fim: instanteDe("2026-10-22", "10:00"),
+        valor: new Prisma.Decimal("35.50"),
+        sala: { nome: "Sala de Reunião" },
+      },
+    ]);
+
+    expect(variaveis.quantidade).toBe("3");
+    // 40 + 75 + 35,50 = R$ 150,50
+    expect(variaveis.valor).toBe("R$ 150,50");
+
+    // Uma linha por reserva, com o dia de CADA uma.
+    expect(variaveis.lista).toContain("20/10 (terça-feira)");
+    expect(variaveis.lista).toContain("21/10 (quarta-feira)");
+    expect(variaveis.lista).toContain("22/10 (quinta-feira)");
+    expect(variaveis.lista?.split("\n")).toHaveLength(3);
+  });
+
+  it("soma centavos sem acumular diferença", () => {
+    const tres = Array.from({ length: 3 }, () => ({
+      nomeCliente: "Maria",
+      inicio: instanteDe("2026-10-20", "09:00"),
+      fim: instanteDe("2026-10-20", "10:00"),
+      valor: new Prisma.Decimal("33.33"),
+      sala: { nome: "Sala Privativa" },
+    }));
+
+    expect(variaveisDaConfirmacaoAgrupada(tres).valor).toBe("R$ 99,99");
+  });
+
+  it("os LEMBRETES continuam individuais, um por reserva", async () => {
+    // O ponto que o dono fez questao: a confirmacao junta, o lembrete nao.
+    // Duas reservas na janela do lembrete de 13h -> DOIS lembretes.
+    await reservaDaquiA(HORAS_DO_PRIMEIRO_LEMBRETE);
+    await reservaDaquiA(HORAS_DO_PRIMEIRO_LEMBRETE, 10, salaContainer);
+
+    const resultado = await lembrete13h(AGORA);
+
+    expect(resultado.enviados).toBe(2);
+    expect(await mensagensEnviadas()).toHaveLength(2);
   });
 });
 

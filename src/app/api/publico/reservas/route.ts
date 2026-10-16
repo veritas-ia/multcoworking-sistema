@@ -2,14 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
-import { ChaveTemplate } from "@/generated/prisma/enums";
 import { lerCorpo, respostaErro } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { criarReservaPublica } from "@/lib/reservas";
 import { telefoneDaSessao } from "@/lib/sessao-cliente";
 import { horarioDaDiaria } from "@/lib/disponibilidade";
-import { dataAmigavelDe, dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
-import { dispararMensagem } from "@/lib/whatsapp";
+import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 
 export const dynamic = "force-dynamic";
 
@@ -109,19 +107,16 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     select: { nome: true },
   });
 
-  dispararMensagem({
-    chave: ChaveTemplate.reserva_confirmada,
-    telefone,
-    reservaId: resultado.reservaId,
-    variaveis: {
-      nome: corpo.data.nome,
-      sala: sala?.nome ?? "",
-      data: dataAmigavelDe(inicio),
-      inicio: horaLocalDe(inicio),
-      fim: horaLocalDe(fim),
-      valor: `R$ ${resultado.valor.replace(".", ",")}`,
-    },
-  });
+  // A CONFIRMACAO NAO SAI AQUI, de proposito.
+  //
+  // A reserva nasce com "confirmacaoEnviadaEm" nulo e quem manda e a rotina
+  // "confirmacoesAgrupadas", alguns minutos depois. O motivo: o site reserva
+  // UMA de cada vez, e quem quer tres passa pelo fluxo tres vezes. Mandando
+  // na hora, essa pessoa recebia tres mensagens, cada uma com um valor, e
+  // nunca via o total. Esperando um pouco, as tres viram uma mensagem so.
+  //
+  // O cliente nao fica sem resposta: a TELA confirma na hora, com sala, dia,
+  // horario e valor. O WhatsApp e o comprovante que fica guardado.
 
   return NextResponse.json(
     {

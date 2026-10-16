@@ -112,7 +112,7 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Preço é informativo no MVP ("valor estimado"), sem pagamento online. O valor fica congelado na reserva no momento da criação; aumento futuro de preço não altera reservas antigas.
 - Lembrete cujo horário já passou no momento da criação não é enviado; fica registrado como "não aplicável".
 - Ao reagendar, os campos de lembrete são zerados e os lembretes valem para o novo horário. A regra "uma vez só" passa a valer por horário agendado, não por reserva na vida toda.
-- Oito templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h e convite para avaliar. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes e no convite para avaliar, {{link}} — que nos lembretes é a área "Minhas reservas" e no convite é o Google. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+- Nove templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h e convite para avaliar. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes e no convite para avaliar, {{link}} — que nos lembretes é a área "Minhas reservas" e no convite é o Google. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
 - Criar uma série recorrente manda UMA mensagem só, resumindo a série (sala, dias da
   semana, horário, período e quantas datas) — não uma por ocorrência. Uma série de dois
   meses mandaria ~17 mensagens seguidas, que parece defeito para o cliente e arrisca o
@@ -359,6 +359,40 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - **Os quatro testes que proibiam dinheiro não foram apagados** — viraram a vigia da
   fronteira nova: geral sem dinheiro, busca sem dinheiro, individual com o total e
   sem o preço linha a linha.
+
+### Confirmação agrupada (16/10/2026)
+- **Problema real:** o site reserva UMA de cada vez, então quem quer três passa pelo
+  fluxo três vezes. A cliente recebia três mensagens, cada uma com um valor, e **nunca
+  via o total**. Conferido nos registros: nenhuma mensagem tinha se perdido — as três
+  saíram, e era esse justamente o incômodo.
+- **A confirmação deixou de sair na hora.** A reserva nasce com `confirmacaoEnviadaEm`
+  nulo, e a rotina `confirmacoesAgrupadas` manda depois, agrupando por telefone.
+- **Janela de 3 minutos, DESLIZANTE:** conta a partir da ÚLTIMA reserva daquele
+  telefone. Quem marca às 10:00, 10:02 e 10:04 recebe uma mensagem às 10:07 com as
+  três. É o deslizamento que mantém a leva inteira.
+- A rotina roda **de minuto em minuto**, e não no tick de 5. Pendurada nos 5, a espera
+  viraria de 3 a 8 minutos em vez de 3. A consulta é leve e tem índice próprio.
+- **Uma reserva usa o texto de sempre** (`reserva_confirmada`); **duas ou mais** usam o
+  nono modelo, `reservas_confirmadas`, com `{{quantidade}}`, `{{lista}}` (uma linha por
+  reserva) e `{{valor}}` **somado**. A soma é em centavos — somar reais em ponto
+  flutuante acumula diferença.
+- **O cliente não fica sem resposta:** a TELA confirma na hora, com sala, dia, horário e
+  valor. O WhatsApp é o comprovante que fica guardado.
+- **SÓ O SITE.** A recepção continua confirmando na hora, uma por reserva: ali o cliente
+  costuma estar no balcão e a equipe confirma na frente dele.
+- **O QUE NÃO MUDOU, e precisa continuar assim** (ponto que o dono fez questão):
+  - **lembretes de 13h e 3h seguem individuais**, um por reserva, no dia de cada uma.
+    Três reservas em dias diferentes = três lembretes, cada um no seu dia. Há teste.
+  - **cancelamento segue individual**: cancelar a reserva do dia 20 não cancela as
+    outras e a mensagem não pode dizer que cancelou tudo. O cliente leria isso como
+    defeito do sistema.
+- Idempotência igual à dos lembretes: **marcar primeiro, mandar depois**, com UPDATE
+  condicional que só o primeiro consegue aplicar.
+- A migração **preenche `confirmacao_enviada_em` em todas as reservas que já existem**.
+  Sem isso, na primeira passada a rotina mandaria confirmação das 90 reservas antigas.
+- O texto do modelo entra **pela migração**, e não pelo seed: o deploy roda
+  `migrate deploy` e **não** roda o seed. Um modelo só no seed nunca chegaria em
+  produção, e a rotina ficaria sem texto para enviar.
 
 ### Mensagem de avaliação (1 hora após o término)
 - Oitavo template, `avaliacao_pos_uso`: agradecimento pelo uso + convite para avaliar

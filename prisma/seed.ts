@@ -298,6 +298,16 @@ const TEMPLATES = [
       "Precisa cancelar ou remarcar? É só acessar:\n{{link}}",
   },
   {
+    chave: ChaveTemplate.reservas_confirmadas,
+    descricao:
+      "Enviada quando o cliente marca mais de uma reserva seguida no site. Vai uma mensagem só, com a quantidade e o valor somado. Quem marca uma reserva única continua recebendo \"Reserva confirmada\".",
+    texto:
+      "Olá, {{nome}}! Suas {{quantidade}} reservas estão confirmadas:\n\n" +
+      "{{lista}}\n\n" +
+      "Valor total estimado: {{valor}}\n\n" +
+      "Qualquer mudança, é só acessar:\n{{link}}",
+  },
+  {
     chave: ChaveTemplate.avaliacao_pos_uso,
     descricao:
       "Enviada 1 hora depois do término da reserva, convidando a avaliar no Google.",

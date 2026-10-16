@@ -103,12 +103,12 @@ describe("quem pode mexer", () => {
 });
 
 describe("leitura", () => {
-  it("devolve as oito mensagens com suas variaveis e a previa", async () => {
+  it("devolve as nove mensagens com suas variaveis e a previa", async () => {
     const corpo = await (
       await getTemplates(pedidoGet("/api/admin/templates", {}, { cookie }))
     ).json();
 
-    expect(corpo.templates).toHaveLength(8);
+    expect(corpo.templates).toHaveLength(9);
 
     const lembrete = corpo.templates.find(
       (template: { chave: string }) => template.chave === "lembrete_13h",

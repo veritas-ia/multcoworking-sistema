@@ -675,7 +675,10 @@ describe("POST /api/publico/reservas", () => {
     expect(corpo.codigo).toBe("DURACAO_MINIMA");
   });
 
-  it("registra o envio da confirmação em LogMensagem", async () => {
+  it("a confirmação NÃO sai na hora: fica esperando a janela de agrupamento", async () => {
+    // Desde 16/10/2026 quem manda e a rotina "confirmacoesAgrupadas", alguns
+    // minutos depois, para quem marca varias reservas seguidas receber UMA
+    // mensagem com o total. A tela ja confirmou na hora.
     const resposta = await postReservas(
       pedidoPost("/api/publico/reservas", corpoDeReserva(), {
         cookie: await cookieDeSessao(),
@@ -683,16 +686,19 @@ describe("POST /api/publico/reservas", () => {
     );
     expect(resposta.status).toBe(201);
 
-    // O envio e disparado sem esperar; aqui esperamos ele terminar.
     await aguardarEnviosPendentes();
 
     const registros = await bancoDeTeste.logMensagem.findMany({
       where: { telefone: TELEFONE },
     });
+    expect(registros).toHaveLength(0);
 
-    expect(registros).toHaveLength(1);
-    expect(registros[0]?.tipo).toBe("reserva_confirmada");
-    expect(registros[0]?.status).toBe("ENVIADA");
+    // A reserva nasce marcada como "confirmacao pendente".
+    const reserva = await bancoDeTeste.reserva.findFirstOrThrow({
+      where: { telefone: TELEFONE },
+      select: { confirmacaoEnviadaEm: true },
+    });
+    expect(reserva.confirmacaoEnviadaEm).toBeNull();
   });
 });
 

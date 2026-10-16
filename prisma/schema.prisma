@@ -69,6 +69,10 @@ enum ChaveTemplate {
   lembrete_3h
   /// Agradecimento + convite para avaliar, 1 hora DEPOIS do termino.
   avaliacao_pos_uso
+  /// Confirmacao de VARIAS reservas feitas na mesma sentada, numa mensagem
+  /// so, com a quantidade e o valor somado. Quem faz uma reserva unica
+  /// continua recebendo "reserva_confirmada".
+  reservas_confirmadas
 }
 
 /// De quanto em quanto tempo uma serie se repete (Fase 9).
@@ -275,6 +279,13 @@ model Reserva {
   lembrete13hNaoAplicavel Boolean @default(false) @map("lembrete_13h_nao_aplicavel")
   lembrete3hNaoAplicavel  Boolean @default(false) @map("lembrete_3h_nao_aplicavel")
 
+  /// Quando a confirmacao desta reserva foi tratada.
+  ///
+  /// Nulo = ainda esta na janela de agrupamento, esperando para ver se o
+  /// cliente vai marcar mais alguma antes de a mensagem sair. Ver a rotina
+  /// "confirmacoesAgrupadas".
+  confirmacaoEnviadaEm DateTime? @map("confirmacao_enviada_em") @db.Timestamptz(3)
+
   /// Convite para avaliar, 1 hora DEPOIS do termino. Mesma mecanica dos
   /// lembretes: data preenchida = ja foi; "nao aplicavel" = nunca vai sair
   /// (a reserva terminou ha tempo demais quando o sistema viu).
@@ -293,6 +304,7 @@ model Reserva {
   @@index([salaId, inicio])
   @@index([telefone, status])
   @@index([recorrenciaId])
+  @@index([confirmacaoEnviadaEm])
   @@map("reservas")
 }
 

@@ -20,11 +20,12 @@
  * troca certa — o CLAUDE.md manda enviar NO MAXIMO uma vez, entao na duvida e
  * melhor faltar do que repetir. A falha fica registrada em LogMensagem.
  */
-import { ChaveTemplate, StatusReserva } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
+import { ChaveTemplate, OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { dataAmigavelDe, horaLocalDe } from "@/lib/tempo";
 import { lerLinkDeAvaliacao } from "@/lib/templates-admin";
-import { enviarMensagem } from "@/lib/whatsapp";
+import { enviarMensagem, type VariaveisMensagem } from "@/lib/whatsapp";
 
 /** Quantas horas antes cada lembrete sai. Decisao do dono na Fase 10. */
 export const HORAS_DO_PRIMEIRO_LEMBRETE = 13;
@@ -338,6 +339,167 @@ export type ResumoDaPassada = {
 };
 
 /** Tudo que roda de 5 em 5 minutos. */
+
+// -----------------------------------------------------------------------------
+// 5. Confirmacao agrupada
+// -----------------------------------------------------------------------------
+
+/**
+ * Quanto tempo esperar, depois da ULTIMA reserva do telefone, antes de mandar
+ * a confirmacao.
+ *
+ * A janela e DESLIZANTE: cada reserva nova reinicia a contagem. E isso que
+ * mantem a leva inteira — quem marca as 10:00, 10:02 e 10:04 recebe UMA
+ * mensagem as 10:07, com as tres, e nao tres mensagens soltas.
+ */
+export const MINUTOS_PARA_AGRUPAR = 3;
+
+/**
+ * A CONFIRMACAO DE QUEM MARCOU VARIAS RESERVAS SEGUIDAS, NUMA MENSAGEM SO.
+ *
+ * O site reserva uma de cada vez: quem quer tres passa pelo fluxo tres vezes.
+ * Antes isso virava tres mensagens, cada uma com um valor, e o cliente nunca
+ * via o total. Agora a confirmacao espera a poeira baixar e sai somada.
+ *
+ * SO VALE PARA O SITE. A recepcao continua confirmando na hora, uma por
+ * reserva: ali o cliente costuma estar no balcao e a equipe confirma na
+ * frente dele.
+ *
+ * O QUE ESTA ROTINA NAO TOCA: os lembretes de 13h e 3h continuam individuais,
+ * um por reserva no dia de cada uma, e a mensagem de cancelamento tambem —
+ * cancelar a reserva do dia 20 nao pode dizer que cancelou as outras.
+ */
+export async function confirmacoesAgrupadas(
+  agora = new Date(),
+): Promise<ResultadoDaRotina> {
+  const limite = maisMinutos(agora, -MINUTOS_PARA_AGRUPAR);
+
+  const pendentes = await prisma.reserva.findMany({
+    where: {
+      confirmacaoEnviadaEm: null,
+      // So o site. A recepcao ja confirmou na hora.
+      origem: OrigemReserva.PUBLICO,
+      status: { in: ATIVAS },
+    },
+    include: { sala: { select: { nome: true } } },
+    orderBy: { inicio: "asc" },
+  });
+
+  const porTelefone = new Map<string, typeof pendentes>();
+
+  for (const reserva of pendentes) {
+    porTelefone.set(reserva.telefone, [
+      ...(porTelefone.get(reserva.telefone) ?? []),
+      reserva,
+    ]);
+  }
+
+  let enviados = 0;
+  let falhas = 0;
+
+  for (const [telefone, reservas] of porTelefone) {
+    // A janela ainda esta aberta se a reserva MAIS RECENTE deste telefone tem
+    // menos de 3 minutos. Nesse caso a pessoa pode estar marcando outra agora.
+    const maisRecente = Math.max(...reservas.map((r) => r.criadoEm.getTime()));
+
+    if (maisRecente > limite.getTime()) {
+      continue;
+    }
+
+    // MARCAR PRIMEIRO, MANDAR DEPOIS. O "count" diz quantas conseguimos
+    // marcar: se outro tick chegou antes, ele volta 0 e nao mandamos nada.
+    const { count } = await prisma.reserva.updateMany({
+      where: { id: { in: reservas.map((r) => r.id) }, confirmacaoEnviadaEm: null },
+      data: { confirmacaoEnviadaEm: agora },
+    });
+
+    if (count === 0) {
+      continue;
+    }
+
+    const resultado = await enviarUmaConfirmacao(telefone, reservas);
+
+    if (resultado.enviada || resultado.simulada) {
+      enviados += 1;
+    } else {
+      falhas += 1;
+    }
+  }
+
+  return { enviados, naoAplicaveis: 0, falhas };
+}
+
+/** Uma reserva usa o texto de sempre; varias, o texto somado. */
+async function enviarUmaConfirmacao(
+  telefone: string,
+  reservas: { id: string; nomeCliente: string; inicio: Date; fim: Date; valor: Prisma.Decimal; sala: { nome: string } }[],
+) {
+  const primeira = reservas[0]!;
+  const nome = primeira.nomeCliente;
+
+  if (reservas.length === 1) {
+    return enviarMensagem({
+      chave: ChaveTemplate.reserva_confirmada,
+      telefone,
+      reservaId: primeira.id,
+      variaveis: {
+        nome,
+        sala: primeira.sala.nome,
+        data: dataAmigavelDe(primeira.inicio),
+        inicio: horaLocalDe(primeira.inicio),
+        fim: horaLocalDe(primeira.fim),
+        valor: emReaisPorExtenso(somarValores(reservas)),
+      },
+    });
+  }
+
+  return enviarMensagem({
+    chave: ChaveTemplate.reservas_confirmadas,
+    telefone,
+    // A mensagem fala de varias reservas; o registro fica preso a PRIMEIRA
+    // so para nao se perder. Amarrar a uma unica nao faria sentido, e repetir
+    // o mesmo log em todas inflaria o historico.
+    reservaId: primeira.id,
+    variaveis: variaveisDaConfirmacaoAgrupada(reservas),
+  });
+}
+
+/**
+ * As variaveis da mensagem de varias reservas: quantidade, lista e TOTAL.
+ *
+ * Separada para poder ser conferida sozinha. O numero que importa aqui e o
+ * total somado — e ele que o cliente nao via antes, e e o unico que, se
+ * sair errado, sai errado em silencio: a mensagem continua bonita.
+ */
+export function variaveisDaConfirmacaoAgrupada(
+  reservas: { nomeCliente: string; inicio: Date; fim: Date; valor: Prisma.Decimal; sala: { nome: string } }[],
+): VariaveisMensagem {
+  return {
+    nome: reservas[0]!.nomeCliente,
+    quantidade: String(reservas.length),
+    lista: reservas
+      .map(
+        (r) =>
+          `• ${dataAmigavelDe(r.inicio)}, ${horaLocalDe(r.inicio)} às ${horaLocalDe(r.fim)} — ${r.sala.nome}`,
+      )
+      .join("\n"),
+    valor: emReaisPorExtenso(somarValores(reservas)),
+    link: linkDasReservas(),
+  };
+}
+
+/** Soma em CENTAVOS: somar reais em ponto flutuante acumula diferenca. */
+function somarValores(reservas: { valor: Prisma.Decimal }[]): number {
+  return reservas.reduce(
+    (soma, reserva) => soma + Math.round(Number(reserva.valor) * 100),
+    0,
+  );
+}
+
+function emReaisPorExtenso(centavos: number): string {
+  return `R$ ${(centavos / 100).toFixed(2).replace(".", ",")}`;
+}
+
 export async function passadaDeRotina(agora = new Date()): Promise<ResumoDaPassada> {
   return {
     lembrete13h: await lembrete13h(agora),

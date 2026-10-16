@@ -1,7 +1,7 @@
 /**
  * MODELOS DE MENSAGEM DO WHATSAPP (Fase 11).
  *
- * Sao os sete textos que o cliente recebe. A equipe edita no painel; o sistema
+ * Sao os textos que o cliente recebe. A equipe edita no painel; o sistema
  * troca as variaveis na hora de enviar.
  *
  * A LISTA DE VARIAVEIS E POR MENSAGEM, e nao uma lista geral.
@@ -42,6 +42,11 @@ export const TEMPLATES: readonly DefinicaoDeTemplate[] = [
     chave: ChaveTemplate.reserva_confirmada,
     rotulo: "Reserva confirmada",
     variaveis: ["nome", "sala", "data", "inicio", "fim", "valor"],
+  },
+  {
+    chave: ChaveTemplate.reservas_confirmadas,
+    rotulo: "Várias reservas confirmadas",
+    variaveis: ["nome", "quantidade", "lista", "valor", "link"],
   },
   {
     chave: ChaveTemplate.serie_confirmada,
@@ -97,6 +102,12 @@ export const EXEMPLO_DA_PREVIA: Record<string, string> = {
   periodo: "15/09 a 30/11",
   quantidade: "17",
   link: "https://coworking.exemplo/minhas-reservas",
+  // A lista da confirmacao agrupada. Com tres linhas de proposito: a equipe
+  // precisa ver como o bloco cresce antes de reescrever o texto em volta.
+  lista:
+    "• 20/10 (segunda-feira), 09:00 às 11:00 — Sala de Reunião\n" +
+    "• 21/10 (terça-feira), 14:00 às 16:00 — Sala Container\n" +
+    "• 22/10 (quarta-feira), 09:00 às 10:00 — Sala Privativa",
 };
 
 export type TemplateNaTela = {

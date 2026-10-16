@@ -12,12 +12,22 @@
  */
 import cron from "node-cron";
 
-import { faxina, passadaDeRotina } from "@/lib/rotinas";
+import { confirmacoesAgrupadas, faxina, passadaDeRotina } from "@/lib/rotinas";
 
 const FUSO = "America/Sao_Paulo";
 
 /** De 5 em 5 minutos: lembretes e marcar concluidas. */
 const A_CADA_CINCO_MINUTOS = "*/5 * * * *";
+
+/**
+ * De minuto em minuto: a confirmacao agrupada.
+ *
+ * Precisa ser mais frequente que as outras. A janela de agrupamento e de 3
+ * minutos; pendurada no tick de 5, a espera do cliente viraria de 3 a 8
+ * minutos, e nao 3. A consulta e leve — procura so as nao marcadas, num
+ * indice proprio.
+ */
+const A_CADA_MINUTO = "* * * * *";
 
 /** Todo dia as 4h da manha, quando ninguem esta usando. */
 const TODA_MADRUGADA = "0 4 * * *";
@@ -65,6 +75,26 @@ export function ligarRotinas(): void {
         .catch((erro: unknown) => {
           // Um tick que falha nao pode derrubar o site inteiro.
           anotar(`falhou: ${erro instanceof Error ? erro.message : String(erro)}`);
+        });
+    },
+    { timezone: FUSO },
+  );
+
+  cron.schedule(
+    A_CADA_MINUTO,
+    () => {
+      void confirmacoesAgrupadas()
+        .then((resumo) => {
+          if (resumo.enviados > 0 || resumo.falhas > 0) {
+            anotar(
+              `${resumo.enviados} confirmacoes enviadas, ${resumo.falhas} falhas`,
+            );
+          }
+        })
+        .catch((erro: unknown) => {
+          anotar(
+            `confirmacao agrupada falhou: ${erro instanceof Error ? erro.message : String(erro)}`,
+          );
         });
     },
     { timezone: FUSO },

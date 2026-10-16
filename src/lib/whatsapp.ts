@@ -31,6 +31,15 @@ export type VariaveisMensagem = {
   periodo?: string;
   /** "17" — quantas datas entraram de verdade. */
   quantidade?: string;
+  // --- so na confirmacao de VARIAS reservas de uma vez ---
+  /**
+   * O bloco com uma linha por reserva (dia, horario e sala).
+   *
+   * Vem pronto de quem envia, e nao montado no texto do modelo: a equipe
+   * edita o modelo no painel, e uma lista de tamanho variavel nao cabe num
+   * campo de texto com variaveis soltas.
+   */
+  lista?: string;
   /** Endereco da area "Minhas reservas". So nos lembretes (Fase 10). */
   link?: string;
 };
