@@ -32,6 +32,7 @@ const Corpo = z.object({
   janelaCancelamentoHoras: z.number().int(),
   antecedenciaMinimaMinutos: z.number().int(),
   antecedenciaMaximaDias: z.number().int(),
+  maximoReservasAtivas: z.number().int(),
 });
 
 /** O que a tela mostra sem deixar editar. Ver o comentario de configuracoes.ts. */

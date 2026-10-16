@@ -196,6 +196,12 @@ const CONFIGURACOES = [
     descricao: "Até quantos dias no futuro o cliente pode reservar.",
   },
   {
+    chave: "maximoReservasAtivas",
+    valor: "0",
+    descricao:
+      "Quantas reservas futuras um cliente pode ter ao mesmo tempo pelo site. Zero = sem limite.",
+  },
+  {
     chave: "horaInicioNoturno",
     valor: "18:00",
     descricao: "A partir de que hora vale o preço noturno das salas.",

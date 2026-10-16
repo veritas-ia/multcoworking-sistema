@@ -41,7 +41,9 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Sem pagamento online no MVP.
 - Identificação do cliente: telefone + código de 6 dígitos via WhatsApp (válido 10 min,
   uso único, máx. 5 tentativas). Exigido para reservar e para gerenciar reservas.
-- Máx. 3 reservas ativas por telefone. Limite de envio de códigos por número e por IP.
+- Limite de reservas futuras por telefone: **desligado desde 16/10/2026** (era 3).
+  O número virou parâmetro editável no painel; ver "Limite de reservas por telefone".
+  Limite de envio de códigos por número e por IP continua valendo.
 - Mensagem de avaliação: enviada 1 hora DEPOIS do término da reserva, com o link do
   Google Meu Negócio. Mesma mecânica dos lembretes (uma vez só, marcar antes de
   mandar). Sem o link cadastrado no painel, ela simplesmente não é enviada.
@@ -97,7 +99,7 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Ao reagendar, o novo horário também precisa estar a mais de 12h de distância — para o cliente. Para a equipe, não.
 - REAGENDADA: a reserva continua sendo a MESMA (mesmo identificador), muda de horário e fica marcada como REAGENDADA, guardando histórico das alterações.
 - CONCLUIDA: marcada automaticamente pela rotina agendada quando o horário de término passa e a reserva ainda estava confirmada.
-- "3 reservas ativas por telefone" conta apenas CONFIRMADA e REAGENDADA com início no futuro. Canceladas e concluídas não contam.
+- O limite de reservas por telefone (quando ligado) conta apenas CONFIRMADA e REAGENDADA com início no futuro. Canceladas e concluídas não contam. Hoje está em zero — ver "Limite de reservas por telefone".
 
 ### Verificação por WhatsApp
 - Limites de envio de código: 1 por minuto por número, 5 por hora por número, 20 por hora por IP.
@@ -303,6 +305,29 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Continua valendo **só leitura**. Sobre dinheiro, ver a seção seguinte: o relatório
   individual passou a mostrar faturamento em 07/10/2026; o geral e a busca continuam
   sem valor nenhum.
+
+### Limite de reservas por telefone (desligado em 16/10/2026)
+- **Decisão do dono: o teto de 3 reservas saiu do caminho do cliente.** O número virou
+  o parâmetro `maximoReservasAtivas`, **editável em Configurações → Parâmetros**, e
+  nasce em **zero**.
+- **ZERO significa SEM LIMITE**, mesma convenção de `intervaloMinutos`. A regra não foi
+  apagada do sistema: ficou desligada, e a equipe religa sozinha pelo painel se a
+  agenda apertar — sem alteração no código nem migração nova.
+- **Nunca foi um teto por MÊS**, e era isso que confundia. Conta reservas com **início
+  no futuro**, em qualquer data: três reservas em três meses diferentes já batiam no
+  limite, enquanto dez reservas já usadas no mesmo mês não contavam nada. Cancelar uma
+  libera a vaga na hora.
+- Motivo de desligar: o cliente que marcava com antecedência batia no teto rápido e a
+  saída era ligar para a recepção, **que nunca teve limite**. Na prática virou atrito
+  para o cliente bom e trabalho a mais para a equipe, enquanto quem quisesse abusar
+  precisava só de um telefonema.
+- **A antecedência máxima de 60 dias continua limitando** o quanto alguém segura a
+  agenda à frente, e as travas de sobreposição seguem intactas. O freio que importa
+  não é este.
+- A mensagem de recusa usa **o número que está valendo**, lido da configuração, e não
+  um "3" escrito no código. Há teste com o limite em 1 conferindo isso.
+- A recepção continua **sem limite nenhum**, ligado ou desligado. Há teste que liga o
+  limite de propósito e prova que a recepção passa por cima.
 
 ### Faturamento no relatório individual (liberado em 07/10/2026)
 - **MUDANÇA AUTORIZADA PELO DONO, reabrindo de propósito a decisão anterior.** Até

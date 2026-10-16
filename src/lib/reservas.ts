@@ -4,7 +4,7 @@
  * Camadas de protecao, nesta ordem:
  *  1. Motor da Fase 3 revalida TODAS as regras de agenda.
  *  2. Trava por telefone (advisory lock) impede que dois pedidos simultaneos
- *     furem o limite de 3 reservas ativas.
+ *     furem o limite de reservas ativas, quando ele esta ligado.
  *  3. As exclusion constraints do banco (Fase 2) sao a palavra final sobre
  *     sobreposicao de horario.
  */
@@ -16,7 +16,34 @@ import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { minutosEntre } from "@/lib/tempo";
 
-export const MAXIMO_DE_RESERVAS_ATIVAS = 3;
+/**
+ * Quantas reservas FUTURAS um mesmo telefone pode ter no site.
+ *
+ * Vem da tabela Configuracao, editavel em Configuracoes -> Parametros, e
+ * ZERO SIGNIFICA SEM LIMITE — mesma convencao de "intervaloMinutos".
+ *
+ * Desde 16/10/2026 nasce em zero, por decisao do dono. O numero continua no
+ * sistema, desligado, para a equipe religar sozinha se a agenda apertar: a
+ * regra some do caminho do cliente sem sumir do produto.
+ *
+ * Nunca foi um teto por MES. Conta reservas com inicio no futuro, em qualquer
+ * data: cancelada, concluida e passada nao entram.
+ */
+async function maximoDeReservasAtivas(): Promise<number> {
+  const linha = await prisma.configuracao.findUnique({
+    where: { chave: "maximoReservasAtivas" },
+  });
+
+  // Registro faltando vale como SEM LIMITE, e nao como um numero inventado
+  // aqui: um padrao escondido no codigo viraria regra de negocio que ninguem
+  // encontra depois.
+  if (!linha) {
+    return 0;
+  }
+
+  const numero = Number(linha.valor);
+  return Number.isFinite(numero) && numero > 0 ? Math.floor(numero) : 0;
+}
 
 export type FalhaAoReservar =
   | { tipo: "REGRA"; codigo: string; motivo: string }
@@ -106,22 +133,27 @@ export async function criarReservaPublica(entrada: {
     categoria,
   });
 
+  const teto = await maximoDeReservasAtivas();
+
   try {
     const reservaId = await prisma.$transaction(async (tx) => {
       // Segura este telefone ate o fim da transacao: dois pedidos ao mesmo
       // tempo entram em fila em vez de contarem as reservas ao mesmo tempo.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${entrada.telefone}))`;
 
-      const ativas = await tx.reserva.count({
-        where: {
-          telefone: entrada.telefone,
-          status: { in: [StatusReserva.CONFIRMADA, StatusReserva.REAGENDADA] },
-          inicio: { gt: new Date() },
-        },
-      });
+      // Com o limite desligado (zero) nem vale a pena contar.
+      if (teto > 0) {
+        const ativas = await tx.reserva.count({
+          where: {
+            telefone: entrada.telefone,
+            status: { in: [StatusReserva.CONFIRMADA, StatusReserva.REAGENDADA] },
+            inicio: { gt: new Date() },
+          },
+        });
 
-      if (ativas >= MAXIMO_DE_RESERVAS_ATIVAS) {
-        throw new LimiteDeReservasAtingido();
+        if (ativas >= teto) {
+          throw new LimiteDeReservasAtingido(teto);
+        }
       }
 
       const reserva = await tx.reserva.create({
@@ -152,7 +184,7 @@ export async function criarReservaPublica(entrada: {
         criada: false,
         falha: {
           tipo: "LIMITE_DE_RESERVAS",
-          motivo: `Você já tem ${MAXIMO_DE_RESERVAS_ATIVAS} reservas ativas. Cancele uma para marcar outra.`,
+          motivo: `Você já tem ${erro.teto} ${erro.teto === 1 ? "reserva marcada" : "reservas marcadas"}. Cancele uma para marcar outra.`,
         },
       };
     }
@@ -172,8 +204,12 @@ export async function criarReservaPublica(entrada: {
 }
 
 class LimiteDeReservasAtingido extends Error {
-  constructor() {
+  /** O teto que estava valendo, para a mensagem dizer o numero certo. */
+  readonly teto: number;
+
+  constructor(teto: number) {
     super("Limite de reservas ativas atingido.");
     this.name = "LimiteDeReservasAtingido";
+    this.teto = teto;
   }
 }

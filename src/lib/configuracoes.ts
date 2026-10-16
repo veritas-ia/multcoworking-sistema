@@ -23,7 +23,8 @@ export type ChaveParametro =
   | "duracaoMinimaMinutos"
   | "janelaCancelamentoHoras"
   | "antecedenciaMinimaMinutos"
-  | "antecedenciaMaximaDias";
+  | "antecedenciaMaximaDias"
+  | "maximoReservasAtivas";
 
 export type DefinicaoParametro = {
   chave: ChaveParametro;
@@ -79,6 +80,15 @@ export const PARAMETROS: readonly DefinicaoParametro[] = [
     unidade: "dias",
     minimo: 1,
     maximo: 365,
+  },
+  {
+    chave: "maximoReservasAtivas",
+    rotulo: "Máximo de reservas futuras por cliente",
+    ajuda:
+      "Quantas reservas ainda por acontecer um mesmo telefone pode ter ao mesmo tempo no site. NÃO é um teto por mês: conta só o que está marcado para a frente, em qualquer data. Reserva que já passou, cancelada ou concluída não conta, e cancelar uma libera a vaga na hora. Deixe em ZERO para não haver limite. A recepção nunca fica presa a este número.",
+    unidade: "reservas (0 = sem limite)",
+    minimo: 0,
+    maximo: 50,
   },
 ] as const;
 

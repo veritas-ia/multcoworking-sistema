@@ -562,34 +562,105 @@ describe("POST /api/publico/reservas", () => {
     ).toBe(1);
   });
 
-  it("recusa a quarta reserva ativa do mesmo telefone", async () => {
+  /** Liga o limite para o teste, e devolve ao valor de hoje no fim. */
+  async function comLimite(teto: number, prova: () => Promise<void>) {
+    await bancoDeTeste.configuracao.update({
+      where: { chave: "maximoReservasAtivas" },
+      data: { valor: String(teto) },
+    });
+
+    try {
+      await prova();
+    } finally {
+      await bancoDeTeste.configuracao.update({
+        where: { chave: "maximoReservasAtivas" },
+        data: { valor: "0" },
+      });
+    }
+  }
+
+  const HORARIOS = [
+    { data: TERCA, inicio: "10:00", fim: "11:00" },
+    { data: TERCA, inicio: "14:00", fim: "15:00" },
+    { data: QUARTA, inicio: "10:00", fim: "11:00" },
+  ];
+
+  it("DESLIGADO (zero), não há limite de reservas por telefone", async () => {
+    // O padrao desde 16/10/2026. O limite continua no sistema, mas em zero.
     const cookie = await cookieDeSessao();
 
-    const horarios = [
-      { data: TERCA, inicio: "10:00", fim: "11:00", salaId: salaCI },
-      { data: TERCA, inicio: "14:00", fim: "15:00", salaId: salaCI },
-      { data: QUARTA, inicio: "10:00", fim: "11:00", salaId: salaCI },
-    ];
-
-    for (const horario of horarios) {
+    for (const horario of [
+      ...HORARIOS,
+      { data: QUARTA, inicio: "14:00", fim: "15:00" },
+      { data: QUARTA, inicio: "16:00", fim: "17:00" },
+    ]) {
       const resposta = await postReservas(
-        pedidoPost("/api/publico/reservas", corpoDeReserva(horario), { cookie }),
+        pedidoPost(
+          "/api/publico/reservas",
+          corpoDeReserva({ ...horario, salaId: salaCI }),
+          { cookie },
+        ),
       );
       expect(resposta.status).toBe(201);
     }
+  });
 
-    const quarta = await postReservas(
-      pedidoPost(
-        "/api/publico/reservas",
-        corpoDeReserva({ data: QUARTA, inicio: "14:00", fim: "15:00", salaId: salaContainer }),
-        { cookie },
-      ),
-    );
-    const corpo = (await quarta.json()) as { erro: string; codigo: string };
+  it("LIGADO em 3, recusa a quarta reserva futura do mesmo telefone", async () => {
+    await comLimite(3, async () => {
+      const cookie = await cookieDeSessao();
 
-    expect(quarta.status).toBe(409);
-    expect(corpo.codigo).toBe("LIMITE_DE_RESERVAS");
-    expect(corpo.erro).toContain("3 reservas ativas");
+      for (const horario of HORARIOS) {
+        const resposta = await postReservas(
+          pedidoPost(
+            "/api/publico/reservas",
+            corpoDeReserva({ ...horario, salaId: salaCI }),
+            { cookie },
+          ),
+        );
+        expect(resposta.status).toBe(201);
+      }
+
+      const quarta = await postReservas(
+        pedidoPost(
+          "/api/publico/reservas",
+          corpoDeReserva({ data: QUARTA, inicio: "14:00", fim: "15:00", salaId: salaContainer }),
+          { cookie },
+        ),
+      );
+      const corpo = (await quarta.json()) as { erro: string; codigo: string };
+
+      expect(quarta.status).toBe(409);
+      expect(corpo.codigo).toBe("LIMITE_DE_RESERVAS");
+      // A mensagem usa o numero que ESTA valendo, e nao um 3 escrito no codigo.
+      expect(corpo.erro).toContain("3 reservas marcadas");
+    });
+  });
+
+  it("LIGADO em 1, já recusa a segunda — o número vem da configuração", async () => {
+    await comLimite(1, async () => {
+      const cookie = await cookieDeSessao();
+
+      const primeira = await postReservas(
+        pedidoPost(
+          "/api/publico/reservas",
+          corpoDeReserva({ ...HORARIOS[0]!, salaId: salaCI }),
+          { cookie },
+        ),
+      );
+      expect(primeira.status).toBe(201);
+
+      const segunda = await postReservas(
+        pedidoPost(
+          "/api/publico/reservas",
+          corpoDeReserva({ ...HORARIOS[1]!, salaId: salaCI }),
+          { cookie },
+        ),
+      );
+      const corpo = (await segunda.json()) as { erro: string; codigo: string };
+
+      expect(segunda.status).toBe(409);
+      expect(corpo.erro).toContain("1 reserva marcada");
+    });
   });
 
   it("revalida as regras de agenda no servidor (30 min é recusado)", async () => {

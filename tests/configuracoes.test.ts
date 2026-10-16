@@ -3,7 +3,7 @@
  *
  * O que estes testes protegem:
  *  1. so entra quem tem sessao de admin;
- *  2. os quatro numeros so gravam se fizerem sentido SOZINHOS (faixa, multiplo
+ *  2. os numeros so gravam se fizerem sentido SOZINHOS (faixa, multiplo
  *     de 30) e EM CONJUNTO (antecedencia minima x maxima, duracao minima x
  *     duracao maxima das salas);
  *  3. gravacao e tudo ou nada: uma recusa nao pode deixar metade salva;
@@ -33,6 +33,8 @@ const ORIGINAIS = {
   janelaCancelamentoHoras: 12,
   antecedenciaMinimaMinutos: 60,
   antecedenciaMaximaDias: 60,
+  // Desligado desde 16/10/2026, por decisao do dono. Zero = sem limite.
+  maximoReservasAtivas: 0,
 } as const;
 
 let cookie: string;
@@ -101,12 +103,12 @@ describe("quem pode mexer", () => {
 });
 
 describe("leitura", () => {
-  it("devolve os quatro parametros com valor, faixa e explicacao", async () => {
+  it("devolve os parâmetros editáveis com valor, faixa e explicação", async () => {
     const resposta = await getParametros(pedidoGet("/api/admin/parametros", {}, { cookie }));
     const corpo = await resposta.json();
 
     expect(resposta.status).toBe(200);
-    expect(corpo.parametros).toHaveLength(4);
+    expect(corpo.parametros).toHaveLength(5);
 
     const duracao = corpo.parametros.find(
       (parametro: { chave: string }) => parametro.chave === "duracaoMinimaMinutos",
@@ -142,6 +144,7 @@ describe("gravacao", () => {
           janelaCancelamentoHoras: 24,
           antecedenciaMinimaMinutos: 120,
           antecedenciaMaximaDias: 45,
+          maximoReservasAtivas: 5,
         },
         { cookie },
       ),
@@ -218,7 +221,7 @@ describe("gravacao", () => {
     expect(await valorNoBanco("duracaoMinimaMinutos")).toBe(60);
   });
 
-  it("nao grava nada quando um dos quatro e recusado", async () => {
+  it("nao grava nada quando um deles e recusado", async () => {
     const resposta = await patchParametros(
       pedidoPatch(
         "/api/admin/parametros",
@@ -227,6 +230,7 @@ describe("gravacao", () => {
           janelaCancelamentoHoras: 48,
           antecedenciaMinimaMinutos: 30,
           antecedenciaMaximaDias: 90,
+          maximoReservasAtivas: 5,
         },
         { cookie },
       ),

@@ -26,7 +26,6 @@ import { POST as postReservaAdmin } from "@/app/api/admin/reservas/route";
 import { POST as postCancelarCliente } from "@/app/api/publico/minhas-reservas/[id]/cancelar/route";
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
 import { validarReserva } from "@/lib/disponibilidade";
-import { MAXIMO_DE_RESERVAS_ATIVAS } from "@/lib/reservas";
 import { COOKIE_SESSAO, criarSessao } from "@/lib/sessao-cliente";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
@@ -221,28 +220,45 @@ describe("as rotas da agenda exigem sessao de admin", () => {
 // =============================================================================
 
 describe("criar reserva pela recepcao", () => {
-  it("ignora o limite de 3 reservas por telefone", async () => {
-    await reservaNoBanco({ data: TERCA, inicio: "08:00", fim: "09:00" });
-    await reservaNoBanco({ data: TERCA, inicio: "11:00", fim: "12:00" });
-    await reservaNoBanco({ data: TERCA, inicio: "14:00", fim: "15:00" });
-
-    const ativas = await bancoDeTeste.reserva.count({
-      where: {
-        telefone: CLIENTE,
-        status: { in: [StatusReserva.CONFIRMADA, StatusReserva.REAGENDADA] },
-        inicio: { gt: new Date() },
-      },
-    });
-    expect(ativas).toBe(MAXIMO_DE_RESERVAS_ATIVAS);
-
-    // O cliente seria barrado aqui. A recepcao passa.
-    const resposta = await criarPelaRecepcao({
-      data: QUARTA,
-      inicio: "10:00",
-      fim: "11:00",
+  it("ignora o limite de reservas por telefone, mesmo com ele LIGADO", async () => {
+    // O limite nasce desligado desde 16/10/2026. Aqui ele e ligado de
+    // proposito, para o teste provar o que importa: mesmo valendo para o
+    // cliente, a recepcao passa por cima.
+    await bancoDeTeste.configuracao.update({
+      where: { chave: "maximoReservasAtivas" },
+      data: { valor: "3" },
     });
 
-    expect(resposta.status).toBe(201);
+    try {
+      await reservaNoBanco({ data: TERCA, inicio: "08:00", fim: "09:00" });
+      await reservaNoBanco({ data: TERCA, inicio: "11:00", fim: "12:00" });
+      await reservaNoBanco({ data: TERCA, inicio: "14:00", fim: "15:00" });
+
+      const ativas = await bancoDeTeste.reserva.count({
+        where: {
+          telefone: CLIENTE,
+          status: { in: [StatusReserva.CONFIRMADA, StatusReserva.REAGENDADA] },
+          inicio: { gt: new Date() },
+        },
+      });
+      expect(ativas).toBe(3);
+
+      // O cliente seria barrado aqui. A recepcao passa.
+      const resposta = await criarPelaRecepcao({
+        data: QUARTA,
+        inicio: "10:00",
+        fim: "11:00",
+      });
+
+      expect(resposta.status).toBe(201);
+    } finally {
+      // Devolve o valor de hoje: desligado. Deixar 3 aqui faria os outros
+      // arquivos da mesma passada falharem.
+      await bancoDeTeste.configuracao.update({
+        where: { chave: "maximoReservasAtivas" },
+        data: { valor: "0" },
+      });
+    }
   });
 
   it("ignora a antecedencia minima de 1 hora", async () => {

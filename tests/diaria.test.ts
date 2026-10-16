@@ -13,7 +13,7 @@
  *  6. o cliente so consegue nos dias cujo expediente cobre a janela inteira;
  *     a recepcao continua podendo em qualquer dia.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST as postReservaAdmin } from "@/app/api/admin/reservas/route";
 import { criarReservaNaRecepcao } from "@/lib/agenda-admin";
@@ -29,7 +29,12 @@ import { pedidoPost } from "./apoio/requisicao";
  *
  * Dentro dos 60 dias de antecedencia maxima de proposito: as conferencias no
  * modo CLIENTE recusam data distante demais, e o teste falaria de outra coisa.
+ *
+ * O RELOGIO E CONGELADO em 2026-10-12. Sem isso estas datas viravam passado
+ * com o tempo e o arquivo inteiro comecava a falhar sozinho, por "NO_PASSADO",
+ * sem ninguem ter mexido em nada. Data fixa pede relogio fixo.
  */
+const AGORA = new Date("2026-10-12T12:00:00.000Z");
 const TERCA = "2026-10-13";
 const SABADO = "2026-10-17";
 const TELEFONE = "+5511900000321";
@@ -75,7 +80,16 @@ async function limpar(): Promise<void> {
   await bancoDeTeste.reserva.deleteMany({ where: { telefone: TELEFONE } });
 }
 
-afterEach(limpar);
+beforeEach(() => {
+  // Congela apenas o relogio; a rede e o banco continuam normais.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AGORA);
+});
+
+afterEach(async () => {
+  vi.useRealTimers();
+  await limpar();
+});
 
 afterAll(async () => {
   await limpar();
