@@ -22,6 +22,7 @@ import {
   cancelarComoAdmin,
   cancelarSerie,
   editarCadastroDaReserva,
+  esticarTermino,
   reagendarComoAdmin,
 } from "./api";
 import { rotuloDoStatus } from "./cores";
@@ -33,7 +34,7 @@ import type { ItemDaAgenda, ReservaDetalhada, ResumoDaSerie } from "./tipos";
  *  a recepcao pode lancar fora do horario comum. O servidor da a palavra final. */
 const BLOCOS = blocosEntre("06:00", "23:00");
 
-type Modo = "detalhe" | "editar" | "reagendar";
+type Modo = "detalhe" | "editar" | "reagendar" | "estender";
 
 export function PainelDaReserva({
   item,
@@ -322,16 +323,45 @@ function DetalheDaReserva({
                   <Botao
                     aparencia="secundario"
                     largura="conteudo"
+                    onClick={() => {
+                      setErroDaAcao(null);
+                      setModo("estender");
+                    }}
+                  >
+                    Ficou mais tempo
+                  </Botao>
+                  <Botao
+                    aparencia="secundario"
+                    largura="conteudo"
                     onClick={() => setConfirmandoCancelamento(true)}
                   >
                     Cancelar reserva
                   </Botao>
                 </div>
               )
-            ) : (
+            ) : reserva.status === "CANCELADA" ? (
               <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm text-text-secondary">
-                Reserva encerrada. Não há ações disponíveis.
+                Reserva cancelada. Não há ações disponíveis.
               </p>
+            ) : (
+              /* CONCLUIDA: a reserva acabou, mas o cliente pode ter ficado
+                 mais tempo. Era aqui que a equipe nao tinha o que fazer. */
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-text-secondary">
+                  Reserva encerrada. Se o cliente ficou além do horário, ajuste
+                  o término aqui — o valor é recalculado e ele é avisado.
+                </p>
+                <Botao
+                  aparencia="secundario"
+                  largura="conteudo"
+                  onClick={() => {
+                    setErroDaAcao(null);
+                    setModo("estender");
+                  }}
+                >
+                  Ficou mais tempo
+                </Botao>
+              </div>
             )}
 
             <section className="flex flex-col gap-2 border-t border-border pt-4">
@@ -353,6 +383,31 @@ function DetalheDaReserva({
               setErroDaAcao(null);
               try {
                 await editarCadastroDaReserva(reservaId, dados);
+                setModo("detalhe");
+                recarregar();
+              } catch (problema: unknown) {
+                setErroDaAcao(mensagemDoErro(problema));
+              } finally {
+                setEnviando(false);
+              }
+            }}
+            aoDesistir={() => {
+              setModo("detalhe");
+              setErroDaAcao(null);
+            }}
+          />
+        ) : null}
+
+        {modo === "estender" ? (
+          <FormularioDeTempoExtra
+            reserva={reserva}
+            enviando={enviando}
+            erro={erroDaAcao}
+            aoSalvar={async (fim) => {
+              setEnviando(true);
+              setErroDaAcao(null);
+              try {
+                await esticarTermino(reservaId, { data: reserva.data, fim });
                 setModo("detalhe");
                 recarregar();
               } catch (problema: unknown) {
@@ -663,6 +718,108 @@ function Gaveta({
 
         <div className="px-4 py-5">{children}</div>
       </aside>
+    </div>
+  );
+}
+
+
+// -----------------------------------------------------------------------------
+
+/**
+ * "Ficou mais tempo": escolhe quanto tempo a mais, nao o horario final.
+ *
+ * A equipe pensa em "ficou meia hora a mais", e nao em "o termino virou
+ * 11:30". Pedir o horario obrigaria a recepcao a fazer a conta de cabeca com
+ * o cliente na frente.
+ */
+function FormularioDeTempoExtra({
+  reserva,
+  enviando,
+  erro,
+  aoSalvar,
+  aoDesistir,
+}: {
+  reserva: ReservaDetalhada;
+  enviando: boolean;
+  erro: string | null;
+  aoSalvar: (fim: string) => Promise<void>;
+  aoDesistir: () => void;
+}) {
+  const [minutos, setMinutos] = useState(30);
+
+  /** O termino atual mais os minutos escolhidos, em "HH:MM". */
+  function terminoCom(extra: number): string {
+    const [h, m] = reserva.fim.split(":").map(Number);
+    const total = (h ?? 0) * 60 + (m ?? 0) + extra;
+    return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  }
+
+  const OPCOES = [30, 60, 90, 120];
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-bg-secondary p-4">
+      <div>
+        <h3 className="text-sm font-bold text-text-primary">
+          O cliente ficou mais tempo
+        </h3>
+        <p className="mt-1 text-sm text-text-secondary">
+          A reserva terminava às {reserva.fim}. Escolha quanto tempo a mais ele
+          ficou — o valor é recalculado e ele recebe um WhatsApp com o total
+          atualizado.
+        </p>
+      </div>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-semibold text-text-primary">
+          Quanto tempo a mais
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {OPCOES.map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              aria-pressed={minutos === opcao}
+              onClick={() => setMinutos(opcao)}
+              className={`min-h-11 rounded-lg border px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${
+                minutos === opcao
+                  ? "border-black bg-brand text-black"
+                  : "border-border bg-bg-primary text-text-secondary hover:border-black"
+              }`}
+            >
+              {opcao === 60 ? "1 hora" : opcao === 120 ? "2 horas" : `${opcao} min`}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <p
+        aria-live="polite"
+        className="rounded-lg border border-border bg-bg-primary p-3 text-sm text-text-primary"
+      >
+        O término passa de <strong>{reserva.fim}</strong> para{" "}
+        <strong>{terminoCom(minutos)}</strong>.
+      </p>
+
+      {erro ? <AvisoDeErro mensagem={erro} /> : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Botao
+          aparencia="primario"
+          largura="conteudo"
+          disabled={enviando}
+          onClick={() => void aoSalvar(terminoCom(minutos))}
+        >
+          {enviando ? "Ajustando…" : "Confirmar o tempo a mais"}
+        </Botao>
+        <Botao
+          aparencia="secundario"
+          largura="conteudo"
+          disabled={enviando}
+          onClick={aoDesistir}
+        >
+          Voltar
+        </Botao>
+      </div>
     </div>
   );
 }

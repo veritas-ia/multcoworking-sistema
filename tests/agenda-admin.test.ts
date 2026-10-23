@@ -25,6 +25,7 @@ import {
 import { POST as postReservaAdmin } from "@/app/api/admin/reservas/route";
 import { POST as postCancelarCliente } from "@/app/api/publico/minhas-reservas/[id]/cancelar/route";
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
+import { esticarTerminoComoAdmin } from "@/lib/agenda-admin";
 import { validarReserva } from "@/lib/disponibilidade";
 import { COOKIE_SESSAO, criarSessao } from "@/lib/sessao-cliente";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
@@ -140,6 +141,9 @@ async function reservaNoBanco(entrada: {
   inicio: string;
   fim: string;
   salaId?: string;
+  status?: StatusReserva;
+  valor?: string;
+  categoria?: "HORA" | "DIARIA";
 }): Promise<string> {
   const inicio = instanteDe(entrada.data, entrada.inicio);
   const fim = instanteDe(entrada.data, entrada.fim);
@@ -152,8 +156,9 @@ async function reservaNoBanco(entrada: {
       inicio,
       fim,
       duracaoMinutos: Math.round((fim.getTime() - inicio.getTime()) / 60_000),
-      valor: "50.00",
-      status: StatusReserva.CONFIRMADA,
+      valor: entrada.valor ?? "50.00",
+      status: entrada.status ?? StatusReserva.CONFIRMADA,
+      categoria: entrada.categoria ?? "HORA",
       origem: OrigemReserva.PUBLICO,
     },
     select: { id: true },
@@ -705,5 +710,202 @@ describe("o minimo de 1 hora continua valendo para o CLIENTE", () => {
       modo: "ADMIN",
     });
     expect(comoAdmin.valido).toBe(true);
+  });
+});
+
+// =============================================================================
+// Esticar o termino — o cliente ficou mais tempo (23/10/2026)
+// =============================================================================
+
+describe("esticar o término", () => {
+  const OPERADOR_DE_TESTE = () => ({ id: operadorId, nome: "Recepção de Teste" });
+
+  it("soma o tempo extra ao valor congelado, sem refazer a conta inteira", async () => {
+    // Sala CI a R$40/h. Reserva de 10:00-11:00 gravada com R$40.
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00", valor: "40.00",
+    });
+
+    const resultado = await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "11:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    expect(resultado.ok).toBe(true);
+    if (!resultado.ok) return;
+
+    // 30 min a R$40/h = R$20. Total R$60.
+    expect(resultado.dados.valorAnterior).toBe("40.00");
+    expect(resultado.dados.valorExtra).toBe("20.00");
+    expect(resultado.dados.valor).toBe("60.00");
+    expect(resultado.dados.minutosExtras).toBe(30);
+  });
+
+  it("NÃO vira reagendamento: status, lembrete e avaliação ficam como estavam", async () => {
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00",
+      status: StatusReserva.CONCLUIDA, valor: "40.00",
+    });
+
+    await bancoDeTeste.reserva.update({
+      where: { id },
+      data: { lembrete13hEnviadoEm: new Date(), avaliacaoEnviadaEm: new Date() },
+    });
+
+    await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "11:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    const depois = await bancoDeTeste.reserva.findUniqueOrThrow({ where: { id } });
+
+    // O "Remarcar" marcaria REAGENDADA e zeraria os dois campos. Aqui, nao.
+    expect(depois.status).toBe(StatusReserva.CONCLUIDA);
+    expect(depois.lembrete13hEnviadoEm).not.toBeNull();
+    expect(depois.avaliacaoEnviadaEm).not.toBeNull();
+  });
+
+  it("funciona em reserva JÁ CONCLUÍDA — que é o caso real", async () => {
+    // O "Remarcar" recusa isto com "Só dá para remarcar uma reserva ativa".
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00",
+      status: StatusReserva.CONCLUIDA, valor: "40.00",
+    });
+
+    const resultado = await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "12:00"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    expect(resultado.ok).toBe(true);
+  });
+
+  it("RECUSA engolir a reserva seguinte, mesmo as duas já CONCLUÍDAS", async () => {
+    // A armadilha: reserva CONCLUIDA nao ocupa a sala — o gatilho do banco a
+    // tira da tabela de travas. Sem a conferencia propria, o termino novo
+    // passaria por cima da reserva de outro cliente sem ninguem perceber.
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00",
+      status: StatusReserva.CONCLUIDA, valor: "40.00",
+    });
+    await reservaNoBanco({
+      data: TERCA, inicio: "11:30", fim: "12:30", status: StatusReserva.CONCLUIDA,
+    });
+
+    const resultado = await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "12:00"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.falha.codigo).toBe("HORARIO_TOMADO");
+    expect(resultado.falha.motivo).toContain("11:30");
+  });
+
+  it("ACEITA esticar até encostar na reserva seguinte", async () => {
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00", valor: "40.00",
+    });
+    await reservaNoBanco({ data: TERCA, inicio: "11:30", fim: "12:30" });
+
+    const resultado = await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "11:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    expect(resultado.ok).toBe(true);
+  });
+
+  it("RECUSA encurtar — só estica", async () => {
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00", valor: "40.00",
+    });
+
+    const resultado = await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "10:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    expect(resultado.ok).toBe(false);
+    if (resultado.ok) return;
+    expect(resultado.falha.motivo).toContain("Remarcar");
+  });
+
+  it("RECUSA tempo fora da grade de 30 minutos", async () => {
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00", valor: "40.00",
+    });
+
+    const resultado = await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "11:20"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    expect(resultado.ok).toBe(false);
+  });
+
+  it("RECUSA reserva cancelada e reserva de diária", async () => {
+    const cancelada = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00",
+    });
+    await bancoDeTeste.reserva.update({
+      where: { id: cancelada },
+      data: { status: StatusReserva.CANCELADA, canceladoEm: new Date() },
+    });
+
+    const recusaCancelada = await esticarTerminoComoAdmin({
+      reservaId: cancelada,
+      fim: instanteDe(TERCA, "11:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+    expect(recusaCancelada.ok).toBe(false);
+
+    const reuniao = await bancoDeTeste.sala.findUniqueOrThrow({
+      where: { slug: "sala-de-reuniao" },
+      select: { id: true },
+    });
+
+    const diaria = await reservaNoBanco({
+      data: QUARTA, inicio: "08:00", fim: "18:00",
+      salaId: reuniao.id, categoria: "DIARIA", valor: "350.00",
+    });
+
+    const recusaDiaria = await esticarTerminoComoAdmin({
+      reservaId: diaria,
+      fim: instanteDe(QUARTA, "18:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+    expect(recusaDiaria.ok).toBe(false);
+    if (recusaDiaria.ok) return;
+    expect(recusaDiaria.falha.motivo).toContain("diária");
+  });
+
+  it("guarda no histórico quanto tempo e quanto custou", async () => {
+    const id = await reservaNoBanco({
+      data: TERCA, inicio: "10:00", fim: "11:00", valor: "40.00",
+    });
+
+    await esticarTerminoComoAdmin({
+      reservaId: id,
+      fim: instanteDe(TERCA, "11:30"),
+      operador: OPERADOR_DE_TESTE(),
+    });
+
+    const depois = await bancoDeTeste.reserva.findUniqueOrThrow({ where: { id } });
+    const historico = depois.historicoAlteracoes as { acao: string; extra?: { minutos: number; valor: string } }[];
+    const ultima = historico[historico.length - 1];
+
+    // Sem isto, ninguem explicaria a diferenca numa reserva de tres meses
+    // atras — o preco da sala pode ter mudado no meio do caminho.
+    expect(ultima?.acao).toBe("ESTENDIDA");
+    expect(ultima?.extra).toEqual({ minutos: 30, valor: "20.00" });
   });
 });

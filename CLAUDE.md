@@ -112,7 +112,7 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Preço é informativo no MVP ("valor estimado"), sem pagamento online. O valor fica congelado na reserva no momento da criação; aumento futuro de preço não altera reservas antigas.
 - Lembrete cujo horário já passou no momento da criação não é enviado; fica registrado como "não aplicável".
 - Ao reagendar, os campos de lembrete são zerados e os lembretes valem para o novo horário. A regra "uma vez só" passa a valer por horário agendado, não por reserva na vida toda.
-- Nove templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h e convite para avaliar. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes e no convite para avaliar, {{link}} — que nos lembretes é a área "Minhas reservas" e no convite é o Google. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
+- Dez templates de mensagem editáveis no painel: código de verificação, reserva confirmada, série confirmada, reserva cancelada, reserva reagendada, lembrete 13h, lembrete 3h e convite para avaliar. Variáveis permitidas: {{nome}}, {{sala}}, {{data}}, {{inicio}}, {{fim}}, {{valor}}, {{codigo}} e, só na série, {{dias}}, {{periodo}} e {{quantidade}}, e só nos lembretes e no convite para avaliar, {{link}} — que nos lembretes é a área "Minhas reservas" e no convite é o Google. O texto de cancelamento não distingue se foi o cliente ou a equipe que cancelou.
 - Criar uma série recorrente manda UMA mensagem só, resumindo a série (sala, dias da
   semana, horário, período e quantas datas) — não uma por ocorrência. Uma série de dois
   meses mandaria ~17 mensagens seguidas, que parece defeito para o cliente e arrisca o
@@ -359,6 +359,40 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - **Os quatro testes que proibiam dinheiro não foram apagados** — viraram a vigia da
   fronteira nova: geral sem dinheiro, busca sem dinheiro, individual com o total e
   sem o preço linha a linha.
+
+### Ajuste de término: o cliente ficou mais tempo (23/10/2026)
+- **Cenário real:** a pessoa marcou das 10h às 11h e saiu 11h30, porque não havia
+  reserva depois. Pagou o tempo a mais no balcão, mas a agenda e o relatório seguiam
+  dizendo 11h. A equipe não tinha como registrar.
+- **É uma ação PRÓPRIA (`esticarTerminoComoAdmin`), e não o "Remarcar".** O remarcar
+  não serve por três motivos: (1) **recusa reserva encerrada**, e a reserva de quem
+  ficou mais tempo já está CONCLUIDA; (2) marcaria **REAGENDADA**, o que seria mentira
+  — ninguém remarcou nada; (3) **zera lembrete e avaliação** e manda o WhatsApp de
+  remarcação. Aqui o status fica como está e nada disso é tocado.
+- **SÓ ESTICA** (decisão do dono). Encurtar reduziria faturamento já registrado com um
+  clique. Para reduzir, usa-se o "Remarcar".
+- **O VALOR: o congelado é MANTIDO e o tempo extra é somado pelo preço de hoje.** Assim
+  a quebra fica honesta — "R$ 40,00 + R$ 20,00 de 30 min = R$ 60,00". Recalculando tudo
+  não daria para dizer quanto custou o extra se o preço da sala tivesse mudado. O
+  histórico guarda `extra: { minutos, valor }`, porque sem isso ninguém explicaria a
+  diferença numa reserva de três meses atrás.
+- **A ARMADILHA que exigiu conferência própria:** a trava de sobreposição do banco só
+  enxerga reserva ATIVA — o gatilho tira a linha de `ocupacao_salas` assim que a
+  reserva vira CONCLUIDA. Como a reserva ajustada quase sempre já terminou, e a
+  seguinte também pode ter terminado, **nem o banco nem o motor barrariam** o término
+  novo de engolir a reserva de outro cliente. Por isso a checagem é feita na mão,
+  olhando todas as reservas da sala menos as canceladas, mais os bloqueios. Há teste
+  com as duas reservas CONCLUIDAS.
+- **Diária não aceita ajuste:** tem preço fechado do dia inteiro, e cobrar hora extra
+  em cima seria inventar regra que ninguém combinou. A recusa explica isso.
+- O tempo extra precisa ser **múltiplo de 30 min**, como o resto da agenda.
+- **O cliente é avisado** (decisão do dono): décimo modelo, `reserva_estendida`, com o
+  horário novo, quanto tempo foi acrescentado (`{{extra}}`) e o valor já atualizado.
+- Na tela, a recepção escolhe **quanto tempo a mais** (30 min, 1h, 90 min, 2h), e não o
+  horário final: a equipe pensa em "ficou meia hora a mais", e pedir o horário obrigaria
+  a fazer a conta de cabeça com o cliente na frente. O botão "Ficou mais tempo" aparece
+  tanto na reserva ativa quanto na **concluída** — onde antes não havia ação nenhuma.
+- **O relatório se ajusta sozinho:** ele lê `fim` e `valor` da reserva, e os dois mudam.
 
 ### Confirmação agrupada (16/10/2026)
 - **Problema real:** o site reserva UMA de cada vez, então quem quer três passa pelo

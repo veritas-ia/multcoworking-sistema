@@ -40,6 +40,9 @@ export type VariaveisMensagem = {
    * campo de texto com variaveis soltas.
    */
   lista?: string;
+  // --- so no aviso de termino esticado ---
+  /** "30 minutos", "1 hora e 30 minutos" — quanto tempo a mais o cliente ficou. */
+  extra?: string;
   /** Endereco da area "Minhas reservas". So nos lembretes (Fase 10). */
   link?: string;
 };

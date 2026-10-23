@@ -94,6 +94,29 @@ export function reagendarComoAdmin(
   });
 }
 
+/**
+ * Estica o termino porque o cliente ficou mais tempo.
+ *
+ * Devolve a quebra do valor para a tela poder mostrar de onde veio a
+ * diferenca, em vez de so trocar o numero.
+ */
+export function esticarTermino(
+  id: string,
+  entrada: { data: string; fim: string },
+): Promise<{
+  id: string;
+  fim: string;
+  valor: string;
+  valorAnterior: string;
+  valorExtra: string;
+  minutosExtras: number;
+}> {
+  return pedir(`/api/admin/reservas/${id}/estender`, {
+    method: "POST",
+    body: JSON.stringify(entrada),
+  });
+}
+
 // -----------------------------------------------------------------------------
 // Bloqueios (Fase 9)
 // -----------------------------------------------------------------------------

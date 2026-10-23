@@ -54,6 +54,11 @@ export const TEMPLATES: readonly DefinicaoDeTemplate[] = [
     variaveis: ["nome", "sala", "dias", "inicio", "fim", "periodo", "quantidade"],
   },
   {
+    chave: ChaveTemplate.reserva_estendida,
+    rotulo: "Término ajustado (cliente ficou mais tempo)",
+    variaveis: ["nome", "sala", "data", "inicio", "fim", "extra", "valor"],
+  },
+  {
     chave: ChaveTemplate.reserva_cancelada,
     rotulo: "Reserva cancelada",
     variaveis: ["nome", "sala", "data", "inicio", "fim"],
@@ -101,6 +106,7 @@ export const EXEMPLO_DA_PREVIA: Record<string, string> = {
   dias: "terça e quarta",
   periodo: "15/09 a 30/11",
   quantidade: "17",
+  extra: "30 minutos",
   link: "https://coworking.exemplo/minhas-reservas",
   // A lista da confirmacao agrupada. Com tres linhas de proposito: a equipe
   // precisa ver como o bloco cresce antes de reescrever o texto em volta.

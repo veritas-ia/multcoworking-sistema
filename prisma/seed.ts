@@ -298,6 +298,17 @@ const TEMPLATES = [
       "Precisa cancelar ou remarcar? É só acessar:\n{{link}}",
   },
   {
+    chave: ChaveTemplate.reserva_estendida,
+    descricao:
+      "Enviada quando a equipe estica o término porque o cliente ficou mais tempo. Mostra o horário novo, quanto tempo foi acrescentado e o valor já atualizado.",
+    texto:
+      "Olá, {{nome}}! Ajustamos o horário da sua reserva na {{sala}}.\n\n" +
+      "📅 {{data}}\n" +
+      "🕐 {{inicio}} às {{fim}} ({{extra}} a mais)\n\n" +
+      "Valor atualizado: {{valor}}\n\n" +
+      "Qualquer dúvida, é só falar com a recepção.",
+  },
+  {
     chave: ChaveTemplate.reservas_confirmadas,
     descricao:
       "Enviada quando o cliente marca mais de uma reserva seguida no site. Vai uma mensagem só, com a quantidade e o valor somado. Quem marca uma reserva única continua recebendo \"Reserva confirmada\".",

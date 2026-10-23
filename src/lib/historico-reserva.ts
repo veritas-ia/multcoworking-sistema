@@ -10,7 +10,13 @@
  */
 import type { Prisma } from "@/generated/prisma/client";
 
-export type AcaoDoHistorico = "CRIADA" | "REAGENDADA" | "CANCELADA" | "EDITADA";
+export type AcaoDoHistorico =
+  | "CRIADA"
+  | "REAGENDADA"
+  | "CANCELADA"
+  | "EDITADA"
+  /** A equipe esticou o termino porque o cliente ficou mais tempo. */
+  | "ESTENDIDA";
 
 export type AutorDaAcao =
   | { por: "CLIENTE" }
@@ -33,6 +39,14 @@ export type EntradaDeHistorico = AutorDaAcao & {
   para?: Momento;
   /** Campos trocados numa edicao de cadastro (nome, telefone). */
   camposEditados?: string[];
+  /**
+   * So em ESTENDIDA: quanto tempo a mais e quanto ele custou.
+   *
+   * Guardado aqui, e nao calculado depois, porque o preco da sala pode mudar
+   * amanha. Sem isto, a equipe nao conseguiria mais explicar de onde veio a
+   * diferenca numa reserva de tres meses atras.
+   */
+  extra?: { minutos: number; valor: string };
 };
 
 /** Acrescenta uma linha sem perder o que ja estava la. */

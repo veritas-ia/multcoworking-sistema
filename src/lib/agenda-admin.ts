@@ -26,10 +26,10 @@ import {
 import { historicoCom, type Momento } from "@/lib/historico-reserva";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
-import type { CategoriaReserva } from "@/lib/precos";
+import { BLOCO_MINUTOS, type CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
-import { minutosEntre } from "@/lib/tempo";
+import { horaLocalDe, minutosEntre } from "@/lib/tempo";
 
 /** Quem esta operando o painel. Vai para o historico de cada acao. */
 export type Operador = { id: string; nome: string };
@@ -400,6 +400,210 @@ export async function cancelarComoAdmin(entrada: {
       nomeCliente: reserva.nomeCliente,
       telefone: reserva.telefone,
       valor: reserva.valor.toFixed(2),
+    },
+  };
+}
+
+
+// -----------------------------------------------------------------------------
+// Esticar o termino — o cliente ficou mais tempo do que reservou
+// -----------------------------------------------------------------------------
+
+/** O que a equipe precisa ver depois de esticar: a quebra do valor. */
+export type ReservaEstendida = ReservaAfetada & {
+  /** Quanto tempo foi acrescentado. */
+  minutosExtras: number;
+  /** Quanto custou SO o tempo extra, em reais: "40.00". */
+  valorExtra: string;
+  /** O valor que a reserva tinha antes do ajuste. */
+  valorAnterior: string;
+};
+
+/**
+ * ESTICA O TERMINO DE UMA RESERVA QUE JA ACONTECEU.
+ *
+ * O cenario: a pessoa marcou das 10h as 11h e ficou ate 11h30, porque nao
+ * havia reserva depois. Pagou no balcao, mas a agenda e o relatorio seguiam
+ * dizendo 11h.
+ *
+ * NAO E UM REAGENDAMENTO, e por isso nao reusa "reagendarComoAdmin":
+ *   - aquele RECUSA reserva encerrada, e esta quase sempre ja esta CONCLUIDA;
+ *   - aquele marca REAGENDADA, o que seria mentira: ninguem remarcou;
+ *   - aquele zera lembrete e avaliacao, que aqui nao tem nada a ver.
+ * Aqui o status fica como esta e nada mais e tocado.
+ *
+ * O VALOR: o congelado da reserva e MANTIDO e o tempo extra e somado pelo
+ * preco de hoje. A quebra fica guardada no historico — sem ela, ninguem
+ * conseguiria explicar a diferenca numa reserva de tres meses atras.
+ */
+export async function esticarTerminoComoAdmin(entrada: {
+  reservaId: string;
+  /** O novo horario de termino. Precisa ser DEPOIS do atual. */
+  fim: Date;
+  operador: Operador;
+}): Promise<Resultado<ReservaEstendida>> {
+  const reserva = await prisma.reserva.findUnique({
+    where: { id: entrada.reservaId },
+    include: { sala: { select: { nome: true } } },
+  });
+
+  if (!reserva) {
+    return { ok: false, falha: { codigo: "NAO_ENCONTRADA", motivo: "Reserva não encontrada." } };
+  }
+
+  if (reserva.status === StatusReserva.CANCELADA) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "JA_ENCERRADA",
+        motivo: "Esta reserva foi cancelada. Não há horário para ajustar.",
+      },
+    };
+  }
+
+  // SO ESTICAR (decisao do dono). Encurtar reduziria faturamento ja
+  // registrado com um clique, e o caso que motivou isto e so de esticar.
+  if (entrada.fim <= reserva.fim) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "REGRA",
+        motivo: `O novo término precisa ser depois das ${horaLocalDe(reserva.fim)}. Para reduzir o horário, use "Remarcar".`,
+      },
+    };
+  }
+
+  const minutosExtras = minutosEntre(reserva.fim, entrada.fim);
+
+  if (minutosExtras % BLOCO_MINUTOS !== 0) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "REGRA",
+        motivo: "O tempo a mais precisa ser múltiplo de 30 minutos, como o resto da agenda.",
+      },
+    };
+  }
+
+  // A DIARIA tem preco FECHADO do dia inteiro. Cobrar hora extra em cima dela
+  // seria inventar uma regra que ninguem combinou.
+  if (reserva.categoria === "DIARIA") {
+    return {
+      ok: false,
+      falha: {
+        codigo: "REGRA",
+        motivo:
+          "Reserva de diária tem preço fechado do dia inteiro e não aceita ajuste de término. Fale com quem cuida do sistema.",
+      },
+    };
+  }
+
+  // A CONFERENCIA QUE NINGUEM MAIS FAZ.
+  //
+  // A trava de sobreposicao do banco so enxerga reserva ATIVA: o gatilho tira
+  // da tabela de ocupacao assim que a reserva vira CONCLUIDA. Como esta
+  // reserva quase sempre JA terminou, e a seguinte tambem pode ter terminado,
+  // nem o banco nem o motor de disponibilidade barrariam o termino novo de
+  // engolir a reserva de outro cliente. Por isso a conferencia e aqui, olhando
+  // TODAS as reservas da sala menos as canceladas.
+  const colidindo = await prisma.reserva.findFirst({
+    where: {
+      salaId: reserva.salaId,
+      id: { not: reserva.id },
+      status: { not: StatusReserva.CANCELADA },
+      inicio: { lt: entrada.fim },
+      fim: { gt: reserva.fim },
+    },
+    select: { inicio: true, nomeCliente: true },
+    orderBy: { inicio: "asc" },
+  });
+
+  if (colidindo) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "HORARIO_TOMADO",
+        motivo: `Não dá para esticar até lá: às ${horaLocalDe(colidindo.inicio)} começa a reserva de ${colidindo.nomeCliente}.`,
+      },
+    };
+  }
+
+  // Bloqueio administrativo tambem ocupa a sala.
+  const bloqueio = await prisma.bloqueio.findFirst({
+    where: {
+      salaId: reserva.salaId,
+      inicio: { lt: entrada.fim },
+      fim: { gt: reserva.fim },
+    },
+    select: { inicio: true },
+  });
+
+  if (bloqueio) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "HORARIO_TOMADO",
+        motivo: `Não dá para esticar até lá: às ${horaLocalDe(bloqueio.inicio)} a sala está bloqueada.`,
+      },
+    };
+  }
+
+  // SO O PEDACO EXTRA e calculado, com os precos de hoje. O valor que a
+  // reserva ja tinha nao e refeito: ele foi congelado na criacao, e refazer a
+  // conta inteira impediria de dizer quanto custou o tempo a mais.
+  const extra = await calcularValor(reserva.salaId, reserva.fim, entrada.fim, {
+    pessoas: reserva.pessoas,
+  });
+
+  const valorAnterior = reserva.valor;
+  const novoValor = valorAnterior.add(extra);
+  const agora = new Date();
+
+  const atualizada = await prisma.reserva.update({
+    where: { id: reserva.id },
+    data: {
+      fim: entrada.fim,
+      duracaoMinutos: minutosEntre(reserva.inicio, entrada.fim),
+      valor: novoValor,
+      // O STATUS NAO MUDA, e lembrete e avaliacao nao sao tocados: isto nao e
+      // um reagendamento, e a reserva ja aconteceu.
+      historicoAlteracoes: historicoCom(reserva.historicoAlteracoes, {
+        em: agora.toISOString(),
+        acao: "ESTENDIDA",
+        por: "ADMIN",
+        quemId: entrada.operador.id,
+        quemNome: entrada.operador.nome,
+        de: {
+          salaId: reserva.salaId,
+          inicio: reserva.inicio.toISOString(),
+          fim: reserva.fim.toISOString(),
+          valor: valorAnterior.toFixed(2),
+        },
+        para: {
+          salaId: reserva.salaId,
+          inicio: reserva.inicio.toISOString(),
+          fim: entrada.fim.toISOString(),
+          valor: novoValor.toFixed(2),
+        },
+        extra: { minutos: minutosExtras, valor: extra.toFixed(2) },
+      }),
+    },
+    include: { sala: { select: { nome: true } } },
+  });
+
+  return {
+    ok: true,
+    dados: {
+      id: atualizada.id,
+      sala: atualizada.sala.nome,
+      inicio: atualizada.inicio,
+      fim: atualizada.fim,
+      nomeCliente: atualizada.nomeCliente,
+      telefone: atualizada.telefone,
+      valor: atualizada.valor.toFixed(2),
+      minutosExtras,
+      valorExtra: extra.toFixed(2),
+      valorAnterior: valorAnterior.toFixed(2),
     },
   };
 }

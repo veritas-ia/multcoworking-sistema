@@ -73,6 +73,8 @@ enum ChaveTemplate {
   /// so, com a quantidade e o valor somado. Quem faz uma reserva unica
   /// continua recebendo "reserva_confirmada".
   reservas_confirmadas
+  /// A equipe esticou o termino porque o cliente ficou mais tempo.
+  reserva_estendida
 }
 
 /// De quanto em quanto tempo uma serie se repete (Fase 9).
