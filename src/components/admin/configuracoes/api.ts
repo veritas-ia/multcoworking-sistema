@@ -371,3 +371,64 @@ export function reordenarFotos(
     body: JSON.stringify({ ids }),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Empresas (27/10/2026)
+// -----------------------------------------------------------------------------
+
+export type EmpresaDoPainel = {
+  id: string;
+  nome: string;
+  ativa: boolean;
+  telefones: number;
+};
+
+export type ClienteConhecido = {
+  telefone: string;
+  /** Todos os nomes que este número já usou, do mais recente ao mais antigo. */
+  nomes: string[];
+  reservas: number;
+  empresaId: string | null;
+};
+
+export type SugestaoDeEmpresa = {
+  palavra: string;
+  telefones: string[];
+  exemplos: string[];
+};
+
+export function buscarEmpresas(sinal?: AbortSignal): Promise<{
+  empresas: EmpresaDoPainel[];
+  clientes: ClienteConhecido[];
+  sugestoes: SugestaoDeEmpresa[];
+}> {
+  return pedir("/api/admin/empresas", { signal: sinal });
+}
+
+export function criarEmpresa(nome: string): Promise<{ empresa: EmpresaDoPainel }> {
+  return pedir("/api/admin/empresas", {
+    method: "POST",
+    body: JSON.stringify({ nome }),
+  });
+}
+
+export function editarEmpresa(
+  id: string,
+  dados: { nome?: string; ativa?: boolean },
+): Promise<{ empresa: EmpresaDoPainel }> {
+  return pedir(`/api/admin/empresas/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(dados),
+  });
+}
+
+/** empresaId nulo DESVINCULA o telefone. */
+export function vincularTelefone(
+  telefone: string,
+  empresaId: string | null,
+): Promise<{ telefone: string; empresaId: string | null }> {
+  return pedir("/api/admin/empresas", {
+    method: "PUT",
+    body: JSON.stringify({ telefone, empresaId }),
+  });
+}

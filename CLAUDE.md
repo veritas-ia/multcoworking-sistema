@@ -574,3 +574,29 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - Fase 11 — Configurações no painel (preços, salas, horários, parâmetros, políticas, templates).
 - Fase 12 — Revisão, polimento, responsividade, Open Graph, build de produção.
 - Fase 13 — Deploy no EasyPanel: Dockerfile standalone, migração, healthcheck, backup, docs/deploy.md.
+### Empresas: vários telefones da mesma empresa (27/10/2026)
+- **O problema, medido no banco:** a Prestare aparece em **3 telefones** (17 reservas
+  no total) e a Toca em **2** (14 reservas). Para a equipe é um cliente só; para o
+  relatório eram cinco clientes diferentes, cada um com uma fatia das horas.
+- **O vínculo é do TELEFONE, nunca da reserva.** Marcar um telefone como sendo da
+  empresa junta **na hora** todas as reservas passadas e futuras dele. Não existe
+  campo "empresa" na reserva: se existisse, mudar a empresa de um cliente exigiria
+  reescrever o histórico, e reserva antiga não se mexe.
+- **Um telefone pertence a no máximo UMA empresa, e quem garante é o banco:** o
+  telefone é a CHAVE PRIMÁRIA de `telefones_empresa`. Sem isso o mesmo número poderia
+  somar em duas empresas e o faturamento apareceria dobrado, sem ninguém desconfiar
+  do número.
+- **O sistema SUGERE, nunca junta sozinho.** A tela mostra os números que compartilham
+  uma palavra de 4 letras ou mais no nome ("prestare", "toca"), ignorando palavras
+  genéricas (de, da, cliente, teste…), e a equipe confirma uma por uma. Um palpite
+  errado viraria faturamento somado na empresa errada — e ninguém reclamaria, porque
+  o número continuaria parecendo certo.
+- A lista de telefones mostra **todos os nomes que cada número já usou**, e não só o
+  mais recente: é justamente a variação ("Prestare", "Prestare Karen", "Prestare -
+  Karen") que faz a equipe reconhecer de quem é o número.
+- **Empresa não se exclui, se desliga** — mesma regra das salas. Apagar tiraria em
+  silêncio o histórico do relatório.
+- O telefone aparece **inteiro** nesta tela, como no relatório de clientes: é a equipe
+  olhando os próprios clientes, atrás de login.
+- Isto **resolve o problema dos 44 nomes sem limpar nada**: os nomes antigos continuam
+  lá, e o agrupamento passa a ser pela empresa. Ver "Nome travado ao telefone".

@@ -223,6 +223,44 @@ model TentativaLogin {
   @@map("tentativas_login")
 }
 
+/// Uma empresa que aluga sala, com varios funcionarios reservando.
+///
+/// Existe porque o relatorio por CLIENTE nao bastava: a Prestare aparece em
+/// tres telefones diferentes, e as vezes quem paga a conta do mes e a empresa.
+model Empresa {
+  id    String  @id @default(uuid(7))
+  nome  String  @unique
+  /// Desligada some dos relatorios, mas o vinculo continua: empresa que saiu
+  /// do coworking ainda precisa aparecer no historico.
+  ativa Boolean @default(true)
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  telefones TelefoneDaEmpresa[]
+
+  @@map("empresas")
+}
+
+/// Qual telefone pertence a qual empresa.
+///
+/// O TELEFONE E A CHAVE, e nao um id proprio: assim o banco impede sozinho o
+/// mesmo numero somar em duas empresas e inflar o relatorio das duas.
+///
+/// O vinculo e do TELEFONE, nunca da reserva. O relatorio descobre a empresa
+/// na hora de montar, entao marcar um numero junta as reservas passadas dele
+/// na hora — e desvincular tira.
+model TelefoneDaEmpresa {
+  telefone  String  @id
+  empresaId String  @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([empresaId])
+  @@map("telefones_empresa")
+}
+
 /// Parametros gerais do sistema, editaveis no painel (Fase 11).
 model Configuracao {
   chave String @id
