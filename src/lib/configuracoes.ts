@@ -24,7 +24,9 @@ export type ChaveParametro =
   | "janelaCancelamentoHoras"
   | "antecedenciaMinimaMinutos"
   | "antecedenciaMaximaDias"
-  | "maximoReservasAtivas";
+  | "maximoReservasAtivas"
+  | "mensagensHoraInicial"
+  | "mensagensHoraFinal";
 
 export type DefinicaoParametro = {
   chave: ChaveParametro;
@@ -89,6 +91,24 @@ export const PARAMETROS: readonly DefinicaoParametro[] = [
     unidade: "reservas (0 = sem limite)",
     minimo: 0,
     maximo: 50,
+  },
+  {
+    chave: "mensagensHoraInicial",
+    rotulo: "Mensagens automáticas a partir das",
+    ajuda:
+      "Antes desta hora o sistema não manda lembrete nem convite para avaliar. Um lembrete que cairia de madrugada é ANTECIPADO para a noite anterior — nunca adiado, porque aviso que chega depois da reserva começar não serve para nada.",
+    unidade: "horas",
+    minimo: 0,
+    maximo: 23,
+  },
+  {
+    chave: "mensagensHoraFinal",
+    rotulo: "Mensagens automáticas até as",
+    ajuda:
+      "Depois desta hora o sistema não manda mais nada automático. Vale para os lembretes e para o convite de avaliação; a confirmação da reserva e o código do WhatsApp continuam saindo na hora, porque a pessoa está esperando a resposta.",
+    unidade: "horas",
+    minimo: 1,
+    maximo: 24,
   },
 ] as const;
 
@@ -176,6 +196,13 @@ async function validarConjunto(valores: ValoresDeParametros): Promise<string | n
 
   if (valores.antecedenciaMinimaMinutos >= antecedenciaMaximaEmMinutos) {
     return "A antecedência mínima ficou maior que a máxima: assim nenhuma data do calendário poderia ser reservada.";
+  }
+
+  // Janela de silencio invertida ou vazia deixaria o sistema sem NENHUMA hora
+  // para mandar lembrete — e ninguem receberia aviso de reserva nenhuma, sem
+  // erro aparecer em lugar nenhum.
+  if (valores.mensagensHoraFinal <= valores.mensagensHoraInicial) {
+    return "O horário final das mensagens automáticas precisa ser depois do inicial. Do jeito que está, nenhum lembrete poderia ser enviado.";
   }
 
   // Uma sala com duracao maxima MENOR que a duracao minima nunca aceitaria

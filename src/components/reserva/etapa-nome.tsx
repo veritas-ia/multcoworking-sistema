@@ -24,6 +24,8 @@ import { TituloDaEtapa } from "./pecas";
  */
 export function EtapaNome({
   nome,
+  nomeJaConhecido,
+  aoLiberarNome,
   pessoas,
   perguntarPessoas,
   capacidade,
@@ -34,6 +36,9 @@ export function EtapaNome({
   aoContinuar,
 }: {
   nome: string;
+  /** Veio da reserva anterior deste telefone: o campo nasce travado. */
+  nomeJaConhecido: boolean;
+  aoLiberarNome: () => void;
   /** Texto, para o campo poder ficar vazio enquanto a pessoa digita. */
   pessoas: string;
   perguntarPessoas: boolean;
@@ -106,20 +111,43 @@ export function EtapaNome({
         {perguntarPessoas ? "Quase lá" : "Como você se chama?"}
       </TituloDaEtapa>
 
-      <Campo
-        etiqueta="Seu nome"
-        type="text"
-        autoComplete="name"
-        autoCapitalize="words"
-        maxLength={120}
-        placeholder="Maria Silva"
-        value={nome}
-        erro={erro}
-        onChange={(evento) => {
-          aoMudar(evento.target.value);
-          setErro(null);
-        }}
-      />
+      {/* NOME JA CONHECIDO: vem travado, com "Trocar o nome" do lado.
+          Nao e para impedir a pessoa de se corrigir — e para ela nao
+          reescrever o nome por reflexo a cada reserva e virar varias versoes
+          de si mesma no painel. Quem quiser trocar, troca num toque. */}
+      {nomeJaConhecido ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-text-primary">Seu nome</span>
+          <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-border bg-bg-secondary px-4 py-2.5">
+            <span className="text-base text-text-primary">{nome}</span>
+            <button
+              type="button"
+              onClick={aoLiberarNome}
+              className="min-h-11 text-sm font-semibold text-text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              Trocar o nome
+            </button>
+          </div>
+          <span className="text-sm text-text-secondary">
+            É o nome da sua última reserva. Pode trocar se quiser.
+          </span>
+        </div>
+      ) : (
+        <Campo
+          etiqueta="Seu nome"
+          type="text"
+          autoComplete="name"
+          autoCapitalize="words"
+          maxLength={120}
+          placeholder="Maria Silva"
+          value={nome}
+          erro={erro}
+          onChange={(evento) => {
+            aoMudar(evento.target.value);
+            setErro(null);
+          }}
+        />
+      )}
 
       {perguntarPessoas ? (
         <Campo

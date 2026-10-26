@@ -17,6 +17,7 @@ import {
   criarSessao,
   embaralhar,
 } from "@/lib/sessao-cliente";
+import { instanteDe } from "@/lib/tempo";
 import { formatarEnquantoDigita, mascararTelefone } from "@/lib/telefone";
 import { variavelParecidaPreenchida } from "@/lib/whatsapp";
 
@@ -54,6 +55,7 @@ describe("GET /api/publico/sessao", () => {
     await expect(resposta.json()).resolves.toEqual({
       identificado: false,
       telefoneMascarado: null,
+      nomeConhecido: null,
     });
   });
 
@@ -65,6 +67,39 @@ describe("GET /api/publico/sessao", () => {
 
     expect(corpo.identificado).toBe(true);
     expect(corpo.telefoneMascarado).toBe("(11) 9****-0001");
+  });
+
+  it("devolve o NOME da última reserva, para o formulário já vir preenchido", async () => {
+    // Impede a mesma pessoa de virar varias versoes de si mesma no painel.
+    const sala = await bancoDeTeste.sala.findFirstOrThrow({
+      orderBy: { ordem: "asc" },
+      select: { id: true },
+    });
+
+    await bancoDeTeste.reserva.create({
+      data: {
+        salaId: sala.id,
+        nomeCliente: "Karen Gomes",
+        telefone: TELEFONE,
+        profissao: "OUTROS",
+        inicio: instanteDe("2026-11-10", "09:00"),
+        fim: instanteDe("2026-11-10", "10:00"),
+        duracaoMinutos: 60,
+        valor: "40.00",
+        origem: "PUBLICO",
+      },
+    });
+
+    try {
+      const resposta = await getSessao(
+        pedidoGet("/api/publico/sessao", {}, { cookie: await cookieDeSessao() }),
+      );
+      const corpo = await resposta.json();
+
+      expect(corpo.nomeConhecido).toBe("Karen Gomes");
+    } finally {
+      await bancoDeTeste.reserva.deleteMany({ where: { telefone: TELEFONE } });
+    }
   });
 
   it("nunca deixa o telefone inteiro vazar na resposta", async () => {

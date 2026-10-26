@@ -45,8 +45,11 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   O número virou parâmetro editável no painel; ver "Limite de reservas por telefone".
   Limite de envio de códigos por número e por IP continua valendo.
 - Mensagem de avaliação: enviada 1 hora DEPOIS do término da reserva, com o link do
-  Google Meu Negócio. Mesma mecânica dos lembretes (uma vez só, marcar antes de
-  mandar). Sem o link cadastrado no painel, ela simplesmente não é enviada.
+  Google Meu Negócio. **UMA VEZ POR CLIENTE, na vida toda** (mudado em 23/10/2026 —
+  era uma vez por reserva). Sem o link cadastrado no painel, ela simplesmente não é
+  enviada.
+- **JANELA DE SILÊNCIO: nenhuma mensagem automática entre 21h e 8h** (editável no
+  painel, desde 26/10/2026). Ver "Janela de silêncio".
 - Lembretes automáticos: 13h antes e 3h antes (mudado na Fase 10 — eram 24h e 2h).
   Cada um enviado NO MÁXIMO uma vez por reserva (registrar data/hora de envio e nunca
   reenviar). As DUAS mensagens levam o link da área "Minhas reservas", para o cliente
@@ -394,6 +397,59 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   tanto na reserva ativa quanto na **concluída** — onde antes não havia ação nenhuma.
 - **O relatório se ajusta sozinho:** ele lê `fim` e `valor` da reserva, e os dois mudam.
 
+### Janela de silêncio: nada de mensagem de madrugada (26/10/2026)
+- **O problema, medido em produção antes de escrever a correção:**
+
+  | Lembrete | Enviados | Fora de hora |
+  |---|---|---|
+  | 13h antes | 53 | **38 (72%)** |
+  | 3h antes | 48 | **17 (35%)** |
+
+  As horas: **10 mensagens às 4h da manhã**, 9 às 5h, 5 à 1h, 5 às 2h, 5 às 3h.
+- **A conta explica sozinha:** o lembrete de 13h de uma reserva das 15h cai às **2h da
+  manhã**. Qualquer reserva de tarde caía de madrugada. O de 3h de uma reserva das 8h
+  cai às 5h.
+- **Dois parâmetros editáveis** em Configurações → Parâmetros: `mensagensHoraInicial`
+  (8) e `mensagensHoraFinal` (21). Salvar com o final menor ou igual ao inicial é
+  recusado — sem nenhuma hora permitida, ninguém receberia lembrete e não apareceria
+  erro em lugar nenhum.
+- **LEMBRETE ANTECIPA, AVALIAÇÃO ADIA.** São direções opostas, de propósito:
+  - o lembrete cujo horário cai na janela recua para as **20:59 da véspera**. Adiar o
+    lembrete de 3h de uma reserva das 8h para as 8h entregaria o aviso no instante em
+    que a reserva começa — aviso que chega depois não é aviso;
+  - o convite de avaliação **espera a janela abrir** (8h do dia seguinte). Não dá para
+    convidar alguém a avaliar a sala antes de ter usado.
+- **Não vale para a confirmação da reserva nem para o código do WhatsApp:** a pessoa
+  acabou de mexer no site e está esperando a resposta. Travar essas seria pior.
+- A busca das rotinas passou a olhar **mais longe** (24h além da janela do lembrete),
+  porque um lembrete antecipado sai quando a reserva ainda está a quase um dia de
+  distância. O volume é pequeno e os índices já existiam.
+- A tolerância de 15 min continua valendo, agora em volta do **horário ajustado**. Fora
+  dela, a reserva é marcada "não aplicável" — reserva lançada tarde demais, ou sistema
+  fora do ar na hora certa.
+
+### Nome travado ao telefone (23/10/2026)
+- **O problema, medido no banco:** 25 telefones geraram **44 nomes diferentes**. Treze
+  pessoas usaram mais de um nome. O pior caso é uma cliente que apareceu como
+  "Prestare", "Prestare Karen", "Prestare - Karen" e "Prestare - Cliente Dani".
+- **Os números do relatório NUNCA estiveram errados:** ele sempre agrupou pelo
+  **telefone** e mostra o nome mais recente. O que a bagunça suja é a **busca** e a
+  leitura da equipe — e a sensação de que o sistema perdeu o cliente.
+- **No site:** quando o telefone já reservou antes, o campo do nome vem **preenchido e
+  travado**, com "Trocar o nome" do lado. Não é para impedir a pessoa de se corrigir —
+  é para ela não reescrever o nome por reflexo a cada reserva.
+- **Na recepção:** digitar um telefone conhecido **preenche o nome sozinho**, mas aqui
+  fica só como sugestão editável: metade das reservas da Prestare saiu do balcão, e às
+  vezes quem liga é outra pessoa da mesma empresa. O campo nunca apaga o que a equipe
+  já digitou.
+- O nome conhecido **não precisa de cadastro**: é o `nomeCliente` da reserva mais
+  recente daquele telefone, que é o mesmo que o relatório já usava.
+- A sessão pública (`/api/publico/sessao`) passou a devolver `nomeConhecido`. Não é
+  dado novo exposto: é o próprio nome de quem está com o cookie na mão, e a resposta
+  sai do cookie, nunca de um parâmetro. O telefone continua mascarado.
+- **Isto não conserta o passado.** Os 44 nomes continuam lá. Com o cadastro de empresas
+  (próximo passo), a limpeza provavelmente deixa de ser necessária.
+
 ### Confirmação agrupada (16/10/2026)
 - **Problema real:** o site reserva UMA de cada vez, então quem quer três passa pelo
   fluxo três vezes. A cliente recebia três mensagens, cada uma com um valor, e **nunca
@@ -442,6 +498,14 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   ninguém leva uma enxurrada de convites atrasados.
 - Roda no mesmo agendador dos lembretes, de 5 em 5 minutos, com a mesma janela de
   tolerância de 15 minutos e a mesma idempotência: **marcar primeiro, mandar depois**.
+- **UMA VEZ POR CLIENTE, e não por reserva (23/10/2026).** Até aqui saía a cada
+  reserva, e quem usa o coworking toda semana juntou **14 convites** para avaliar no
+  Google — conferido no banco. Convite demais vira incômodo e o cliente para de ler as
+  mensagens do coworking. O freio é o LOG de envio por telefone, não um campo da
+  reserva: a segunda reserva é marcada como "não aplicável" e nunca manda.
+- **Só conta envio que DEU CERTO.** Se a mensagem falhou, a pessoa nunca a recebeu, e
+  queimar a próxima chance dela por causa de uma falha nossa seria perder o convite
+  sem ninguém perceber.
 - Vale para **qualquer status menos CANCELADA** — e isso inclui CONCLUIDA, de propósito.
   Uma hora depois do término a reserva **já é** CONCLUIDA, porque a rotina de marcar
   concluídas roda na mesma passada. Filtrar por CONFIRMADA/REAGENDADA aqui faria a

@@ -93,6 +93,8 @@ export function FluxoDeReserva({
   const [inicio, setInicio] = useState<string | null>(null);
   const [fim, setFim] = useState<string | null>(null);
   const [nome, setNome] = useState("");
+  /** Veio da reserva anterior: o campo nasce travado, com "editar" do lado. */
+  const [nomeJaConhecido, setNomeJaConhecido] = useState(false);
   const [telefoneMascarado, setTelefoneMascarado] = useState<string | null>(null);
 
   const [reserva, setReserva] = useState<ReservaCriada | null>(null);
@@ -127,6 +129,18 @@ export function FluxoDeReserva({
           telefoneMascarado: sessao.telefoneMascarado,
         });
         setTelefoneMascarado(sessao.telefoneMascarado);
+
+        // O NOME JA VEM PREENCHIDO quando este telefone ja reservou antes.
+        //
+        // Sem isso, a mesma pessoa reescreve o nome a cada reserva e vira
+        // varias versoes de si mesma no painel — uma cliente ja apareceu
+        // como "Prestare", "Prestare Karen" e "Prestare - Karen". O
+        // agrupamento sempre foi pelo telefone, entao os numeros nunca
+        // estiveram errados; o que suja e a busca e a leitura da equipe.
+        if (sessao.nomeConhecido) {
+          setNome(sessao.nomeConhecido);
+          setNomeJaConhecido(true);
+        }
 
         const daUrl = resultadoSalas.salas.find(
           (sala) => sala.slug === salaPreSelecionada,
@@ -499,6 +513,8 @@ export function FluxoDeReserva({
         {etapa === "nome" ? (
           <EtapaNome
             nome={nome}
+            nomeJaConhecido={nomeJaConhecido}
+            aoLiberarNome={() => setNomeJaConhecido(false)}
             pessoas={pessoas}
             perguntarPessoas={perguntarPessoas}
             capacidade={sala?.capacidade ?? null}

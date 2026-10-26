@@ -35,6 +35,9 @@ const ORIGINAIS = {
   antecedenciaMaximaDias: 60,
   // Desligado desde 16/10/2026, por decisao do dono. Zero = sem limite.
   maximoReservasAtivas: 0,
+  // Janela de silencio: nada de mensagem automatica de madrugada.
+  mensagensHoraInicial: 8,
+  mensagensHoraFinal: 21,
 } as const;
 
 let cookie: string;
@@ -108,7 +111,7 @@ describe("leitura", () => {
     const corpo = await resposta.json();
 
     expect(resposta.status).toBe(200);
-    expect(corpo.parametros).toHaveLength(5);
+    expect(corpo.parametros).toHaveLength(7);
 
     const duracao = corpo.parametros.find(
       (parametro: { chave: string }) => parametro.chave === "duracaoMinimaMinutos",
@@ -145,6 +148,8 @@ describe("gravacao", () => {
           antecedenciaMinimaMinutos: 120,
           antecedenciaMaximaDias: 45,
           maximoReservasAtivas: 5,
+          mensagensHoraInicial: 8,
+          mensagensHoraFinal: 21,
         },
         { cookie },
       ),
@@ -231,6 +236,8 @@ describe("gravacao", () => {
           antecedenciaMinimaMinutos: 30,
           antecedenciaMaximaDias: 90,
           maximoReservasAtivas: 5,
+          mensagensHoraInicial: 8,
+          mensagensHoraFinal: 21,
         },
         { cookie },
       ),

@@ -26,6 +26,8 @@ import {
   HORAS_DO_SEGUNDO_LEMBRETE,
   JANELA_MINUTOS,
   confirmacoesAgrupadas,
+  momentoDaAvaliacao,
+  momentoDoLembrete,
   variaveisDaConfirmacaoAgrupada,
   lembrete13h,
   lembrete3h,
@@ -34,7 +36,7 @@ import {
   passadaDeRotina,
 } from "@/lib/rotinas";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
-import { instanteDe } from "@/lib/tempo";
+import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
 import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
@@ -311,12 +313,13 @@ describe("reagendar zera os lembretes", () => {
     expect(remarcada.lembrete13hEnviadoEm).toBeNull();
     expect(remarcada.lembrete13hNaoAplicavel).toBe(false);
 
-    // E o lembrete sai de novo, na hora certa do horario novo.
-    const treseHorasAntes = new Date(
-      instanteDe("2026-10-08", "14:00").getTime() - 13 * 60 * 60_000,
-    );
-    const resultado = await lembrete13h(treseHorasAntes);
-    expect(resultado.enviados).toBe(1);
+    // E o lembrete sai de novo — mas ANTECIPADO para a noite anterior.
+    //
+    // 13h antes das 14:00 do dia 08 seria 01:00 da madrugada, dentro da
+    // janela de silencio. Desde 26/10/2026 o lembrete recua para as 20:59 do
+    // dia 07, em vez de acordar o cliente.
+    const naNoiteAnterior = instanteDe("2026-10-07", "20:59");
+    expect((await lembrete13h(naNoiteAnterior)).enviados).toBe(1);
   });
 });
 
@@ -733,5 +736,106 @@ describe("a passada de 5 em 5 minutos", () => {
     expect(segunda.lembrete13h.enviados).toBe(0);
     expect(segunda.lembrete3h.enviados).toBe(0);
     await expect(mensagensEnviadas()).resolves.toHaveLength(2);
+  });
+});
+
+// =============================================================================
+// Janela de silencio: nada de mensagem de madrugada (26/10/2026)
+// =============================================================================
+
+describe("janela de silêncio", () => {
+  // Medido em producao antes desta regra: 38 dos 53 lembretes de 13h tinham
+  // saido fora de hora — 10 as 4h da manha, 9 as 5h, 5 a 1h.
+
+  /** Uma reserva num dia e hora exatos, sem lembrete enviado. */
+  async function reservaEm(dia: string, hora: string): Promise<string> {
+    const inicio = instanteDe(dia, hora);
+
+    const reserva = await bancoDeTeste.reserva.create({
+      data: {
+        salaId: salaCI,
+        nomeCliente: "Cliente de Teste",
+        telefone: CLIENTE,
+        inicio,
+        fim: new Date(inicio.getTime() + 60 * 60_000),
+        duracaoMinutos: 60,
+        valor: "50.00",
+        status: StatusReserva.CONFIRMADA,
+        origem: OrigemReserva.ADMIN,
+        confirmacaoEnviadaEm: new Date(),
+      },
+      select: { id: true },
+    });
+
+    return reserva.id;
+  }
+
+  it("O CASO REAL: reserva das 15h não acorda o cliente à 1h da manhã", async () => {
+    // 13h antes das 15:00 de 27/10 seria 02:00 — madrugada.
+    await reservaEm("2026-10-27", "15:00");
+
+    // Na madrugada, nada sai.
+    expect((await lembrete13h(instanteDe("2026-10-27", "02:00"))).enviados).toBe(0);
+  });
+
+  it("o lembrete sai ANTECIPADO, às 20:59 da véspera", async () => {
+    await reservaEm("2026-10-27", "15:00");
+
+    const resultado = await lembrete13h(instanteDe("2026-10-26", "20:59"));
+
+    expect(resultado.enviados).toBe(1);
+  });
+
+  // Os dois casos abaixo sao testes SEPARADOS de proposito: rodar a rotina
+  // numa hora que ja passou marca a reserva como "perdeu a hora", e a segunda
+  // chamada nao teria mais o que enviar.
+  it("o lembrete de 3h de uma reserva das 8h não sai às 5h da manhã", async () => {
+    await reservaEm("2026-10-27", "08:00");
+
+    expect((await lembrete3h(instanteDe("2026-10-27", "05:00"))).enviados).toBe(0);
+  });
+
+  it("o lembrete de 3h de uma reserva das 8h recua para a véspera", async () => {
+    await reservaEm("2026-10-27", "08:00");
+
+    expect((await lembrete3h(instanteDe("2026-10-26", "20:59"))).enviados).toBe(1);
+  });
+
+  it("horário que JÁ cai dentro da janela não é mexido", async () => {
+    // 13h antes das 22:00 e 09:00 — horario civilizado, sai na hora certa.
+    await reservaEm("2026-10-27", "22:00");
+
+    expect((await lembrete13h(instanteDe("2026-10-27", "09:00"))).enviados).toBe(1);
+  });
+
+  it("a conta que ajusta o horário", () => {
+    const janela = { inicial: 8, final: 21 };
+
+    // Madrugada -> vespera as 20:59.
+    expect(
+      horaLocalDe(momentoDoLembrete(instanteDe("2026-10-27", "02:00"), janela)),
+    ).toBe("20:59");
+    expect(
+      dataLocalDe(momentoDoLembrete(instanteDe("2026-10-27", "02:00"), janela)),
+    ).toBe("2026-10-26");
+
+    // Fim da noite -> mesmo dia as 20:59.
+    expect(
+      dataLocalDe(momentoDoLembrete(instanteDe("2026-10-27", "23:30"), janela)),
+    ).toBe("2026-10-27");
+
+    // Dentro da janela -> intocado.
+    expect(
+      horaLocalDe(momentoDoLembrete(instanteDe("2026-10-27", "14:30"), janela)),
+    ).toBe("14:30");
+  });
+
+  it("o convite de avaliação ADIA, em vez de antecipar", () => {
+    // Nao da para convidar alguem a avaliar antes de ter usado a sala.
+    const janela = { inicial: 8, final: 21 };
+    const tardeDaNoite = instanteDe("2026-10-27", "23:00");
+
+    expect(dataLocalDe(momentoDaAvaliacao(tardeDaNoite, janela))).toBe("2026-10-28");
+    expect(horaLocalDe(momentoDaAvaliacao(tardeDaNoite, janela))).toBe("08:00");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { mensagemDoErro } from "@/components/reserva/api";
 import { blocosEntre } from "@/components/reserva/datas";
@@ -17,7 +17,7 @@ import {
 import { formatarEnquantoDigita } from "@/lib/telefone";
 import { cn } from "@/lib/utils";
 
-import { criarNaRecepcao, criarSerie, type RelatorioDaSerie } from "./api";
+import { buscarNomeDoCliente, criarNaRecepcao, criarSerie, type RelatorioDaSerie } from "./api";
 
 const BLOCOS = blocosEntre("06:00", "23:00");
 
@@ -79,6 +79,46 @@ export function NovaReserva({
   const [fim, setFim] = useState("10:00");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /** Quando o telefone ja reservou antes, o nome dele aparece aqui. */
+  const [nomeConhecido, setNomeConhecido] = useState<string | null>(null);
+
+  // TELEFONE CONHECIDO PREENCHE O NOME.
+  //
+  // A mesma pessoa vinha sendo cadastrada de varios jeitos ("Prestare",
+  // "Prestare Karen", "Prestare - Karen"), e metade dessas reservas saiu
+  // daqui, do balcao. O nome fica apenas SUGERIDO: a recepcao continua
+  // podendo escrever outro, porque as vezes quem liga e outra pessoa da
+  // mesma empresa.
+  useEffect(() => {
+    if (telefone.length < 14) {
+      setNomeConhecido(null);
+      return;
+    }
+
+    const controle = new AbortController();
+
+    buscarNomeDoCliente(telefone, controle.signal)
+      .then((resposta) => {
+        if (controle.signal.aborted) {
+          return;
+        }
+
+        setNomeConhecido(resposta.nome);
+
+        // So preenche o campo vazio: nunca apaga o que a equipe digitou.
+        if (resposta.nome) {
+          setNome((atual) => (atual.trim() === "" ? resposta.nome! : atual));
+        }
+      })
+      .catch(() => {
+        // Sem o nome a tela segue funcionando: a recepcao digita como sempre.
+        if (!controle.signal.aborted) {
+          setNomeConhecido(null);
+        }
+      });
+
+    return () => controle.abort();
+  }, [telefone]);
 
   // --- repeticao ---
   const [repetir, setRepetir] = useState(false);
@@ -197,6 +237,11 @@ export function NovaReserva({
           maxLength={120}
           placeholder="Maria Silva"
           onChange={(evento) => setNome(evento.target.value)}
+          dica={
+            nomeConhecido && nome.trim() === nomeConhecido
+              ? "Nome da última reserva deste telefone. Troque se for outra pessoa."
+              : undefined
+          }
         />
 
         <label className="flex flex-col gap-2">

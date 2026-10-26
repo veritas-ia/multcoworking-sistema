@@ -21,9 +21,14 @@
  * melhor faltar do que repetir. A falha fica registrada em LogMensagem.
  */
 import type { Prisma } from "@/generated/prisma/client";
-import { ChaveTemplate, OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
+import {
+  ChaveTemplate,
+  OrigemReserva,
+  StatusMensagem,
+  StatusReserva,
+} from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { dataAmigavelDe, horaLocalDe } from "@/lib/tempo";
+import { dataLocalDe, dataAmigavelDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { lerLinkDeAvaliacao } from "@/lib/templates-admin";
 import { enviarMensagem, type VariaveisMensagem } from "@/lib/whatsapp";
 
@@ -45,6 +50,99 @@ export const HORAS_ATE_A_AVALIACAO = 1;
 export const JANELA_MINUTOS = 15;
 
 const ATIVAS = [StatusReserva.CONFIRMADA, StatusReserva.REAGENDADA];
+
+// -----------------------------------------------------------------------------
+// Janela de silencio: nada de mensagem automatica de madrugada
+// -----------------------------------------------------------------------------
+
+export type JanelaDeMensagens = { inicial: number; final: number };
+
+/** Os horarios da janela, do painel. Se sumirem do banco, vale 8h-21h. */
+export async function lerJanelaDeMensagens(): Promise<JanelaDeMensagens> {
+  const linhas = await prisma.configuracao.findMany({
+    where: { chave: { in: ["mensagensHoraInicial", "mensagensHoraFinal"] } },
+  });
+
+  const valores = new Map(linhas.map((linha) => [linha.chave, Number(linha.valor)]));
+  const inicial = valores.get("mensagensHoraInicial");
+  const final = valores.get("mensagensHoraFinal");
+
+  return {
+    inicial: Number.isInteger(inicial) ? inicial! : 8,
+    final: Number.isInteger(final) ? final! : 21,
+  };
+}
+
+/** Soma dias a uma data "AAAA-MM-DD", sem depender do fuso do aparelho. */
+function somarDiasNaData(data: string, dias: number): string {
+  const [ano, mes, dia] = data.split("-").map(Number);
+  const base = new Date(Date.UTC(ano!, mes! - 1, dia!));
+  base.setUTCDate(base.getUTCDate() + dias);
+  return base.toISOString().slice(0, 10);
+}
+
+/** A hora do relogio de Sao Paulo, como numero: "02:30" -> 2. */
+function horaCheiaDe(instante: Date): number {
+  return Number(horaLocalDe(instante).slice(0, 2));
+}
+
+/**
+ * O instante em que o LEMBRETE pode sair, respeitando a janela de silencio.
+ *
+ * Se o horario ideal cai de madrugada, o lembrete e ANTECIPADO para o ultimo
+ * minuto permitido antes dele — nunca adiado.
+ *
+ * O motivo e concreto: adiar o lembrete de 3h de uma reserva das 8h para as
+ * 8h da manha entregaria o aviso no instante em que a reserva comeca. Aviso
+ * que chega depois nao e aviso. Antecipar sempre chega antes.
+ *
+ * Medido em producao antes desta regra existir: o lembrete de 13h de uma
+ * reserva das 15h caia as 2h da manha, e 38 dos 53 lembretes ja enviados
+ * tinham saido fora de hora.
+ */
+export function momentoDoLembrete(
+  ideal: Date,
+  janela: JanelaDeMensagens,
+): Date {
+  const hora = horaCheiaDe(ideal);
+
+  if (hora >= janela.inicial && hora < janela.final) {
+    return ideal;
+  }
+
+  const dia = dataLocalDe(ideal);
+  const horaFinal = `${String(janela.final - 1).padStart(2, "0")}:59`;
+
+  // Depois do fechamento da janela: recua para o fim da janela do MESMO dia.
+  // Antes da abertura: recua para o fim da janela do dia ANTERIOR.
+  return hora >= janela.final
+    ? instanteDe(dia, horaFinal)
+    : instanteDe(somarDiasNaData(dia, -1), horaFinal);
+}
+
+/**
+ * O instante em que o CONVITE PARA AVALIAR pode sair.
+ *
+ * Aqui a direcao e a contraria da dos lembretes: o convite e ADIADO para a
+ * abertura da janela seguinte. Nao da para convidar alguem a avaliar a sala
+ * antes de a pessoa ter usado.
+ */
+export function momentoDaAvaliacao(ideal: Date, janela: JanelaDeMensagens): Date {
+  const hora = horaCheiaDe(ideal);
+
+  if (hora >= janela.inicial && hora < janela.final) {
+    return ideal;
+  }
+
+  const dia = dataLocalDe(ideal);
+  const horaInicial = `${String(janela.inicial).padStart(2, "0")}:00`;
+
+  // Antes da abertura: espera abrir no MESMO dia. Depois do fechamento:
+  // espera a abertura do dia SEGUINTE.
+  return hora < janela.inicial
+    ? instanteDe(dia, horaInicial)
+    : instanteDe(somarDiasNaData(dia, 1), horaInicial);
+}
 
 export type ResultadoDaRotina = {
   enviados: number;
@@ -91,18 +189,19 @@ async function rodarLembrete(
   lembrete: Lembrete,
   agora: Date,
 ): Promise<ResultadoDaRotina> {
-  const alvo = maisMinutos(agora, lembrete.horas * 60);
-  const de = maisMinutos(alvo, -JANELA_MINUTOS);
-  const ate = maisMinutos(alvo, JANELA_MINUTOS);
+  const janela = await lerJanelaDeMensagens();
 
   let enviados = 0;
   let falhas = 0;
+  let perderamAHora = 0;
 
-  // --- as que estao na janela agora ---
+  // A busca olha MAIS LONGE do que as 13h do lembrete, porque um lembrete que
+  // cairia de madrugada e antecipado para a noite anterior — ou seja, sai
+  // quando a reserva ainda esta a quase um dia de distancia.
   const candidatas = await prisma.reserva.findMany({
     where: {
       status: { in: ATIVAS },
-      inicio: { gte: de, lte: ate },
+      inicio: { gt: agora, lte: maisMinutos(agora, (lembrete.horas + 24) * 60) },
       [lembrete.campoEnviado]: null,
       [lembrete.campoNaoAplicavel]: false,
     },
@@ -110,6 +209,32 @@ async function rodarLembrete(
   });
 
   for (const reserva of candidatas) {
+    const momento = momentoDoLembrete(
+      maisMinutos(reserva.inicio, -lembrete.horas * 60),
+      janela,
+    );
+
+    // Ainda nao chegou a hora deste lembrete.
+    if (agora < maisMinutos(momento, -JANELA_MINUTOS)) {
+      continue;
+    }
+
+    // Passou da hora: reserva criada tarde demais, ou o sistema ficou fora do
+    // ar na hora certa. Marcar impede a rotina de reavaliar isto para sempre.
+    if (agora > maisMinutos(momento, JANELA_MINUTOS)) {
+      const { count: tarde } = await prisma.reserva.updateMany({
+        where: {
+          id: reserva.id,
+          [lembrete.campoEnviado]: null,
+          [lembrete.campoNaoAplicavel]: false,
+        },
+        data: { [lembrete.campoNaoAplicavel]: true },
+      });
+
+      perderamAHora += tarde;
+      continue;
+    }
+
     // MARCAR PRIMEIRO. O "count" diz se fomos nos que marcamos: se outro tick
     // (ou outro processo) chegou antes, ele volta 0 e a gente nao manda nada.
     const { count } = await prisma.reserva.updateMany({
@@ -142,22 +267,22 @@ async function rodarLembrete(
     }
   }
 
-  // --- as que perderam a hora: marcar "nao aplicavel" ---
+  // --- as que ja comecaram: marcar "nao aplicavel" ---
   //
   // Reserva criada tarde demais (a recepcao pode lancar para daqui a 30 min,
   // ou ate no passado). O lembrete nunca vai poder sair; sem marcar, a rotina
   // reavaliaria essa reserva para sempre.
-  const { count: naoAplicaveis } = await prisma.reserva.updateMany({
+  const { count: jaComecaram } = await prisma.reserva.updateMany({
     where: {
       status: { in: ATIVAS },
-      inicio: { lt: de },
+      inicio: { lte: agora },
       [lembrete.campoEnviado]: null,
       [lembrete.campoNaoAplicavel]: false,
     },
     data: { [lembrete.campoNaoAplicavel]: true },
   });
 
-  return { enviados, naoAplicaveis, falhas };
+  return { enviados, naoAplicaveis: perderamAHora + jaComecaram, falhas };
 }
 
 export function lembrete13h(agora = new Date()): Promise<ResultadoDaRotina> {
@@ -198,25 +323,88 @@ export async function avaliacaoPosUso(agora = new Date()): Promise<ResultadoDaRo
     return { enviados: 0, naoAplicaveis: 0, falhas: 0 };
   }
 
-  // A reserva precisa ter terminado ha HORAS_ATE_A_AVALIACAO, com a folga.
+  const janela = await lerJanelaDeMensagens();
+
+  // A reserva precisa ter terminado ha HORAS_ATE_A_AVALIACAO. A busca olha
+  // MAIS PARA TRAS do que isso, porque um convite que cairia de madrugada e
+  // ADIADO para a manha seguinte — e ai a reserva ja terminou faz horas.
   const alvo = maisMinutos(agora, -HORAS_ATE_A_AVALIACAO * 60);
-  const de = maisMinutos(alvo, -JANELA_MINUTOS);
-  const ate = maisMinutos(alvo, JANELA_MINUTOS);
+  const de = maisMinutos(alvo, -24 * 60);
 
   let enviados = 0;
   let falhas = 0;
+  let perderamAHora = 0;
 
   const candidatas = await prisma.reserva.findMany({
     where: {
       status: { not: StatusReserva.CANCELADA },
-      fim: { gte: de, lte: ate },
+      fim: { gte: de, lte: maisMinutos(alvo, JANELA_MINUTOS) },
       avaliacaoEnviadaEm: null,
       avaliacaoNaoAplicavel: false,
     },
     include: { sala: { select: { nome: true } } },
   });
 
+  let naoAplicaveisPorRepeticao = 0;
+
   for (const reserva of candidatas) {
+    const momento = momentoDaAvaliacao(
+      maisMinutos(reserva.fim, HORAS_ATE_A_AVALIACAO * 60),
+      janela,
+    );
+
+    // Ainda nao chegou a hora: o termino caiu de madrugada e o convite espera
+    // a janela abrir. Convidar alguem a avaliar as 23h so gasta paciencia.
+    if (agora < maisMinutos(momento, -JANELA_MINUTOS)) {
+      continue;
+    }
+
+    // Passou da hora: o sistema ficou fora do ar, ou a reserva e antiga
+    // demais. Convite atrasado demais nao faz sentido e so confunde.
+    if (agora > maisMinutos(momento, JANELA_MINUTOS)) {
+      const { count: tarde } = await prisma.reserva.updateMany({
+        where: {
+          id: reserva.id,
+          avaliacaoEnviadaEm: null,
+          avaliacaoNaoAplicavel: false,
+        },
+        data: { avaliacaoNaoAplicavel: true },
+      });
+
+      perderamAHora += tarde;
+      continue;
+    }
+
+    // UMA VEZ POR CLIENTE, NA VIDA TODA (decisao do dono, 23/10/2026).
+    //
+    // Ate aqui a regra era uma vez por RESERVA, e quem usa o coworking toda
+    // semana juntou 14 convites para avaliar no Google. Convite demais vira
+    // incomodo e o cliente para de ler as mensagens do coworking.
+    //
+    // So conta envio que DEU CERTO: se a mensagem falhou, a pessoa nunca a
+    // recebeu, e tirar a proxima chance dela por causa de uma falha nossa
+    // seria perder o convite sem ninguem perceber.
+    const jaRecebeu = await prisma.logMensagem.findFirst({
+      where: {
+        telefone: reserva.telefone,
+        tipo: ChaveTemplate.avaliacao_pos_uso,
+        status: StatusMensagem.ENVIADA,
+      },
+      select: { id: true },
+    });
+
+    if (jaRecebeu) {
+      // "Nao aplicavel", e nao "enviada": a mensagem nunca vai sair para esta
+      // reserva, e marcar assim impede a rotina de reconferir toda passada.
+      const { count: marcadas } = await prisma.reserva.updateMany({
+        where: { id: reserva.id, avaliacaoEnviadaEm: null, avaliacaoNaoAplicavel: false },
+        data: { avaliacaoNaoAplicavel: true },
+      });
+
+      naoAplicaveisPorRepeticao += marcadas;
+      continue;
+    }
+
     // MARCAR PRIMEIRO, como nos lembretes: o "count" diz se fomos nos que
     // marcamos. Quem nao marcou, nao manda.
     const { count } = await prisma.reserva.updateMany({
@@ -262,7 +450,13 @@ export async function avaliacaoPosUso(agora = new Date()): Promise<ResultadoDaRo
     data: { avaliacaoNaoAplicavel: true },
   });
 
-  return { enviados, naoAplicaveis, falhas };
+  // As tres contagens entram juntas: as que perderam a hora, as antigas
+  // demais e as que o cliente ja tinha recebido o convite antes.
+  return {
+    enviados,
+    naoAplicaveis: naoAplicaveis + naoAplicaveisPorRepeticao + perderamAHora,
+    falhas,
+  };
 }
 
 // -----------------------------------------------------------------------------

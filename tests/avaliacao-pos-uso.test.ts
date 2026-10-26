@@ -253,3 +253,96 @@ describe("na passada completa", () => {
     expect(resumo.concluidas).toBeGreaterThanOrEqual(1);
   });
 });
+
+// =============================================================================
+// Uma vez por CLIENTE, na vida toda (23/10/2026)
+// =============================================================================
+
+describe("uma vez por cliente", () => {
+  // Ate 23/10/2026 a regra era uma vez por RESERVA, e quem usa o coworking
+  // toda semana juntou 14 convites para avaliar no Google.
+
+  it("a SEGUNDA reserva do mesmo telefone NAO recebe o convite", async () => {
+    const primeira = await reservaTerminadaHa(NA_HORA);
+    expect((await avaliacaoPosUso(AGORA)).enviados).toBe(1);
+
+    // Limpa a marca da primeira para provar que o freio e o LOG de envio, e
+    // nao o campo da propria reserva.
+    const segunda = await reservaTerminadaHa(NA_HORA);
+
+    const resultado = await avaliacaoPosUso(AGORA);
+
+    expect(resultado.enviados).toBe(0);
+    expect(resultado.naoAplicaveis).toBeGreaterThanOrEqual(1);
+
+    const noBanco = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: segunda.id },
+    });
+    // "Nao aplicavel", e nao "enviada": a mensagem nunca vai sair para esta.
+    expect(noBanco.avaliacaoNaoAplicavel).toBe(true);
+    expect(noBanco.avaliacaoEnviadaEm).toBeNull();
+
+    // Uma mensagem no total, e nao duas.
+    const enviadas = await bancoDeTeste.logMensagem.count({
+      where: { telefone: TELEFONE, tipo: "avaliacao_pos_uso", status: "ENVIADA" },
+    });
+    expect(enviadas).toBe(1);
+    expect(primeira.id).not.toBe(segunda.id);
+  });
+
+  it("duas reservas na MESMA passada geram um convite só", async () => {
+    await reservaTerminadaHa(NA_HORA);
+    await reservaTerminadaHa(NA_HORA);
+
+    const resultado = await avaliacaoPosUso(AGORA);
+
+    expect(resultado.enviados).toBe(1);
+  });
+
+  it("OUTRO telefone continua recebendo normalmente", async () => {
+    const OUTRO = "+5511900000099";
+
+    await reservaTerminadaHa(NA_HORA);
+    await avaliacaoPosUso(AGORA);
+
+    const fim = maisMinutos(AGORA, -NA_HORA);
+    await bancoDeTeste.reserva.create({
+      data: {
+        salaId,
+        nomeCliente: "Outra Pessoa",
+        telefone: OUTRO,
+        profissao: "OUTROS",
+        inicio: maisMinutos(fim, -60),
+        fim,
+        duracaoMinutos: 60,
+        valor: "35.00",
+        status: StatusReserva.CONCLUIDA,
+        origem: "ADMIN",
+      },
+    });
+
+    try {
+      expect((await avaliacaoPosUso(AGORA)).enviados).toBe(1);
+    } finally {
+      await bancoDeTeste.logMensagem.deleteMany({ where: { telefone: OUTRO } });
+      await bancoDeTeste.reserva.deleteMany({ where: { telefone: OUTRO } });
+    }
+  });
+
+  it("envio que FALHOU nao queima a chance do cliente", async () => {
+    // A pessoa nunca recebeu a mensagem; tirar a proxima chance dela por
+    // causa de uma falha nossa seria perder o convite em silencio.
+    await bancoDeTeste.logMensagem.create({
+      data: {
+        telefone: TELEFONE,
+        tipo: "avaliacao_pos_uso",
+        status: "FALHOU",
+        erro: "Evolution respondeu 500",
+      },
+    });
+
+    await reservaTerminadaHa(NA_HORA);
+
+    expect((await avaliacaoPosUso(AGORA)).enviados).toBe(1);
+  });
+});

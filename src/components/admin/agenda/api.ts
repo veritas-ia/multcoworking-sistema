@@ -94,6 +94,16 @@ export function reagendarComoAdmin(
   });
 }
 
+/** O nome que este telefone usou na ultima reserva. Nulo se nunca reservou. */
+export function buscarNomeDoCliente(
+  telefone: string,
+  sinal?: AbortSignal,
+): Promise<{ nome: string | null }> {
+  return pedir(`/api/admin/clientes?telefone=${encodeURIComponent(telefone)}`, {
+    signal: sinal,
+  });
+}
+
 /**
  * Estica o termino porque o cliente ficou mais tempo.
  *

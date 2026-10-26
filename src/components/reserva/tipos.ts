@@ -64,6 +64,8 @@ export type Bloco = {
 export type Sessao = {
   identificado: boolean;
   telefoneMascarado: string | null;
+  /** O nome usado na ultima reserva deste telefone. Nulo na primeira vez. */
+  nomeConhecido: string | null;
 };
 
 export type ReservaCriada = {

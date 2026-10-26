@@ -33,6 +33,8 @@ const Corpo = z.object({
   antecedenciaMinimaMinutos: z.number().int(),
   antecedenciaMaximaDias: z.number().int(),
   maximoReservasAtivas: z.number().int(),
+  mensagensHoraInicial: z.number().int(),
+  mensagensHoraFinal: z.number().int(),
 });
 
 /** O que a tela mostra sem deixar editar. Ver o comentario de configuracoes.ts. */
