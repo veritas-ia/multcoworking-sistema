@@ -390,8 +390,29 @@ describe("a empresa que já vem escolhida", () => {
 // -----------------------------------------------------------------------------
 
 describe("criar reserva no site com empresa", () => {
-  /** Uma terca-feira futura, dentro do horario de funcionamento. */
-  const DIA = "2026-11-10";
+  /**
+   * Uma TERCA futura, calculada a partir de hoje — nunca uma data escrita a
+   * mao.
+   *
+   * Data fixa aqui tem prazo de validade: a antecedencia minima recusa o
+   * passado, e a maxima recusa alem de 60 dias, entao o teste quebraria
+   * sozinho sem nada no sistema ter mudado. Foi exatamente o que pegou o
+   * "diaria.test.ts" e o "profissao-bloqueada.test.ts".
+   *
+   * Terca porque seg-qui abre das 08h as 18h. Um dia de diferenca por causa
+   * do fuso cai em segunda ou quarta, que tambem abrem.
+   */
+  const DIA = (() => {
+    const dia = new Date();
+    dia.setUTCDate(dia.getUTCDate() + 7);
+
+    // 2 = terca. Anda para a frente ate cair numa.
+    while (dia.getUTCDay() !== 2) {
+      dia.setUTCDate(dia.getUTCDate() + 1);
+    }
+
+    return dia.toISOString().slice(0, 10);
+  })();
 
   async function reservarNoSite(empresaId: string | null, hora: string) {
     return criarReservaPublica({
@@ -452,5 +473,118 @@ describe("criar reserva no site com empresa", () => {
     const resultado = await reservarNoSite(null, "09:00");
 
     expect(resultado.criada).toBe(true);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// RENOMEAR E DESLIGAR (27/10/2026)
+//
+// Pedido do dono: a equipe precisa poder editar a empresa e tira-la da lista
+// que o cliente ve, sem perder o historico. Os testes de que o historico
+// sobrevive ao desligamento estao em "relatorios.test.ts", onde mora o
+// relatorio; aqui ficam o cadastro e a lista do site.
+// -----------------------------------------------------------------------------
+
+describe("renomear uma empresa", () => {
+  it("troca o nome TAMBÉM nas reservas antigas, sem mexer nelas", async () => {
+    // A reserva aponta para a empresa e nao guarda o texto do nome. E o que
+    // se quer: empresa que mudou de razao social nao vira duas no relatorio.
+    const dela = await empresaDeTeste(`${PREFIXO} Antes`);
+    const criada = await reserva(TELEFONES[0]!, "Cliente", "2026-11-10", dela.id);
+
+    const antes = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.id },
+    });
+
+    const renomeada = await editarEmpresa(dela.id, { nome: `${PREFIXO} Depois` });
+
+    expect(renomeada.ok).toBe(true);
+    if (!renomeada.ok) return;
+    expect(renomeada.dados.nome).toBe(`${PREFIXO} Depois`);
+
+    // A LINHA DA RESERVA fica intacta: renomear nao e um gancho para mexer
+    // em reserva nenhuma.
+    const depois = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.id },
+    });
+    expect(depois).toEqual(antes);
+
+    // E o nome novo chega na reserva pela ligacao, sem copia.
+    const comEmpresa = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.id },
+      select: { empresa: { select: { nome: true } } },
+    });
+    expect(comEmpresa.empresa?.nome).toBe(`${PREFIXO} Depois`);
+  });
+
+  it("recusa renomear para um nome que já existe", async () => {
+    const primeira = await empresaDeTeste(`${PREFIXO} Primeira`);
+    await empresaDeTeste(`${PREFIXO} Segunda`);
+
+    const resultado = await editarEmpresa(primeira.id, {
+      nome: `${PREFIXO} Segunda`,
+    });
+
+    expect(resultado.ok).toBe(false);
+  });
+
+  it("aceita salvar o MESMO nome sem reclamar de repetido", async () => {
+    // A tela manda o nome junto mesmo quando a pessoa so olhou e salvou.
+    const dela = await empresaDeTeste();
+
+    const resultado = await editarEmpresa(dela.id, { nome: dela.nome });
+
+    expect(resultado.ok).toBe(true);
+  });
+
+  it("recusa empresa que não existe", async () => {
+    const resultado = await editarEmpresa("nao-existe", { ativa: false });
+
+    expect(resultado.ok).toBe(false);
+  });
+});
+
+describe("desligar tira da lista do site, e só", () => {
+  it("sai da lista que o cliente escolhe, mas continua no painel", async () => {
+    const dela = await empresaDeTeste();
+    await reserva(TELEFONES[0]!, "Cliente", "2026-11-10", dela.id);
+
+    await editarEmpresa(dela.id, { ativa: false });
+
+    // Fora da lista do site.
+    expect(
+      (await listarEmpresasParaEscolher()).some((item) => item.id === dela.id),
+    ).toBe(false);
+
+    // Mas o painel continua mostrando, marcada como desligada — senao a
+    // equipe nao teria como religar.
+    const noPainel = (await listarEmpresas()).find((item) => item.id === dela.id);
+    expect(noPainel?.ativa).toBe(false);
+  });
+
+  it("o vínculo do telefone continua guardado", async () => {
+    // Desligar e decisao sobre o FUTURO. Apagar o vinculo faria as reservas
+    // antigas perderem a empresa em silencio.
+    const dela = await empresaDeTeste();
+    await reserva(TELEFONES[0]!, "Cliente");
+    await vincularTelefone(TELEFONES[0]!, dela.id);
+
+    await editarEmpresa(dela.id, { ativa: false });
+
+    const vinculo = await bancoDeTeste.telefoneDaEmpresa.findUnique({
+      where: { telefone: TELEFONES[0]! },
+    });
+    expect(vinculo?.empresaId).toBe(dela.id);
+  });
+
+  it("religar devolve a empresa para a lista do site", async () => {
+    const dela = await empresaDeTeste();
+    await editarEmpresa(dela.id, { ativa: false });
+
+    await editarEmpresa(dela.id, { ativa: true });
+
+    expect(
+      (await listarEmpresasParaEscolher()).some((item) => item.id === dela.id),
+    ).toBe(true);
   });
 });

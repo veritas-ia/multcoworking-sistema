@@ -658,6 +658,33 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - **Empresa com reserva não se apaga:** a chave estrangeira é `ON DELETE RESTRICT`.
   Não existe tela para apagar empresa; se um dia existir, a trava é do banco.
 
+### Desligar uma empresa: sai da lista, o histórico fica (27/10/2026)
+- **Pedido do dono, com a palavra dele:** *"mesmo que ela não apareça mais ali na parte
+  de reservas como uma alternativa de empresa mensalista, ainda assim ela vai ter o
+  registro"*. É o caso da empresa que sai do coworking e para de ser mensalista.
+- **Desligar é decisão sobre o FUTURO, não sobre o passado.** A empresa sai da lista
+  que o cliente vê no site e deixa de ser sugerida; o histórico fica **inteiro**:
+  - as reservas antigas continuam de pé, **apontando para ela**;
+  - ela continua no relatório geral, com as horas dela;
+  - o relatório dela ainda **abre**, com o faturamento;
+  - as reservas atribuídas pelo **vínculo do telefone** também continuam — desligar
+    não apaga o vínculo, senão as reservas antigas perderiam a empresa em silêncio;
+  - **religar devolve tudo** como estava.
+  **Há teste para cada um desses cinco pontos**, inclusive um que compara a linha
+  inteira da reserva antes e depois: desligar não é gancho para mexer em reserva
+  nenhuma.
+- **Em Configurações → Empresas a equipe pode:** cadastrar, **renomear**, desligar e
+  religar. **Não pode excluir**, mesma regra das salas — apagar tiraria o histórico do
+  relatório em silêncio, e é justamente o que o dono não quer.
+- **Renomear troca o nome TAMBÉM nas reservas antigas**, e isso é o desejado: a reserva
+  aponta para a empresa e não guarda o texto do nome, então empresa que mudou de razão
+  social não vira duas no relatório. A linha da reserva fica intacta — há teste
+  comparando antes e depois. Nome repetido é recusado; salvar o mesmo nome é aceito,
+  porque a tela manda o nome junto mesmo quando a pessoa só olhou.
+- **No painel a empresa desligada continua visível**, marcada como "(desligada)" e com
+  o aviso "fora da lista do site, histórico mantido" — sem isso a equipe não teria como
+  religar, e não entenderia o que o desligamento fez.
+
 ### Faturamento por empresa (27/10/2026)
 - **Autorizado pelo dono** — *"Isso é sobre faturamento, cara. No final das contas,
   sim, tem que mostrar."* Mesmo desenho do relatório individual de cliente, e pelo

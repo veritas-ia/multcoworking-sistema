@@ -998,3 +998,111 @@ describe("editar o nome NÃO cria um cliente novo", () => {
     expect(doTelefone[0]?.nome).toBe("Toca Imóveis");
   });
 });
+
+// -----------------------------------------------------------------------------
+// EMPRESA DESLIGADA: O HISTORICO FICA INTEIRO (27/10/2026)
+//
+// Pedido do dono, com a palavra dele: "mesmo que ela nao apareca mais ali na
+// parte de reservas como uma alternativa de empresa mensalista, ainda assim
+// ela vai ter o registro".
+//
+// Empresa que saiu do coworking e DESLIGADA, nunca excluida. Desligar e uma
+// decisao sobre o FUTURO — ela sai da lista do site — e nao sobre o passado.
+// Se alguem um dia fizer o desligamento esconder o historico, e aqui que
+// estoura.
+// -----------------------------------------------------------------------------
+
+describe("empresa desligada", () => {
+  /** Desliga a empresa direto no banco, como o painel faz. */
+  async function desligar(empresaId: string) {
+    await bancoDeTeste.empresa.update({
+      where: { id: empresaId },
+      data: { ativa: false },
+    });
+  }
+
+  it("continua no relatório geral, com as horas dela", async () => {
+    const dela = await empresa();
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "11:00", empresaId: dela.id,
+    });
+
+    await desligar(dela.id);
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const linha = relatorio.horasPorEmpresa.find((item) => item.id === dela.id);
+
+    expect(linha?.horas).toBe(2);
+    expect(linha?.nome).toBe(dela.nome);
+  });
+
+  it("o relatório DELA ainda abre, com o faturamento", async () => {
+    const dela = await empresa();
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id, valor: "55.00",
+    });
+
+    await desligar(dela.id);
+
+    const detalhe = await montarDetalheDaEmpresa({ de: SEGUNDA, ate: SEGUNDA }, dela.id);
+
+    expect(detalhe).not.toBeNull();
+    expect(detalhe?.faturamentoCentavos).toBe(5500);
+    expect(detalhe?.horas).toBe(1);
+  });
+
+  it("as reservas antigas ficam INTACTAS, ainda apontando para ela", async () => {
+    const dela = await empresa();
+    const criada = await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id, valor: "55.00",
+    });
+
+    const antes = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.id },
+    });
+
+    await desligar(dela.id);
+
+    const depois = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: criada.id },
+    });
+
+    // A LINHA INTEIRA, e nao so a empresa: desligar nao e um gancho para
+    // mexer em reserva nenhuma.
+    expect(depois).toEqual(antes);
+    expect(depois.empresaId).toBe(dela.id);
+  });
+
+  it("as reservas antigas atribuídas pelo TELEFONE também continuam", async () => {
+    // As reservas que nunca foram perguntadas acham a empresa pelo vinculo.
+    // Desligar nao pode cortar esse caminho tambem.
+    const dela = await empresa();
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: null });
+    await bancoDeTeste.telefoneDaEmpresa.create({
+      data: { telefone: TELEFONE, empresaId: dela.id },
+    });
+
+    await desligar(dela.id);
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === dela.id)?.horas).toBe(1);
+  });
+
+  it("religar devolve tudo como estava", async () => {
+    const dela = await empresa();
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id,
+    });
+
+    await desligar(dela.id);
+    await bancoDeTeste.empresa.update({
+      where: { id: dela.id },
+      data: { ativa: true },
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === dela.id)?.horas).toBe(1);
+  });
+});

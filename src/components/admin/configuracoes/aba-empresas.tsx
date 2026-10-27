@@ -38,6 +38,9 @@ export function AbaDeEmpresas() {
   const [erroAoCarregar, setErroAoCarregar] = useState<string | null>(null);
   const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
   const [nomeNovo, setNomeNovo] = useState("");
+  /** A empresa que esta sendo renomeada agora, e o texto em edicao. */
+  const [renomeando, setRenomeando] = useState<string | null>(null);
+  const [nomeEmEdicao, setNomeEmEdicao] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async (sinal?: AbortSignal) => {
@@ -95,8 +98,23 @@ export function AbaDeEmpresas() {
           vezes quem paga a conta do mês é a empresa.
         </p>
         <p>
-          Marcar um telefone junta <strong>todas as reservas passadas dele</strong> na
-          hora, sem mexer em reserva nenhuma. Desmarcar tira do total da empresa.
+          As empresas <strong>ligadas</strong> aparecem no site, para o cliente
+          escolher a dele na hora de reservar. É esse o caminho normal: a
+          resposta fica guardada na reserva e não depende de ninguém marcar
+          nada depois.
+        </p>
+        <p>
+          <strong>Desligar</strong> tira a empresa da lista do site — ela deixa
+          de ser oferecida a quem vai reservar. O histórico{" "}
+          <strong>fica inteiro</strong>: as reservas antigas continuam de pé, a
+          empresa continua no relatório com as horas e o faturamento dela, e
+          nada é apagado. Empresa que saiu do coworking é desligada, nunca
+          excluída — por isso não existe botão de excluir aqui.
+        </p>
+        <p>
+          Marcar um telefone, lá embaixo, junta{" "}
+          <strong>as reservas antigas dele</strong> na hora. Serve para arrumar
+          o passado e para o caso raro de quem veio uma vez só com a equipe.
         </p>
       </CaixaInformativa>
 
@@ -112,33 +130,87 @@ export function AbaDeEmpresas() {
               {empresas.map((empresa) => (
                 <li
                   key={empresa.id}
-                  className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-border bg-bg-primary px-4 py-2.5"
+                  className="flex flex-col gap-3 rounded-lg border border-border bg-bg-primary px-4 py-2.5"
                 >
-                  <span className="flex flex-col">
-                    <span className="font-semibold text-text-primary">
-                      {empresa.nome}
-                      {empresa.ativa ? "" : " (desligada)"}
+                  <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <span className="flex flex-col">
+                      <span className="font-semibold text-text-primary">
+                        {empresa.nome}
+                        {empresa.ativa ? "" : " (desligada)"}
+                      </span>
+                      <span className="text-sm text-text-secondary">
+                        {empresa.telefones === 1
+                          ? "1 telefone marcado"
+                          : `${empresa.telefones} telefones marcados`}
+                        {empresa.ativa
+                          ? ""
+                          : " · fora da lista do site, histórico mantido"}
+                      </span>
                     </span>
-                    <span className="text-sm text-text-secondary">
-                      {empresa.telefones === 1
-                        ? "1 telefone marcado"
-                        : `${empresa.telefones} telefones marcados`}
-                    </span>
-                  </span>
 
-                  <Botao
-                    aparencia="secundario"
-                    largura="conteudo"
-                    disabled={salvando}
-                    onClick={() =>
-                      void comAviso(
-                        () => editarEmpresa(empresa.id, { ativa: !empresa.ativa }),
-                        "Não foi possível mudar a empresa.",
-                      )
-                    }
-                  >
-                    {empresa.ativa ? "Desligar" : "Religar"}
-                  </Botao>
+                    <div className="flex flex-wrap gap-2">
+                      <Botao
+                        aparencia="secundario"
+                        largura="conteudo"
+                        disabled={salvando}
+                        onClick={() => {
+                          setErroDaAcao(null);
+                          setRenomeando((atual) =>
+                            atual === empresa.id ? null : empresa.id,
+                          );
+                          setNomeEmEdicao(empresa.nome);
+                        }}
+                      >
+                        {renomeando === empresa.id ? "Cancelar" : "Renomear"}
+                      </Botao>
+
+                      <Botao
+                        aparencia="secundario"
+                        largura="conteudo"
+                        disabled={salvando}
+                        onClick={() =>
+                          void comAviso(
+                            () => editarEmpresa(empresa.id, { ativa: !empresa.ativa }),
+                            "Não foi possível mudar a empresa.",
+                          )
+                        }
+                      >
+                        {empresa.ativa ? "Desligar" : "Religar"}
+                      </Botao>
+                    </div>
+                  </div>
+
+                  {/* RENOMEAR muda o rotulo em TODO lugar, inclusive nas
+                      reservas antigas — elas apontam para a empresa, e nao
+                      guardam o nome. E o que se quer: empresa que mudou de
+                      razao social nao vira duas no relatorio. */}
+                  {renomeando === empresa.id ? (
+                    <div className="flex flex-wrap items-end gap-3 border-t border-border pt-3">
+                      <div className="min-w-56 flex-1">
+                        <Campo
+                          etiqueta="Nome da empresa"
+                          value={nomeEmEdicao}
+                          maxLength={80}
+                          onChange={(evento) => setNomeEmEdicao(evento.target.value)}
+                          dica="Troca o nome também nas reservas antigas: elas apontam para a empresa, não guardam o texto."
+                        />
+                      </div>
+                      <Botao
+                        largura="conteudo"
+                        disabled={salvando || nomeEmEdicao.trim().length < 2}
+                        onClick={() =>
+                          void comAviso(async () => {
+                            await editarEmpresa(empresa.id, {
+                              nome: nomeEmEdicao.trim(),
+                            });
+                            setRenomeando(null);
+                          }, "Não foi possível renomear a empresa.")
+                        }
+                      >
+                        Salvar nome
+                      </Botao>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
