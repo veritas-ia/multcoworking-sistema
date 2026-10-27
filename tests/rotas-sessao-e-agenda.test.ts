@@ -56,6 +56,7 @@ describe("GET /api/publico/sessao", () => {
       identificado: false,
       telefoneMascarado: null,
       nomeConhecido: null,
+      empresaConhecida: null,
     });
   });
 

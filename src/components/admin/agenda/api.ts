@@ -58,6 +58,8 @@ export function criarNaRecepcao(entrada: {
   salaId: string;
   /** Area de atuacao do cliente. Obrigatoria. */
   profissao: string;
+  /** A empresa mensalista, ou nulo. So afeta o relatorio. */
+  empresaId?: string | null;
   telefone: string;
   nome: string;
   data: string;
@@ -94,11 +96,26 @@ export function reagendarComoAdmin(
   });
 }
 
-/** O nome que este telefone usou na ultima reserva. Nulo se nunca reservou. */
+/**
+ * As empresas mensalistas ativas, para o campo do balcao.
+ *
+ * Reaproveita a rota publica de proposito: e a mesma lista que o cliente ve
+ * no site, e duas rotas devolvendo a mesma coisa acabariam discordando.
+ */
+export function buscarEmpresasAtivas(
+  sinal?: AbortSignal,
+): Promise<{ empresas: { id: string; nome: string }[] }> {
+  return pedir("/api/publico/empresas", { signal: sinal });
+}
+
+/**
+ * O nome e a empresa que este telefone usou na ultima reserva. Nulos se
+ * nunca reservou.
+ */
 export function buscarNomeDoCliente(
   telefone: string,
   sinal?: AbortSignal,
-): Promise<{ nome: string | null }> {
+): Promise<{ nome: string | null; empresa: { id: string; nome: string } | null }> {
   return pedir(`/api/admin/clientes?telefone=${encodeURIComponent(telefone)}`, {
     signal: sinal,
   });
@@ -242,6 +259,8 @@ export type DadosDaSerie = {
   salaId: string;
   /** Area de atuacao do cliente, perguntada uma vez para a serie. */
   profissao: string;
+  /** A empresa mensalista da serie, perguntada uma vez. */
+  empresaId?: string | null;
   telefone: string;
   nome: string;
   inicio: string;

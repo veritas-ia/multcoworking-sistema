@@ -66,7 +66,12 @@ export type Sessao = {
   telefoneMascarado: string | null;
   /** O nome usado na ultima reserva deste telefone. Nulo na primeira vez. */
   nomeConhecido: string | null;
+  /** A empresa da ultima reserva deste telefone. Nula = nao e de empresa. */
+  empresaConhecida: EmpresaDoCliente | null;
 };
+
+/** Uma empresa mensalista, do jeito que o cliente a ve: so o nome. */
+export type EmpresaDoCliente = { id: string; nome: string };
 
 export type ReservaCriada = {
   id: string;

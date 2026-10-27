@@ -5,7 +5,14 @@
  * proprio servidor escreveu — a tela nunca inventa texto de erro de regra de
  * negocio. Sem internet, a mensagem e generica e o status fica 0.
  */
-import type { Agenda, Bloco, ReservaCriada, Sala, Sessao } from "./tipos";
+import type {
+  Agenda,
+  Bloco,
+  EmpresaDoCliente,
+  ReservaCriada,
+  Sala,
+  Sessao,
+} from "./tipos";
 
 export class ErroDaApi extends Error {
   constructor(
@@ -66,6 +73,18 @@ export function buscarSessao(sinal?: AbortSignal): Promise<Sessao> {
   return pedir("/api/publico/sessao", { signal: sinal });
 }
 
+/**
+ * As empresas mensalistas, para a pessoa escolher a dela.
+ *
+ * Lista vazia e normal: enquanto a equipe nao cadastrar nenhuma, a pergunta
+ * simplesmente nao aparece no formulario.
+ */
+export function buscarEmpresas(
+  sinal?: AbortSignal,
+): Promise<{ empresas: EmpresaDoCliente[] }> {
+  return pedir("/api/publico/empresas", { signal: sinal });
+}
+
 export function encerrarSessao(): Promise<{ mensagem: string }> {
   return pedir("/api/publico/sessao", { method: "DELETE" });
 }
@@ -122,6 +141,8 @@ export function criarReserva(entrada: {
   categoria?: "HORA" | "DIARIA";
   /** Area de atuacao do cliente. Obrigatoria. */
   profissao: string;
+  /** A empresa mensalista escolhida, ou nulo. */
+  empresaId?: string | null;
   salaId: string;
   data: string;
   inicio: string;

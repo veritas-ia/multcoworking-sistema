@@ -10,6 +10,7 @@ import { Logotipo } from "@/components/marca/logotipo";
 import {
   buscarAgenda,
   buscarSalas,
+  buscarEmpresas,
   buscarSessao,
   criarReserva,
   encerrarSessao,
@@ -28,6 +29,7 @@ import { BarraDeProgresso } from "./pecas";
 import {
   ETAPAS,
   type Agenda,
+  type EmpresaDoCliente,
   type Etapa,
   type ReservaCriada,
   type Sala,
@@ -95,6 +97,9 @@ export function FluxoDeReserva({
   const [nome, setNome] = useState("");
   /** Veio da reserva anterior: o campo nasce travado, com "editar" do lado. */
   const [nomeJaConhecido, setNomeJaConhecido] = useState(false);
+  /** As empresas mensalistas cadastradas. Vazia = a pergunta nao aparece. */
+  const [empresas, setEmpresas] = useState<EmpresaDoCliente[]>([]);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [telefoneMascarado, setTelefoneMascarado] = useState<string | null>(null);
 
   const [reserva, setReserva] = useState<ReservaCriada | null>(null);
@@ -117,8 +122,9 @@ export function FluxoDeReserva({
       buscarSalas(controle.signal),
       buscarAgenda(controle.signal),
       buscarSessao(controle.signal),
+      buscarEmpresas(controle.signal),
     ])
-      .then(([resultadoSalas, agenda, sessao]) => {
+      .then(([resultadoSalas, agenda, sessao, resultadoEmpresas]) => {
         if (controle.signal.aborted) {
           return;
         }
@@ -140,6 +146,20 @@ export function FluxoDeReserva({
         if (sessao.nomeConhecido) {
           setNome(sessao.nomeConhecido);
           setNomeJaConhecido(true);
+        }
+
+        setEmpresas(resultadoEmpresas.empresas);
+
+        // A EMPRESA TAMBEM JA VEM ESCOLHIDA, pelo mesmo motivo do nome: quem
+        // e da Prestare nao precisa dizer isso toda vez. So vale se ela
+        // continuar na lista — empresa desligada no painel sai da escolha.
+        if (
+          sessao.empresaConhecida &&
+          resultadoEmpresas.empresas.some(
+            (empresa) => empresa.id === sessao.empresaConhecida?.id,
+          )
+        ) {
+          setEmpresaId(sessao.empresaConhecida.id);
         }
 
         const daUrl = resultadoSalas.salas.find(
@@ -293,6 +313,7 @@ export function FluxoDeReserva({
         pessoas: perguntarPessoas && pessoas !== "" ? Number(pessoas) : null,
         categoria,
         profissao,
+        empresaId,
       });
       setReserva(criada);
       setAviso(null);
@@ -519,9 +540,12 @@ export function FluxoDeReserva({
             perguntarPessoas={perguntarPessoas}
             capacidade={sala?.capacidade ?? null}
             profissao={profissao}
+            empresas={empresas}
+            empresaId={empresaId}
             aoMudar={setNome}
             aoMudarPessoas={setPessoas}
             aoMudarProfissao={setProfissao}
+            aoMudarEmpresa={setEmpresaId}
             aoContinuar={() => setEtapa("resumo")}
           />
         ) : null}

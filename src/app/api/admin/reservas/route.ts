@@ -16,6 +16,8 @@ export const dynamic = "force-dynamic";
 
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
+  /** A empresa mensalista. Ausente ou nula = nao e de empresa. */
+  empresaId: z.string().min(1).nullish(),
   /** Obrigatoria em reserva nova; so o passado tem reserva sem profissao. */
   profissao: z.enum(["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"], {
     message: "Escolha a área de atuação do cliente.",
@@ -78,6 +80,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     telefone,
     nomeCliente: corpo.data.nome,
     profissao: corpo.data.profissao,
+    empresaId: corpo.data.empresaId ?? null,
     pessoas: corpo.data.pessoas ?? null,
     categoria,
     inicio,

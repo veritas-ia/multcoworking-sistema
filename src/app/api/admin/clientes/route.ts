@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { respostaErro } from "@/lib/api";
+import { empresaConhecidaDoTelefone } from "@/lib/empresas";
 import { prisma } from "@/lib/prisma";
 import { normalizarTelefone } from "@/lib/telefone";
 
@@ -12,8 +13,8 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/admin/clientes?telefone=...
  *
- * O nome que este telefone usou na ULTIMA reserva, para o formulario da
- * recepcao preencher sozinho.
+ * O nome e a empresa que este telefone usou na ULTIMA reserva, para o
+ * formulario da recepcao preencher sozinho.
  *
  * Existe pelo mesmo motivo do campo travado no site: a mesma pessoa vinha
  * sendo cadastrada de varios jeitos ("Prestare", "Prestare Karen",
@@ -34,7 +35,7 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
 
   // Telefone incompleto nao e erro: a tela consulta enquanto a pessoa digita.
   if (!telefone) {
-    return NextResponse.json({ nome: null });
+    return NextResponse.json({ nome: null, empresa: null });
   }
 
   const ultima = await prisma.reserva.findFirst({
@@ -43,5 +44,8 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     select: { nomeCliente: true },
   });
 
-  return NextResponse.json({ nome: ultima?.nomeCliente ?? null });
+  return NextResponse.json({
+    nome: ultima?.nomeCliente ?? null,
+    empresa: await empresaConhecidaDoTelefone(telefone),
+  });
 }

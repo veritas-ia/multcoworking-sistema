@@ -17,6 +17,11 @@ const Corpo = z.object({
   profissao: z.enum(["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"], {
     message: "Escolha a sua área de atuação.",
   }),
+  /**
+   * A empresa mensalista, quando a pessoa disse que e de uma. Ausente ou nula
+   * e o caso normal. O servidor confere se ela existe e esta ativa.
+   */
+  empresaId: z.string().min(1).nullish(),
   /** "DIARIA" ignora inicio/fim: o horario vem da configuracao. */
   categoria: z.enum(["HORA", "DIARIA"]).optional(),
   /** So as salas que cobram diferente por grupo perguntam isso. */
@@ -81,6 +86,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     telefone,
     nomeCliente: corpo.data.nome,
     profissao: corpo.data.profissao,
+    empresaId: corpo.data.empresaId ?? null,
     pessoas: corpo.data.pessoas ?? null,
     categoria,
     inicio,

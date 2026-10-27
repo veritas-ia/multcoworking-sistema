@@ -17,7 +17,13 @@ import {
 import { formatarEnquantoDigita } from "@/lib/telefone";
 import { cn } from "@/lib/utils";
 
-import { buscarNomeDoCliente, criarNaRecepcao, criarSerie, type RelatorioDaSerie } from "./api";
+import {
+  buscarEmpresasAtivas,
+  buscarNomeDoCliente,
+  criarNaRecepcao,
+  criarSerie,
+  type RelatorioDaSerie,
+} from "./api";
 
 const BLOCOS = blocosEntre("06:00", "23:00");
 
@@ -81,6 +87,26 @@ export function NovaReserva({
   const [erro, setErro] = useState<string | null>(null);
   /** Quando o telefone ja reservou antes, o nome dele aparece aqui. */
   const [nomeConhecido, setNomeConhecido] = useState<string | null>(null);
+  /** As empresas mensalistas. Vazia = o campo nao aparece. */
+  const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([]);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controle = new AbortController();
+
+    buscarEmpresasAtivas(controle.signal)
+      .then((resposta) => {
+        if (!controle.signal.aborted) {
+          setEmpresas(resposta.empresas);
+        }
+      })
+      .catch(() => {
+        // Sem a lista, o balcao lanca a reserva sem empresa e a equipe
+        // arruma depois no painel. Nao e motivo para travar o formulario.
+      });
+
+    return () => controle.abort();
+  }, []);
 
   // TELEFONE CONHECIDO PREENCHE O NOME.
   //
@@ -104,6 +130,13 @@ export function NovaReserva({
         }
 
         setNomeConhecido(resposta.nome);
+
+        // A EMPRESA TAMBEM VEM SUGERIDA, e tambem so preenche o que esta
+        // vazio: as vezes quem liga e outra pessoa da mesma empresa, e as
+        // vezes e alguem de fora usando o telefone do escritorio.
+        if (resposta.empresa) {
+          setEmpresaId((atual) => atual ?? resposta.empresa!.id);
+        }
 
         // So preenche o campo vazio: nunca apaga o que a equipe digitou.
         if (resposta.nome) {
@@ -150,6 +183,7 @@ export function NovaReserva({
           telefone,
           nome: nome.trim(),
           profissao,
+          empresaId,
           inicio,
           fim,
           diasDaSemana,
@@ -167,6 +201,7 @@ export function NovaReserva({
         telefone,
         nome: nome.trim(),
         profissao,
+        empresaId,
         data,
         inicio,
         fim,
@@ -273,6 +308,35 @@ export function NovaReserva({
             </span>
           ) : null}
         </label>
+
+        {/* A EMPRESA MENSALISTA.
+            Aqui e opcional e sem pergunta de "sim ou nao": o balcao conhece
+            o cliente e escolhe direto. Sugerida pelo telefone, igual ao
+            nome, e sempre editavel. */}
+        {empresas.length > 0 ? (
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-semibold text-text-primary">
+              Empresa (se for mensalista)
+            </span>
+            <select
+              value={empresaId ?? ""}
+              onChange={(evento) =>
+                setEmpresaId(evento.target.value === "" ? null : evento.target.value)
+              }
+              className="min-h-12 w-full rounded-lg border border-border bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+            >
+              <option value="">Nenhuma — é do próprio cliente</option>
+              {empresas.map((empresa) => (
+                <option key={empresa.id} value={empresa.id}>
+                  {empresa.nome}
+                </option>
+              ))}
+            </select>
+            <span className="text-sm text-text-secondary">
+              Junta as reservas da equipe no relatório. Não muda o valor.
+            </span>
+          </label>
+        ) : null}
 
         <Campo
           etiqueta="Telefone (WhatsApp)"

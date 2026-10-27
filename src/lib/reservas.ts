@@ -11,6 +11,10 @@
 import { StatusReserva } from "@/generated/prisma/enums";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
+import {
+  empresaEscolhidaEhValida,
+  lembrarEmpresaDoTelefone,
+} from "@/lib/empresas";
 import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
 import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
@@ -91,6 +95,12 @@ export async function criarReservaPublica(entrada: {
   categoria?: CategoriaReserva;
   /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
   profissao: CategoriaProfissao;
+  /**
+   * A empresa mensalista, escolhida pelo cliente. Nulo = nao e de empresa,
+   * que e o caso da maioria. Nao muda preco nem disponibilidade: serve ao
+   * relatorio.
+   */
+  empresaId?: string | null;
 }): Promise<ResultadoCriacao> {
   // A trava do contrato de exclusividade vem ANTES de qualquer outra conta:
   // nao ha por que conferir horario e preco de uma reserva que nao pode
@@ -103,6 +113,20 @@ export async function criarReservaPublica(entrada: {
         tipo: "REGRA",
         codigo: "PROFISSAO_BLOQUEADA",
         motivo: AVISO_PROFISSAO_BLOQUEADA,
+      },
+    };
+  }
+
+  // A tela manda o identificador da empresa, e ninguem precisa acreditar na
+  // tela: aqui se confere que ela existe e esta ativa. Inventado ou
+  // desligado, a reserva nasceria apontando para o nada.
+  if (!(await empresaEscolhidaEhValida(entrada.empresaId))) {
+    return {
+      criada: false,
+      falha: {
+        tipo: "REGRA",
+        codigo: "EMPRESA_INVALIDA",
+        motivo: "Essa empresa não está mais disponível. Escolha outra ou siga sem empresa.",
       },
     };
   }
@@ -170,12 +194,20 @@ export async function criarReservaPublica(entrada: {
           origem: "PUBLICO",
           categoria,
           profissao: entrada.profissao,
+          empresaId: entrada.empresaId ?? null,
         },
         select: { id: true },
       });
 
       return reserva.id;
     });
+
+    // Guarda o telefone na empresa para a PROXIMA reserva ja vir escolhida.
+    // Depois da transacao, de proposito: e conveniencia, e nao pode derrubar
+    // uma reserva que ja esta confirmada.
+    if (entrada.empresaId) {
+      await lembrarEmpresaDoTelefone(entrada.telefone, entrada.empresaId);
+    }
 
     return { criada: true, reservaId, valor: valor.toFixed(2) };
   } catch (erro: unknown) {

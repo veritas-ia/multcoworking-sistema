@@ -11,6 +11,7 @@ import {
 } from "@/lib/profissoes";
 
 import { TituloDaEtapa } from "./pecas";
+import type { EmpresaDoCliente } from "./tipos";
 
 /**
  * Etapa 6 — nome (e, em algumas salas, quantas pessoas).
@@ -30,9 +31,12 @@ export function EtapaNome({
   perguntarPessoas,
   capacidade,
   profissao,
+  empresas,
+  empresaId,
   aoMudar,
   aoMudarPessoas,
   aoMudarProfissao,
+  aoMudarEmpresa,
   aoContinuar,
 }: {
   nome: string;
@@ -46,17 +50,35 @@ export function EtapaNome({
   capacidade: number | null;
   /** Vazio ate a pessoa escolher. Obrigatorio para continuar. */
   profissao: string;
+  /** As empresas mensalistas cadastradas. Vazia = a pergunta nao aparece. */
+  empresas: EmpresaDoCliente[];
+  /** A empresa escolhida, ou nulo para "nao sou de empresa mensalista". */
+  empresaId: string | null;
   aoMudar: (nome: string) => void;
   aoMudarPessoas: (pessoas: string) => void;
   aoMudarProfissao: (profissao: string) => void;
+  aoMudarEmpresa: (empresaId: string | null) => void;
   aoContinuar: () => void;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [erroDePessoas, setErroDePessoas] = useState<string | null>(null);
   const [erroDeProfissao, setErroDeProfissao] = useState<string | null>(null);
+  const [erroDeEmpresa, setErroDeEmpresa] = useState<string | null>(null);
   const idProfissao = useId();
+  const idEmpresa = useId();
+
+  /**
+   * Nulo = a pessoa ainda nao respondeu. Com a empresa ja vinda do telefone,
+   * nasce em "sim" — e so confirmar.
+   */
+  const [deEmpresa, setDeEmpresa] = useState<boolean | null>(
+    empresaId === null ? null : true,
+  );
 
   const bloqueada = profissaoBloqueada(profissao);
+
+  /** Sem empresa cadastrada no painel, a pergunta nao faz sentido nenhum. */
+  const perguntarEmpresa = empresas.length > 0;
 
   return (
     <form
@@ -95,6 +117,19 @@ export function EtapaNome({
         // qualquer jeito; aqui e so para o cliente nao preencher o resto a
         // toa e levar a recusa so no fim.
         if (profissaoBloqueada(profissao)) {
+          return;
+        }
+
+        // Quem disse que e de empresa precisa dizer QUAL. Deixar passar em
+        // branco criaria a reserva sem empresa, e a pessoa sairia achando
+        // que marcou no nome da dela.
+        if (perguntarEmpresa && deEmpresa === null) {
+          setErroDeEmpresa("Diga se esta reserva é de uma empresa mensalista.");
+          return;
+        }
+
+        if (perguntarEmpresa && deEmpresa && empresaId === null) {
+          setErroDeEmpresa("Escolha a empresa.");
           return;
         }
 
@@ -200,6 +235,84 @@ export function EtapaNome({
           </p>
         )}
       </div>
+
+      {/* A EMPRESA MENSALISTA.
+          Lista fechada, cadastrada pela equipe: digitar livre devolveria a
+          bagunca de nomes ("Prestare", "Prestarre") por outra porta. Nao muda
+          preco nem disponibilidade — serve ao relatorio da equipe. */}
+      {perguntarEmpresa ? (
+        <fieldset className="flex flex-col gap-3">
+          <legend className="pb-1 text-sm font-semibold text-text-primary">
+            Esta reserva é de uma empresa mensalista?
+          </legend>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {[
+              { valor: false, rotulo: "Não, é minha" },
+              { valor: true, rotulo: "Sim, de uma empresa" },
+            ].map((opcao) => (
+              <button
+                key={String(opcao.valor)}
+                type="button"
+                aria-pressed={deEmpresa === opcao.valor}
+                onClick={() => {
+                  setDeEmpresa(opcao.valor);
+                  setErroDeEmpresa(null);
+                  if (!opcao.valor) {
+                    aoMudarEmpresa(null);
+                  }
+                }}
+                className={`min-h-12 flex-1 rounded-lg border px-4 text-base focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black ${
+                  deEmpresa === opcao.valor
+                    ? "border-black bg-brand-yellow font-semibold text-black"
+                    : "border-border bg-bg-primary text-text-primary"
+                }`}
+              >
+                {opcao.rotulo}
+              </button>
+            ))}
+          </div>
+
+          {deEmpresa ? (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor={idEmpresa}
+                className="text-sm font-semibold text-text-primary"
+              >
+                Qual empresa?
+              </label>
+              <select
+                id={idEmpresa}
+                value={empresaId ?? ""}
+                aria-invalid={erroDeEmpresa ? true : undefined}
+                onChange={(evento) => {
+                  aoMudarEmpresa(evento.target.value === "" ? null : evento.target.value);
+                  setErroDeEmpresa(null);
+                }}
+                className={`min-h-12 w-full rounded-lg border bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black ${
+                  erroDeEmpresa ? "border-destructive" : "border-border"
+                }`}
+              >
+                <option value="">Escolha…</option>
+                {empresas.map((empresa) => (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {erroDeEmpresa ? (
+            <p className="text-sm font-medium text-destructive">{erroDeEmpresa}</p>
+          ) : (
+            <p className="text-sm text-text-secondary">
+              Se a sua empresa aluga uma sala por mês aqui, as reservas da
+              equipe ficam juntas. Não muda o valor.
+            </p>
+          )}
+        </fieldset>
+      ) : null}
 
       {bloqueada ? (
         <p

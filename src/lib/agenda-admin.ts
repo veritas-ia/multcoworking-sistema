@@ -25,6 +25,10 @@ import {
 } from "@/lib/disponibilidade";
 import { historicoCom, type Momento } from "@/lib/historico-reserva";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
+import {
+  empresaEscolhidaEhValida,
+  lembrarEmpresaDoTelefone,
+} from "@/lib/empresas";
 import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
 import { BLOCO_MINUTOS, type CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
@@ -207,6 +211,8 @@ export async function criarReservaNaRecepcao(entrada: {
   categoria?: CategoriaReserva;
   /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
   profissao: CategoriaProfissao;
+  /** A empresa mensalista. Nulo = nao e de empresa. So afeta o relatorio. */
+  empresaId?: string | null;
   operador: Operador;
 }): Promise<Resultado<{ id: string; sala: string; valor: string }>> {
   // A trava do contrato de exclusividade vale TAMBEM para a recepcao. Ela
@@ -216,6 +222,13 @@ export async function criarReservaNaRecepcao(entrada: {
     return {
       ok: false,
       falha: { codigo: "REGRA", motivo: AVISO_PROFISSAO_BLOQUEADA },
+    };
+  }
+
+  if (!(await empresaEscolhidaEhValida(entrada.empresaId))) {
+    return {
+      ok: false,
+      falha: { codigo: "REGRA", motivo: "Essa empresa não está mais disponível." },
     };
   }
 
@@ -249,6 +262,7 @@ export async function criarReservaNaRecepcao(entrada: {
         pessoas: entrada.pessoas ?? null,
         categoria: entrada.categoria ?? "HORA",
         profissao: entrada.profissao,
+        empresaId: entrada.empresaId ?? null,
         inicio: entrada.inicio,
         fim: entrada.fim,
         duracaoMinutos: minutosEntre(entrada.inicio, entrada.fim),
@@ -265,6 +279,12 @@ export async function criarReservaNaRecepcao(entrada: {
       },
       include: { sala: { select: { nome: true, cor: true } } },
     });
+
+    // A proxima reserva deste telefone ja vem com a empresa escolhida — tanto
+    // no balcao quanto no site. Nao derruba a reserva se falhar.
+    if (entrada.empresaId) {
+      await lembrarEmpresaDoTelefone(entrada.telefone, entrada.empresaId);
+    }
 
     return {
       ok: true,

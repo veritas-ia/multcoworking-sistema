@@ -8,6 +8,7 @@ import {
   telefoneDaSessao,
 } from "@/lib/sessao-cliente";
 import { prisma } from "@/lib/prisma";
+import { empresaConhecidaDoTelefone, type EmpresaParaEscolher } from "@/lib/empresas";
 import { mascararTelefone } from "@/lib/telefone";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,14 @@ export type RespostaSessao = {
    * mao, e a resposta sai do cookie, nunca de um parametro.
    */
   nomeConhecido: string | null;
+  /**
+   * A empresa que este telefone usou por ultimo. Nula quando nao e de
+   * empresa, que e o caso da maioria.
+   *
+   * Serve para o campo ja nascer escolhido, do mesmo jeito que o nome. Nao e
+   * dado de outra pessoa: e a empresa de quem esta com o cookie na mao.
+   */
+  empresaConhecida: EmpresaParaEscolher | null;
 };
 
 /**
@@ -54,6 +63,7 @@ export async function GET(
     identificado: telefone !== null,
     telefoneMascarado: telefone ? mascararTelefone(telefone) : null,
     nomeConhecido: ultima?.nomeCliente ?? null,
+    empresaConhecida: telefone ? await empresaConhecidaDoTelefone(telefone) : null,
   });
 }
 

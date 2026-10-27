@@ -6,10 +6,18 @@
  * relatorio isso virava varios clientes separados, e as vezes quem paga a
  * conta do mes e a empresa, e nao a pessoa.
  *
- * O VINCULO E DO TELEFONE, NUNCA DA RESERVA. O relatorio descobre a empresa
- * pelo telefone na hora de montar, entao marcar um numero junta as reservas
- * passadas dele na mesma hora — e desvincular tira. Foi o combinado com o
- * dono: o relatorio reflete quem e cliente HOJE.
+ * QUEM RESPONDE E O CLIENTE, na hora de reservar, escolhendo de uma lista que
+ * so a equipe cadastra aqui — digitar livre devolveria a bagunca de nomes
+ * ("Prestare", "Prestarre", "Prestare Advocacia") por outra porta.
+ *
+ * A resposta fica GRAVADA NA RESERVA (campo "empresaId"), porque e a verdade
+ * daquele dia: reserva antiga nao muda de dono porque a pessoa trocou de
+ * empresa depois.
+ *
+ * O VINCULO DO TELEFONE, aqui embaixo, continua existindo com dois papeis
+ * menores: atribuir as reservas ANTIGAS, que nunca foram perguntadas, e ja
+ * vir escolhido na proxima reserva do mesmo numero. Ele e o padrao, nao a
+ * fonte da verdade.
  */
 import { prisma } from "@/lib/prisma";
 import { normalizarTelefone } from "@/lib/telefone";
@@ -305,4 +313,116 @@ export async function vincularTelefone(
   });
 
   return { ok: true, dados: { telefone, empresaId } };
+}
+
+// -----------------------------------------------------------------------------
+// O que o cliente ve e responde
+// -----------------------------------------------------------------------------
+
+/** O minimo para a pessoa escolher: nome e identificador, nada mais. */
+export type EmpresaParaEscolher = { id: string; nome: string };
+
+/**
+ * As empresas que o CLIENTE pode escolher no site.
+ *
+ * So as ativas, e so nome e id — nem telefone, nem quantidade de reservas,
+ * nem nada que diga quanto a empresa usa o espaco.
+ *
+ * ESTA LISTA E PUBLICA, por decisao do dono, e vale entender o porque: um
+ * funcionario novo de uma empresa mensalista reserva pela primeira vez e o
+ * sistema nao tem como saber que ele e de la. Sem a lista aberta, ele
+ * dependeria de a recepcao marcar o numero dele depois — exatamente o
+ * trabalho manual que esta mudanca veio tirar do caminho.
+ *
+ * O que isso custa, e o dono aceitou: quem abrir o site ve quais empresas sao
+ * mensalistas, e nada impede alguem de se dizer de uma delas. Como a empresa
+ * so muda o RELATORIO — nao muda preco, nem sala, nem libera horario — o
+ * estrago possivel e uma reserva somada na empresa errada, que a equipe
+ * corrige no painel.
+ */
+export async function listarEmpresasParaEscolher(): Promise<EmpresaParaEscolher[]> {
+  return prisma.empresa.findMany({
+    where: { ativa: true },
+    orderBy: { nome: "asc" },
+    select: { id: true, nome: true },
+  });
+}
+
+/**
+ * A empresa que ja esta ligada a este telefone, para o campo nascer escolhido.
+ *
+ * Primeiro procura a ULTIMA RESERVA deste numero que tinha empresa: e a
+ * resposta mais recente da propria pessoa. So depois cai no vinculo do
+ * telefone, que e o que a equipe marcou na mao.
+ */
+export async function empresaConhecidaDoTelefone(
+  telefone: string,
+): Promise<EmpresaParaEscolher | null> {
+  const ultima = await prisma.reserva.findFirst({
+    where: { telefone, empresaId: { not: null }, empresa: { ativa: true } },
+    orderBy: { criadoEm: "desc" },
+    select: { empresa: { select: { id: true, nome: true } } },
+  });
+
+  if (ultima?.empresa) {
+    return ultima.empresa;
+  }
+
+  const vinculo = await prisma.telefoneDaEmpresa.findUnique({
+    where: { telefone },
+    select: { empresa: { select: { id: true, nome: true, ativa: true } } },
+  });
+
+  if (!vinculo?.empresa.ativa) {
+    return null;
+  }
+
+  return { id: vinculo.empresa.id, nome: vinculo.empresa.nome };
+}
+
+/**
+ * Confere, no SERVIDOR, que a empresa escolhida existe e esta ativa.
+ *
+ * Nulo na entrada e resposta valida: e quem nao e de empresa. O que nao pode
+ * passar e um identificador inventado ou de empresa desligada — a tela manda
+ * o id, e ninguem precisa acreditar na tela.
+ */
+export async function empresaEscolhidaEhValida(
+  empresaId: string | null | undefined,
+): Promise<boolean> {
+  if (!empresaId) {
+    return true;
+  }
+
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: empresaId },
+    select: { ativa: true },
+  });
+
+  return empresa?.ativa === true;
+}
+
+/**
+ * Guarda, em silencio, que este telefone e desta empresa.
+ *
+ * Serve so para a PROXIMA reserva do mesmo numero ja vir com a empresa
+ * escolhida. Nao e o que o relatorio soma — quem manda ali e o campo da
+ * propria reserva.
+ *
+ * Nunca derruba a reserva: se falhar, a pessoa so vai escolher de novo na
+ * proxima vez. Reserva confirmada nao se perde por causa de uma conveniencia.
+ */
+export async function lembrarEmpresaDoTelefone(
+  telefone: string,
+  empresaId: string,
+): Promise<void> {
+  try {
+    await prisma.telefoneDaEmpresa.upsert({
+      where: { telefone },
+      create: { telefone, empresaId },
+      update: { empresaId },
+    });
+  } catch {
+    // De proposito sem barulho: ver o comentario acima.
+  }
 }

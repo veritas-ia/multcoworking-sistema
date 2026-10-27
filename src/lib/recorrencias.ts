@@ -25,6 +25,10 @@ import {
   type SemanaDoMes,
 } from "@/lib/datas-recorrencia";
 import type { CategoriaProfissao } from "@/generated/prisma/enums";
+import {
+  empresaEscolhidaEhValida,
+  lembrarEmpresaDoTelefone,
+} from "@/lib/empresas";
 import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import { historicoCom } from "@/lib/historico-reserva";
@@ -63,6 +67,11 @@ export async function criarSerie(entrada: {
   nomeCliente: string;
   /** Area de atuacao do cliente, perguntada UMA vez para a serie inteira. */
   profissao: CategoriaProfissao;
+  /**
+   * A empresa mensalista da serie. Perguntada UMA vez; todas as ocorrencias
+   * nascem com ela, igual a profissao.
+   */
+  empresaId?: string | null;
   horaInicio: string;
   horaFim: string;
   diasDaSemana: number[];
@@ -76,6 +85,13 @@ export async function criarSerie(entrada: {
   // uma vez; deixar passar aqui seria a maior brecha das tres portas.
   if (profissaoBloqueada(entrada.profissao)) {
     return { ok: false, falha: { codigo: "REGRA", motivo: AVISO_PROFISSAO_BLOQUEADA } };
+  }
+
+  if (!(await empresaEscolhidaEhValida(entrada.empresaId))) {
+    return {
+      ok: false,
+      falha: { codigo: "REGRA", motivo: "Essa empresa não está mais disponível." },
+    };
   }
 
   if (entrada.diasDaSemana.length === 0) {
@@ -183,6 +199,7 @@ export async function criarSerie(entrada: {
           nomeCliente: entrada.nomeCliente,
           telefone: entrada.telefone,
           profissao: entrada.profissao,
+          empresaId: entrada.empresaId ?? null,
           inicio,
           fim,
           duracaoMinutos: minutosEntre(inicio, fim),
@@ -210,6 +227,11 @@ export async function criarSerie(entrada: {
       }
       throw erro;
     }
+  }
+
+  // A proxima reserva deste telefone ja vem com a empresa escolhida.
+  if (entrada.empresaId) {
+    await lembrarEmpresaDoTelefone(entrada.telefone, entrada.empresaId);
   }
 
   return { ok: true, dados: { recorrenciaId: recorrencia.id, criadas, puladas } };
