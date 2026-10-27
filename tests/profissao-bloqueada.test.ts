@@ -13,7 +13,16 @@
  *
  * Precisa do banco no ar e com o seed carregado.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { POST as postReservaAdmin } from "@/app/api/admin/reservas/route";
 import { reagendarComoAdmin } from "@/lib/agenda-admin";
@@ -30,6 +39,16 @@ import { instanteDe } from "@/lib/tempo";
 
 import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoPost } from "./apoio/requisicao";
+
+/**
+ * O RELOGIO E CONGELADO nestes testes.
+ *
+ * Sem isso o arquivo tinha prazo de validade: ele reserva na TERCA as 10h, e
+ * no dia 27/10/2026, passadas as 10h, a antecedencia minima passou a recusar
+ * a reserva — o teste quebrava sozinho, sem nada no sistema ter mudado. Foi o
+ * mesmo defeito que pegou o "diaria.test.ts".
+ */
+const AGORA = new Date("2026-10-27T09:00:00.000Z");
 
 const TERCA = "2026-10-27";
 const QUARTA = "2026-10-28";
@@ -65,7 +84,16 @@ async function limpar(): Promise<void> {
   await bancoDeTeste.recorrencia.deleteMany({ where: { telefone: TELEFONE } });
 }
 
-afterEach(limpar);
+beforeEach(() => {
+  // Congela apenas o relogio; o banco continua normal.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(AGORA);
+});
+
+afterEach(async () => {
+  vi.useRealTimers();
+  await limpar();
+});
 
 afterAll(async () => {
   await limpar();
