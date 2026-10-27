@@ -11,9 +11,10 @@
 --  1. e a verdade do momento: aquela reserva foi para aquela empresa. Reserva
 --     antiga nao muda de dono porque o cliente trocou de emprego depois;
 --  2. acaba o conflito entre "o que a equipe marcou" e "o que o cliente
---     disse": cada reserva carrega a propria resposta;
---  3. telefone de empresa e compartilhado na pratica — o mesmo numero
---     (+5514996040233) ja aparece em producao como "Toca" e como "Prestare".
+--     disse": cada reserva carrega a propria resposta.
+--
+-- O telefone continua sendo um bom critério de agrupamento, e e o que atribui
+-- as reservas antigas. Guardar na reserva nao o substitui: completa.
 --
 -- O vinculo do telefone CONTINUA existindo e tem dois papeis: atribuir as
 -- reservas antigas, que nunca foram perguntadas, e ja vir escolhido na proxima

@@ -583,11 +583,20 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   marcando telefone por telefone — o dono vetou: *"a gente não vai ter toda hora esse
   controle de ficar olhando reserva por reserva"*. Com 26 telefones e crescendo, isso
   não se sustentava.
-- **A resposta fica GRAVADA NA RESERVA** (`empresaId`), e não no telefone. Três
+- **A resposta fica GRAVADA NA RESERVA** (`empresaId`), e não no telefone. Dois
   motivos: é a verdade daquele dia (reserva antiga não muda de dono porque a pessoa
-  trocou de emprego depois); acaba o conflito entre "o que a equipe marcou" e "o que o
-  cliente disse"; e telefone de empresa é compartilhado na prática — em produção o
-  mesmo `+5514996040233` aparece como "Toca" e como "Prestare".
+  trocou de emprego depois) e acaba o conflito entre "o que a equipe marcou" e "o que
+  o cliente disse".
+- **Correção de 27/10/2026:** houve um terceiro motivo listado aqui, de que telefone de
+  empresa seria compartilhado na prática, apoiado no número `+5514996040233` aparecer
+  como "Toca" e como "Prestare" em produção. **Estava errado:** esse número é o
+  atendimento comercial do próprio coworking, e a coincidência foi teste. **O telefone
+  continua sendo um bom critério de agrupamento** (palavra do dono), e os dois motivos
+  acima bastam para a decisão — que não mudou.
+- **O que o número da casa ainda implica:** reserva lançada pelo balcão com o telefone
+  do atendimento comercial cai toda num "cliente" só, que é a recepção. É justamente a
+  empresa gravada na reserva que salva o relatório nesse caso, porque ela não depende
+  do telefone usado.
 - **O vínculo do TELEFONE continua existindo, com dois papéis menores:** atribuir as
   reservas ANTIGAS, que nunca foram perguntadas, e já vir escolhido na próxima reserva
   do mesmo número. É o padrão, não a fonte da verdade. A coluna aceita nulo de
@@ -690,6 +699,5 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   frente não aparece em atalho nenhum (em produção a Giovanna tem reserva até 31/10 e a
   Nicole até 29/10). Fica **em aberto**, por decisão de escopo do dono.
 - **Editar o nome NUNCA criou cliente novo.** O agrupamento sempre foi pelo telefone; o
-  que troca é o rótulo, que é o nome da reserva mais recente. Em produção o
-  `+5514996040233` aparece como "Toca" e como "Prestare" — é um cliente só, e a tela
-  mostra o nome mais novo. Há teste provando isso.
+  que troca é o rótulo, que é o nome da reserva mais recente. Há teste provando isso,
+  com dois nomes no mesmo número dando um cliente só.

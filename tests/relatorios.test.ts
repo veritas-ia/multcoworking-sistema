@@ -977,9 +977,9 @@ describe("a fronteira do dinheiro continua de pé", () => {
 
 describe("editar o nome NÃO cria um cliente novo", () => {
   it("dois nomes no mesmo telefone continuam sendo um cliente só", async () => {
-    // O dono desconfiou disso ao ver o painel. Em producao o telefone
-    // +5514996040233 aparece como "Toca" e como "Prestare" — e UM cliente,
-    // porque o agrupamento sempre foi pelo telefone. O que troca e o rotulo.
+    // O dono desconfiou disso ao ver o painel: dois nomes no mesmo numero
+    // parecem dois clientes. Nao sao — o agrupamento sempre foi pelo telefone,
+    // e o que troca e so o rotulo, que mostra o nome da reserva mais recente.
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Toca" });
     await reserva({
       dia: SEGUNDA, inicio: "14:00", fim: "15:00", nome: "Toca Imóveis",

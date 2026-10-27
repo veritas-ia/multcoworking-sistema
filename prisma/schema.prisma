@@ -308,10 +308,10 @@ model Reserva {
 
   /// A empresa que esta reserva pertence, respondida por quem reservou.
   ///
-  /// Fica NA RESERVA, e nao no telefone: a reserva antiga nao muda de dono
-  /// porque a pessoa trocou de empresa depois. Em producao o mesmo numero ja
-  /// aparece como "Toca" e como "Prestare" — telefone de empresa e
-  /// compartilhado na pratica.
+  /// Fica NA RESERVA, e nao no telefone, por dois motivos: a reserva antiga nao
+  /// muda de dono porque a pessoa trocou de empresa depois, e cada reserva
+  /// carrega a propria resposta, sem conflito entre o que a equipe marcou e o
+  /// que o cliente disse.
   ///
   /// Nulo e normal: e a reserva de quem nao e de empresa mensalista, e e
   /// tambem a reserva antiga, criada antes de a pergunta existir. Para essas,
