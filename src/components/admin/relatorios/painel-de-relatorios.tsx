@@ -15,7 +15,7 @@ import {
   GraficoDoTempo,
   diaEMes,
 } from "./graficos";
-import { ATALHOS, porExtensoCurto } from "./periodos";
+import { ATALHOS, ATALHO_PADRAO, porExtensoCurto } from "./periodos";
 
 /**
  * O DASHBOARD DE RELATORIOS.
@@ -27,8 +27,8 @@ import { ATALHOS, porExtensoCurto } from "./periodos";
  * nenhum, entao nao ha o que esconder aqui.
  */
 export function PainelDeRelatorios({ hoje }: { hoje: string }) {
-  const [periodo, setPeriodo] = useState<Periodo>(() => ATALHOS[0]!.calcular(hoje));
-  const [atalhoAtivo, setAtalhoAtivo] = useState<string | null>(ATALHOS[0]!.id);
+  const [periodo, setPeriodo] = useState<Periodo>(() => ATALHO_PADRAO.calcular(hoje));
+  const [atalhoAtivo, setAtalhoAtivo] = useState<string | null>(ATALHO_PADRAO.id);
   const [dados, setDados] = useState<Comparacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);

@@ -24,6 +24,7 @@ import {
   somarDias,
 } from "@/lib/relatorios";
 import { GET as getRelatorios } from "@/app/api/admin/relatorios/route";
+import { ATALHOS, ATALHO_PADRAO } from "@/components/admin/relatorios/periodos";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
@@ -739,5 +740,28 @@ describe("GET /api/admin/relatorios", () => {
       de: somarDias(SEGUNDA, -7),
       ate: somarDias(SEGUNDA, -7),
     });
+  });
+});
+
+/**
+ * O PERIODO COM QUE A TELA ABRE (27/10/2026).
+ *
+ * Isto nao e detalhe de estilo. Com sete dias, o dono do coworking leu
+ * "poucas horas" da Toca Imoveis achando que era o total — era so a ultima
+ * semana, e as horas estavam todas no banco. Se alguem voltar o padrao para
+ * sete dias, o mesmo mal-entendido volta com ele, e sem erro aparecer em
+ * lugar nenhum.
+ */
+describe("o período com que o relatório abre", () => {
+  it("abre em 30 dias, não em 7", () => {
+    expect(ATALHO_PADRAO.id).toBe("30dias");
+
+    const periodo = ATALHO_PADRAO.calcular("2026-10-27");
+
+    expect(periodo).toEqual({ de: "2026-09-28", ate: "2026-10-27" });
+  });
+
+  it("os três atalhos continuam na tela, na ordem de leitura", () => {
+    expect(ATALHOS.map((atalho) => atalho.id)).toEqual(["7dias", "30dias", "mes"]);
   });
 });

@@ -39,6 +39,20 @@ export const ATALHOS: readonly Atalho[] = [
   },
 ] as const;
 
+/**
+ * O periodo com que o relatorio ABRE.
+ *
+ * Trinta dias, e nao sete (mudado em 27/10/2026). Sete dias respondia a
+ * pergunta errada: quem abre o relatorio quer saber quanto um cliente usou, e
+ * uma semana nunca e essa resposta. O dono do coworking leu "poucas horas" da
+ * Toca Imoveis achando que era o total, quando era so a ultima semana — as
+ * horas estavam todas no banco.
+ *
+ * Nao e o primeiro da lista de proposito: na tela os atalhos seguem na ordem
+ * 7, 30, este mes, que e a ordem que se le. Qual deles abre e outra decisao.
+ */
+export const ATALHO_PADRAO: Atalho = ATALHOS.find((a) => a.id === "30dias")!;
+
 /** "2026-11-02" -> "02/11/2026". */
 export function porExtensoCurto(data: string): string {
   const [ano, mes, dia] = data.split("-");
