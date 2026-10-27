@@ -39,6 +39,33 @@ export type DetalheDoCliente = {
   reservas: ReservaDoCliente[];
 };
 
+export type HorasDaEmpresa = {
+  id: string;
+  nome: string;
+  horas: number;
+  reservas: number;
+};
+
+export type PessoaDaEmpresa = {
+  nome: string;
+  telefoneVisivel: string;
+  horas: number;
+  reservas: number;
+};
+
+export type DetalheDaEmpresa = {
+  periodo: Periodo;
+  id: string;
+  nome: string;
+  horas: number;
+  totalDeReservas: number;
+  /** Soma do valor gravado nas reservas não canceladas, em centavos. */
+  faturamentoCentavos: number;
+  porSala: FatiaColorida[];
+  porStatus: Fatia[];
+  pessoas: PessoaDaEmpresa[];
+};
+
 export type Relatorio = {
   periodo: Periodo;
   total: number;
@@ -49,6 +76,7 @@ export type Relatorio = {
   porHora: Fatia[];
   porProfissao: Fatia[];
   horasPorCliente: HorasDoCliente[];
+  horasPorEmpresa: HorasDaEmpresa[];
 };
 
 export type Comparacao = {
@@ -98,6 +126,21 @@ export function buscarDetalheDoCliente(
     de: periodo.de,
     ate: periodo.ate,
     telefone,
+  });
+
+  return pedir(`/api/admin/relatorios?${busca}`, { signal: sinal });
+}
+
+/** O relatorio de UMA empresa no periodo. */
+export function buscarDetalheDaEmpresa(
+  periodo: Periodo,
+  empresaId: string,
+  sinal?: AbortSignal,
+): Promise<{ detalheDaEmpresa: DetalheDaEmpresa }> {
+  const busca = new URLSearchParams({
+    de: periodo.de,
+    ate: periodo.ate,
+    empresaId,
   });
 
   return pedir(`/api/admin/relatorios?${busca}`, { signal: sinal });

@@ -6,6 +6,7 @@ import { respostaErro } from "@/lib/api";
 import {
   compararPeriodos,
   diasNoPeriodo,
+  montarDetalheDaEmpresa,
   montarDetalheDoCliente,
   procurarClientes,
 } from "@/lib/relatorios";
@@ -31,6 +32,8 @@ const Busca = z.object({
   cliente: z.string().max(120).optional(),
   /** Telefone do cliente ja escolhido, para o relatorio individual. */
   telefone: z.string().max(30).optional(),
+  /** Empresa ja escolhida, para o relatorio dela. */
+  empresaId: z.string().max(60).optional(),
 });
 
 /**
@@ -39,9 +42,10 @@ const Busca = z.object({
  * SO LEITURA: esta rota nao tem POST, PATCH nem DELETE, e o modulo que ela
  * usa nao grava nada. O dashboard responde perguntas, nao mexe na agenda.
  *
- * E SEM DINHEIRO: nenhum valor de reserva sai daqui (decisao do dono). Quem
- * garante isso e a lista fechada de campos em "relatorios.ts", e nao esta
- * rota.
+ * O DINHEIRO SO SAI em duas respostas, e so o TOTAL: o relatorio de um
+ * cliente e o de uma empresa, os dois autorizados pelo dono. O relatorio
+ * GERAL e a BUSCA continuam sem valor nenhum, e quem garante isso e a lista
+ * fechada de campos em "relatorios.ts", nao esta rota.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
   if (!(await operadorDaRequisicao(requisicao))) {
@@ -57,6 +61,7 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     compararAte: parametros.get("compararAte") ?? undefined,
     cliente: parametros.get("cliente") ?? undefined,
     telefone: parametros.get("telefone") ?? undefined,
+    empresaId: parametros.get("empresaId") ?? undefined,
   });
 
   if (!busca.success) {
@@ -80,6 +85,15 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     return detalhe
       ? NextResponse.json({ detalheDoCliente: detalhe })
       : respostaErro(404, "Nenhuma reserva desse cliente neste período.");
+  }
+
+  // --- relatorio de UMA empresa ---------------------------------------------
+  if (busca.data.empresaId) {
+    const detalhe = await montarDetalheDaEmpresa(periodo, busca.data.empresaId);
+
+    return detalhe
+      ? NextResponse.json({ detalheDaEmpresa: detalhe })
+      : respostaErro(404, "Nenhuma reserva dessa empresa neste período.");
   }
 
   // --- busca de clientes, para a equipe escolher -----------------------------

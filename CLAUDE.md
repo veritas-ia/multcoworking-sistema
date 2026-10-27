@@ -578,19 +578,35 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - **O problema, medido no banco:** a Prestare aparece em **3 telefones** (17 reservas
   no total) e a Toca em **2** (14 reservas). Para a equipe é um cliente só; para o
   relatório eram cinco clientes diferentes, cada um com uma fatia das horas.
-- **O vínculo é do TELEFONE, nunca da reserva.** Marcar um telefone como sendo da
-  empresa junta **na hora** todas as reservas passadas e futuras dele. Não existe
-  campo "empresa" na reserva: se existisse, mudar a empresa de um cliente exigiria
-  reescrever o histórico, e reserva antiga não se mexe.
+- **Quem responde é o CLIENTE, na hora de reservar** (mudado em 27/10/2026, antes de
+  ir para produção). A primeira versão só tinha a tela do painel, com a equipe
+  marcando telefone por telefone — o dono vetou: *"a gente não vai ter toda hora esse
+  controle de ficar olhando reserva por reserva"*. Com 26 telefones e crescendo, isso
+  não se sustentava.
+- **A resposta fica GRAVADA NA RESERVA** (`empresaId`), e não no telefone. Três
+  motivos: é a verdade daquele dia (reserva antiga não muda de dono porque a pessoa
+  trocou de emprego depois); acaba o conflito entre "o que a equipe marcou" e "o que o
+  cliente disse"; e telefone de empresa é compartilhado na prática — em produção o
+  mesmo `+5514996040233` aparece como "Toca" e como "Prestare".
+- **O vínculo do TELEFONE continua existindo, com dois papéis menores:** atribuir as
+  reservas ANTIGAS, que nunca foram perguntadas, e já vir escolhido na próxima reserva
+  do mesmo número. É o padrão, não a fonte da verdade. A coluna aceita nulo de
+  propósito, igual à `profissao`: preencher as reservas antigas seria inventar resposta
+  que o cliente não deu.
+- **A ordem de leitura no relatório é regra, não detalhe:** primeiro a empresa gravada
+  na reserva, só depois o vínculo do telefone. Há teste com o telefone vinculado a A e
+  a reserva respondida como B — vale B.
 - **Um telefone pertence a no máximo UMA empresa, e quem garante é o banco:** o
   telefone é a CHAVE PRIMÁRIA de `telefones_empresa`. Sem isso o mesmo número poderia
   somar em duas empresas e o faturamento apareceria dobrado, sem ninguém desconfiar
   do número.
-- **O sistema SUGERE, nunca junta sozinho.** A tela mostra os números que compartilham
-  uma palavra de 4 letras ou mais no nome ("prestare", "toca"), ignorando palavras
-  genéricas (de, da, cliente, teste…), e a equipe confirma uma por uma. Um palpite
-  errado viraria faturamento somado na empresa errada — e ninguém reclamaria, porque
-  o número continuaria parecendo certo.
+- **A tela do painel virou conserto, não cadastro diário.** Ela ainda SUGERE
+  agrupamentos (números que compartilham uma palavra de 4 letras ou mais no nome,
+  ignorando genéricas como de/da/cliente/teste) e nunca junta sozinha — um palpite
+  errado viraria faturamento somado na empresa errada, e ninguém reclamaria porque o
+  número continuaria parecendo certo. Mas o caminho normal agora é o cliente
+  respondendo; o painel serve para arrumar o passado e para o caso raro da empresa que
+  veio uma vez só com dois funcionários.
 - A lista de telefones mostra **todos os nomes que cada número já usou**, e não só o
   mais recente: é justamente a variação ("Prestare", "Prestare Karen", "Prestare -
   Karen") que faz a equipe reconhecer de quem é o número.
@@ -600,3 +616,80 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   olhando os próprios clientes, atrás de login.
 - Isto **resolve o problema dos 44 nomes sem limpar nada**: os nomes antigos continuam
   lá, e o agrupamento passa a ser pela empresa. Ver "Nome travado ao telefone".
+
+### A empresa na visão do cliente (27/10/2026)
+- **No site, depois de sala e horário:** *"Esta reserva é de uma empresa mensalista?"*
+  Quem diz sim escolhe **de uma lista fechada**, cadastrada pela equipe. Quem diz não
+  segue como sempre.
+- **Lista fechada, nunca campo livre.** Digitar o nome devolveria a bagunça por outra
+  porta: o servidor até resolveria "Prestare" / "prestare" / "PRESTARE" sozinho, mas
+  não "Prestarre" nem "Prestare Advocacia". Com lista, o erro não tem por onde entrar.
+- **A lista é PÚBLICA, e isto foi decisão consciente do dono.** O motivo: um
+  funcionário novo de mensalista reserva pela primeira vez e o sistema não tem como
+  saber que ele é de lá; sem a lista aberta ele dependeria de a recepção marcar o
+  número depois — o trabalho manual que a mudança veio tirar. O que custa, e o dono
+  aceitou: quem abre o site vê quais empresas são mensalistas, e nada impede alguém de
+  se dizer de uma delas. Como a empresa **só muda o relatório** — não muda preço, nem
+  sala, nem libera horário —, o estrago possível é uma reserva somada na empresa
+  errada, que a equipe corrige no painel. A rota devolve **só id e nome**: nada de
+  telefone nem de quanto a empresa usa o espaço. Há teste conferindo os campos.
+- **Ser mensalista não muda NADA além do relatório** (decisão do dono). Mesmas salas,
+  mesmos horários, mesmo preço, mesmo código no WhatsApp.
+- **A empresa já vem escolhida** para quem o telefone conhece, igual ao nome. Vem da
+  **última reserva** daquele número que tinha empresa; só depois cai no vínculo do
+  painel. Empresa desligada não é sugerida.
+- **Na recepção** o campo é um seletor simples, sem a pergunta de sim/não — o balcão
+  conhece o cliente. Sugerido pelo telefone e sempre editável, e **nunca apaga o que a
+  equipe já escolheu**, mesma regra do nome.
+- **Na série recorrente** a empresa é perguntada **uma vez** e todas as ocorrências
+  nascem com ela, igual à profissão.
+- **O servidor confere nas três portas** que a empresa existe e está ativa. A tela
+  manda o identificador, e esconder o campo não para quem manda o pedido direto.
+  Empresa inventada ou desligada é recusada. Há teste nas duas recusas.
+- **Empresa com reserva não se apaga:** a chave estrangeira é `ON DELETE RESTRICT`.
+  Não existe tela para apagar empresa; se um dia existir, a trava é do banco.
+
+### Faturamento por empresa (27/10/2026)
+- **Autorizado pelo dono** — *"Isso é sobre faturamento, cara. No final das contas,
+  sim, tem que mostrar."* Mesmo desenho do relatório individual de cliente, e pelo
+  mesmo motivo: é a empresa que paga a conta do mês.
+- **A fronteira do dinheiro não mudou:** o relatório **GERAL** e a **BUSCA** continuam
+  sem valor nenhum. A lista de empresas no dashboard mostra **horas e reservas, sem
+  dinheiro**; o faturamento aparece só quando a equipe **ABRE** uma empresa — exatamente
+  como no cliente. Há teste procurando o valor dentro da resposta geral.
+- Com uma empresa aberta, **o relatório geral e a busca de cliente saem da tela**, pela
+  mesma razão de sempre: dois conjuntos de números parecidos, um do coworking e outro
+  de uma empresa, e a equipe leria um achando que é o outro.
+- **Soma do valor JÁ GRAVADO**, nunca recálculo, e **em centavos**. Há teste com três
+  reservas de R$ 33,33 que precisam dar R$ 99,99.
+- **Cancelada não entra** no faturamento nem nas horas, mas **conta como reserva** —
+  ela aconteceu na agenda.
+- **Só o total sai na resposta**, nunca o preço de cada reserva. Há teste procurando o
+  preço dentro da resposta da empresa.
+- A consulta que traz dinheiro é **separada** (`reservasDaEmpresaNoPeriodo`), como a do
+  cliente. Ela junta dois conjuntos: as reservas com `empresaId` daquela empresa **e**
+  as reservas **sem empresa** dos telefones vinculados a ela. A condição de empresa
+  nula no segundo conjunto é essencial — sem ela, uma reserva marcada para OUTRA
+  empresa entraria aqui só porque o telefone está vinculado a esta.
+- O relatório da empresa mostra **quem reservou** no nome dela, com o **telefone
+  inteiro** — mesma regra do relatório de clientes: é a equipe olhando o próprio
+  cliente, atrás de login.
+
+### O relatório abre em 30 dias (27/10/2026)
+- **O dono do coworking leu "poucas horas" da Toca Imóveis achando que era o total.**
+  Conferido em produção: **11 reservas, 22,5 horas, de 05/10 a 26/10** — tudo no banco,
+  tudo fora da janela de **7 dias** com que a tela abria.
+- **Nada foi perdido e nenhuma consulta tem corte:** a consulta do relatório não limita
+  quantidade, não limita cliente e não descarta situação (só cancelada, de propósito).
+  O problema era o tamanho da janela.
+- O padrão virou **"Últimos 30 dias"** (`ATALHO_PADRAO`). Os três atalhos continuam na
+  tela na ordem de leitura (7, 30, este mês); mudou qual já vem escolhido. **Dois testes
+  travam isso**, porque voltar para sete dias não daria erro nenhum — só faria a equipe
+  ler um número menor que a realidade.
+- **O futuro continua fora:** todo atalho termina em *hoje*, então reserva marcada para
+  frente não aparece em atalho nenhum (em produção a Giovanna tem reserva até 31/10 e a
+  Nicole até 29/10). Fica **em aberto**, por decisão de escopo do dono.
+- **Editar o nome NUNCA criou cliente novo.** O agrupamento sempre foi pelo telefone; o
+  que troca é o rótulo, que é o nome da reserva mais recente. Em produção o
+  `+5514996040233` aparece como "Toca" e como "Prestare" — é um cliente só, e a tela
+  mostra o nome mais novo. Há teste provando isso.

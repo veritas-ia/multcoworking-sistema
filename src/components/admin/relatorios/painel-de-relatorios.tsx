@@ -15,6 +15,7 @@ import {
   GraficoDoTempo,
   diaEMes,
 } from "./graficos";
+import { EmpresasNoRelatorio } from "./empresas-no-relatorio";
 import { ATALHOS, ATALHO_PADRAO, porExtensoCurto } from "./periodos";
 
 /**
@@ -39,6 +40,8 @@ export function PainelDeRelatorios({ hoje }: { hoje: string }) {
    * o de baixo.
    */
   const [clienteAberto, setClienteAberto] = useState(false);
+  /** Mesmo motivo do cliente: empresa aberta esconde os numeros gerais. */
+  const [empresaAberta, setEmpresaAberta] = useState(false);
 
   const carregar = useCallback(async (alvo: Periodo, sinal?: AbortSignal) => {
     setCarregando(true);
@@ -90,11 +93,19 @@ export function PainelDeRelatorios({ hoje }: { hoje: string }) {
 
       {/* A busca fica ACIMA dos numeros gerais: quem chega aqui atras de um
           cliente especifico nao deveria ter que rolar a pagina inteira. */}
-      {dados ? (
+      {dados && !empresaAberta ? (
         <BuscaDeCliente periodo={periodo} aoAbrirCliente={setClienteAberto} />
       ) : null}
 
       {dados && !clienteAberto ? (
+        <EmpresasNoRelatorio
+          empresas={dados.atual.horasPorEmpresa}
+          periodo={periodo}
+          aoAbrirEmpresa={setEmpresaAberta}
+        />
+      ) : null}
+
+      {dados && !clienteAberto && !empresaAberta ? (
         <Numeros dados={dados} carregando={carregando} />
       ) : null}
     </div>

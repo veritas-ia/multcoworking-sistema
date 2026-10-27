@@ -17,6 +17,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   compararPeriodos,
   diasNoPeriodo,
+  montarDetalheDaEmpresa,
   montarDetalheDoCliente,
   montarRelatorio,
   periodoAnterior,
@@ -68,9 +69,26 @@ beforeAll(async () => {
 /** Um segundo cliente, para o ranking ter com quem comparar. */
 const TELEFONE_B = "+5511900000788";
 
+const EMPRESA_DE_TESTE = "ZZ Relatorio";
+
 async function limpar(): Promise<void> {
   await bancoDeTeste.reserva.deleteMany({
     where: { telefone: { in: [TELEFONE, TELEFONE_B] } },
+  });
+  // A ORDEM IMPORTA: a reserva aponta para a empresa com ON DELETE RESTRICT.
+  await bancoDeTeste.telefoneDaEmpresa.deleteMany({
+    where: { telefone: { in: [TELEFONE, TELEFONE_B] } },
+  });
+  await bancoDeTeste.empresa.deleteMany({
+    where: { nome: { startsWith: EMPRESA_DE_TESTE } },
+  });
+}
+
+/** Uma empresa de teste, criada direto no banco. */
+async function empresa(sufixo = "") {
+  return bancoDeTeste.empresa.create({
+    data: { nome: `${EMPRESA_DE_TESTE}${sufixo} ${Date.now()}` },
+    select: { id: true, nome: true },
   });
 }
 
@@ -92,6 +110,8 @@ async function reserva(entrada: {
   profissao?: "MARKETING" | "JURIDICO" | "CONTABIL" | "SAUDE" | "OUTROS" | null;
   nome?: string;
   telefone?: string;
+  empresaId?: string | null;
+  valor?: string;
 }) {
   return bancoDeTeste.reserva.create({
     data: {
@@ -107,7 +127,8 @@ async function reserva(entrada: {
         (instanteDe(entrada.dia, entrada.fim).getTime() -
           instanteDe(entrada.dia, entrada.inicio).getTime()) /
         60_000,
-      valor: "40.00",
+      valor: entrada.valor ?? "40.00",
+      empresaId: entrada.empresaId ?? null,
       status: entrada.status ?? "CONFIRMADA",
       // O banco exige a data do cancelamento junto com o status CANCELADA
       // (trava "reserva_cancelamento_coerente"): status cancelado sem data
@@ -763,5 +784,217 @@ describe("o período com que o relatório abre", () => {
 
   it("os três atalhos continuam na tela, na ordem de leitura", () => {
     expect(ATALHOS.map((atalho) => atalho.id)).toEqual(["7dias", "30dias", "mes"]);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// EMPRESAS NO RELATORIO (27/10/2026)
+//
+// O problema real: a Prestare usa tres telefones e a Toca dois. Para a equipe
+// e um cliente so; para o relatorio eram cinco clientes, cada um com uma
+// fatia das horas.
+// -----------------------------------------------------------------------------
+
+describe("horas por empresa", () => {
+  it("soma os vários telefones da mesma empresa num total só", async () => {
+    const dela = await empresa();
+
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "11:00", empresaId: dela.id,
+    });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", telefone: TELEFONE_B,
+      nome: "Outra pessoa da equipe", empresaId: dela.id, salaId: salaContainer,
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const linha = relatorio.horasPorEmpresa.find((item) => item.id === dela.id);
+
+    expect(linha?.horas).toBe(3);
+    expect(linha?.reservas).toBe(2);
+  });
+
+  it("cancelada não conta como hora usada", async () => {
+    const dela = await empresa();
+
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id,
+    });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "16:00", empresaId: dela.id,
+      status: "CANCELADA", salaId: salaContainer,
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === dela.id)?.horas).toBe(1);
+  });
+
+  it("a reserva ANTIGA, sem empresa gravada, entra pelo vínculo do telefone", async () => {
+    // As reservas criadas antes da pergunta existir tem empresa nula.
+    // Preencher um valor nelas seria inventar resposta que o cliente nunca
+    // deu, entao a empresa delas vem do vinculo marcado no painel.
+    const dela = await empresa();
+
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: null });
+    await bancoDeTeste.telefoneDaEmpresa.create({
+      data: { telefone: TELEFONE, empresaId: dela.id },
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === dela.id)?.horas).toBe(1);
+  });
+
+  it("a reserva de OUTRA empresa não é puxada pelo vínculo do telefone", async () => {
+    // A armadilha: o telefone esta vinculado a A, mas a reserva foi
+    // respondida como B. O que o cliente disse naquele dia vale mais do que
+    // o vinculo de hoje — senao quem trocou de empresa levaria as reservas
+    // antigas com ele.
+    const a = await empresa(" A");
+    const b = await empresa(" B");
+
+    await bancoDeTeste.telefoneDaEmpresa.create({
+      data: { telefone: TELEFONE, empresaId: a.id },
+    });
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: b.id });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === b.id)?.horas).toBe(1);
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === a.id)).toBeUndefined();
+  });
+
+  it("quem não é de empresa não aparece", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+
+    expect(relatorio.horasPorEmpresa).toHaveLength(0);
+  });
+});
+
+describe("o relatório de UMA empresa", () => {
+  it("soma o faturamento do valor JÁ GRAVADO, em centavos", async () => {
+    // Tres reservas de R$ 33,33 precisam dar R$ 99,99: somar reais em ponto
+    // flutuante acumula diferenca de centavo.
+    const dela = await empresa();
+
+    for (const hora of ["08:00", "10:00", "14:00"]) {
+      await reserva({
+        dia: SEGUNDA, inicio: hora, fim: `${Number(hora.slice(0, 2)) + 1}:00`.padStart(5, "0"),
+        empresaId: dela.id, valor: "33.33",
+      });
+    }
+
+    const detalhe = await montarDetalheDaEmpresa({ de: SEGUNDA, ate: SEGUNDA }, dela.id);
+
+    expect(detalhe?.faturamentoCentavos).toBe(9999);
+    expect(detalhe?.horas).toBe(3);
+  });
+
+  it("cancelada não entra no faturamento", async () => {
+    const dela = await empresa();
+
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id, valor: "40.00",
+    });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", empresaId: dela.id, valor: "999.00",
+      status: "CANCELADA", salaId: salaContainer,
+    });
+
+    const detalhe = await montarDetalheDaEmpresa({ de: SEGUNDA, ate: SEGUNDA }, dela.id);
+
+    expect(detalhe?.faturamentoCentavos).toBe(4000);
+    // A cancelada continua contando como RESERVA: ela aconteceu na agenda.
+    expect(detalhe?.totalDeReservas).toBe(2);
+  });
+
+  it("lista quem reservou, com o telefone inteiro", async () => {
+    const dela = await empresa();
+
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Karen", empresaId: dela.id,
+    });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", nome: "Dani", telefone: TELEFONE_B,
+      empresaId: dela.id, salaId: salaContainer,
+    });
+
+    const detalhe = await montarDetalheDaEmpresa({ de: SEGUNDA, ate: SEGUNDA }, dela.id);
+
+    expect(detalhe?.pessoas).toHaveLength(2);
+    // Do que mais usou para o que menos usou.
+    expect(detalhe?.pessoas[0]?.nome).toBe("Karen");
+    expect(detalhe?.pessoas[0]?.telefoneVisivel).toBe(TELEFONE);
+  });
+
+  it("é nulo quando a empresa não tem nada no período", async () => {
+    const dela = await empresa();
+
+    expect(
+      await montarDetalheDaEmpresa({ de: SEGUNDA, ate: SEGUNDA }, dela.id),
+    ).toBeNull();
+  });
+
+  it("NÃO manda o preço de cada reserva, só o total", async () => {
+    // O dono liberou a METRICA por empresa, e nao o preco reserva a reserva.
+    const dela = await empresa();
+
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id, valor: "77.77",
+    });
+
+    const detalhe = await montarDetalheDaEmpresa({ de: SEGUNDA, ate: SEGUNDA }, dela.id);
+    const texto = JSON.stringify(detalhe);
+
+    expect(detalhe?.faturamentoCentavos).toBe(7777);
+    expect(texto).not.toContain("77.77");
+    expect(texto).not.toContain('"valor"');
+  });
+});
+
+describe("a fronteira do dinheiro continua de pé", () => {
+  it("o relatório GERAL não leva dinheiro nenhum, nem com empresa na jogada", async () => {
+    const dela = await empresa();
+
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", empresaId: dela.id, valor: "123.45",
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const texto = JSON.stringify(relatorio);
+
+    expect(texto).not.toContain("123.45");
+    expect(texto).not.toContain("12345");
+    expect(texto).not.toContain('"valor"');
+    expect(texto).not.toContain("faturamento");
+    // E a empresa esta la, com horas — so sem dinheiro.
+    expect(relatorio.horasPorEmpresa.find((item) => item.id === dela.id)?.horas).toBe(1);
+  });
+});
+
+describe("editar o nome NÃO cria um cliente novo", () => {
+  it("dois nomes no mesmo telefone continuam sendo um cliente só", async () => {
+    // O dono desconfiou disso ao ver o painel. Em producao o telefone
+    // +5514996040233 aparece como "Toca" e como "Prestare" — e UM cliente,
+    // porque o agrupamento sempre foi pelo telefone. O que troca e o rotulo.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Toca" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", nome: "Toca Imóveis",
+      salaId: salaContainer,
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const doTelefone = relatorio.horasPorCliente.filter(
+      (cliente) => cliente.telefone === TELEFONE,
+    );
+
+    expect(doTelefone).toHaveLength(1);
+    expect(doTelefone[0]?.horas).toBe(2);
+    expect(doTelefone[0]?.reservas).toBe(2);
+    // O nome mostrado e o da reserva mais recente.
+    expect(doTelefone[0]?.nome).toBe("Toca Imóveis");
   });
 });

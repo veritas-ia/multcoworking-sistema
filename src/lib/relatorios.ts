@@ -54,6 +54,26 @@ export type Relatorio = {
   porProfissao: Fatia[];
   /** Ranking de horas usadas. Canceladas nao entram. */
   horasPorCliente: HorasDoCliente[];
+  /**
+   * O mesmo ranking, somado por EMPRESA. Sem dinheiro: o faturamento da
+   * empresa sai no relatorio dela, aberto de proposito, igual ao do cliente.
+   */
+  horasPorEmpresa: HorasDaEmpresa[];
+};
+
+/**
+ * Quanto tempo uma EMPRESA usou no periodo.
+ *
+ * Junta os varios funcionarios, cada um do seu telefone. Uma reserva entra
+ * aqui de dois jeitos: pela empresa gravada nela (o que o cliente respondeu)
+ * ou, quando nao ha nenhuma, pelo vinculo do telefone — que e como as
+ * reservas ANTIGAS, criadas antes de a pergunta existir, encontram a empresa.
+ */
+export type HorasDaEmpresa = {
+  id: string;
+  nome: string;
+  horas: number;
+  reservas: number;
 };
 
 /**
@@ -197,6 +217,9 @@ type ReservaContada = {
   profissao: CategoriaProfissao | null;
   nomeCliente: string;
   telefone: string;
+  /** A empresa respondida nesta reserva. Nula na maioria. */
+  empresaId: string | null;
+  empresa: { nome: string } | null;
   sala: { nome: string; cor: string };
 };
 
@@ -221,6 +244,8 @@ async function reservasDoPeriodo(periodo: Periodo): Promise<ReservaContada[]> {
       profissao: true,
       nomeCliente: true,
       telefone: true,
+      empresaId: true,
+      empresa: { select: { nome: true } },
       sala: { select: { nome: true, cor: true } },
     },
     orderBy: { inicio: "asc" },
@@ -258,6 +283,8 @@ async function reservasDoClienteNoPeriodo(
       profissao: true,
       nomeCliente: true,
       telefone: true,
+      empresaId: true,
+      empresa: { select: { nome: true } },
       sala: { select: { nome: true, cor: true } },
       valor: true,
     },
@@ -596,12 +623,236 @@ export async function montarDetalheDoCliente(
   };
 }
 
+
+// -----------------------------------------------------------------------------
+// Empresas
+// -----------------------------------------------------------------------------
+
+/**
+ * De qual empresa e cada TELEFONE, pelo vinculo do painel.
+ *
+ * Isto existe para as reservas ANTIGAS. Elas nasceram antes de a pergunta
+ * existir e tem "empresaId" nulo — preencher um valor nelas agora seria
+ * inventar resposta que o cliente nunca deu. Entao a empresa delas e
+ * descoberta aqui, na hora de montar o relatorio.
+ */
+async function vinculosDeTelefone(): Promise<Map<string, { id: string; nome: string }>> {
+  const vinculos = await prisma.telefoneDaEmpresa.findMany({
+    select: { telefone: true, empresa: { select: { id: true, nome: true } } },
+  });
+
+  return new Map(
+    vinculos.map((vinculo) => [
+      vinculo.telefone,
+      { id: vinculo.empresa.id, nome: vinculo.empresa.nome },
+    ]),
+  );
+}
+
+/**
+ * A empresa de uma reserva: primeiro a que esta GRAVADA nela, depois o
+ * vinculo do telefone.
+ *
+ * Essa ordem e a regra, e nao um detalhe: o que o cliente respondeu naquele
+ * dia vale mais do que o vinculo de hoje. Quem mudou de empresa nao leva as
+ * reservas antigas com ele.
+ */
+function empresaDaReserva(
+  reserva: ReservaContada,
+  vinculos: Map<string, { id: string; nome: string }>,
+): { id: string; nome: string } | null {
+  if (reserva.empresaId && reserva.empresa) {
+    return { id: reserva.empresaId, nome: reserva.empresa.nome };
+  }
+
+  return vinculos.get(reserva.telefone) ?? null;
+}
+
+function somarHorasPorEmpresa(
+  reservas: ReservaContada[],
+  vinculos: Map<string, { id: string; nome: string }>,
+): HorasDaEmpresa[] {
+  const mapa = new Map<string, { nome: string; horas: number; reservas: number }>();
+
+  for (const reserva of reservas) {
+    if (!contouComoUso(reserva)) {
+      continue;
+    }
+
+    const empresa = empresaDaReserva(reserva, vinculos);
+
+    if (!empresa) {
+      continue;
+    }
+
+    const atual = mapa.get(empresa.id);
+    mapa.set(empresa.id, {
+      nome: empresa.nome,
+      horas: (atual?.horas ?? 0) + horasDe(reserva),
+      reservas: (atual?.reservas ?? 0) + 1,
+    });
+  }
+
+  return [...mapa.entries()]
+    .map(([id, dados]) => ({
+      id,
+      nome: dados.nome,
+      horas: umaCasa(dados.horas),
+      reservas: dados.reservas,
+    }))
+    .sort((a, b) => b.horas - a.horas || a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+/** Uma pessoa que reservou no nome da empresa. */
+export type PessoaDaEmpresa = {
+  nome: string;
+  /** Inteiro, como no relatorio de clientes: e a equipe vendo o proprio cliente. */
+  telefoneVisivel: string;
+  horas: number;
+  reservas: number;
+};
+
+export type DetalheDaEmpresa = {
+  periodo: Periodo;
+  id: string;
+  nome: string;
+  horas: number;
+  totalDeReservas: number;
+  /**
+   * Soma do valor JA GRAVADO nas reservas nao canceladas.
+   *
+   * Autorizado pelo dono, igual ao relatorio de um cliente: e para a empresa
+   * que paga a conta do mes. NUNCA um recalculo — o preco fica congelado na
+   * reserva, e recalcular aqui criaria um segundo numero discordando dela.
+   */
+  faturamentoCentavos: number;
+  porSala: FatiaColorida[];
+  porStatus: Fatia[];
+  /** Quem reservou no nome dela, do que mais usou para o que menos usou. */
+  pessoas: PessoaDaEmpresa[];
+};
+
+/**
+ * As reservas de UMA empresa no periodo, com o valor gravado.
+ *
+ * Consulta SEPARADA, pelo mesmo motivo da do cliente: deixar o "valor" entrar
+ * na lista fechada compartilhada faria o dinheiro circular no relatorio do
+ * coworking inteiro e na busca, onde ele continua proibido.
+ */
+async function reservasDaEmpresaNoPeriodo(
+  periodo: Periodo,
+  empresaId: string,
+): Promise<ReservaDoClienteContada[]> {
+  const vinculados = await prisma.telefoneDaEmpresa.findMany({
+    where: { empresaId },
+    select: { telefone: true },
+  });
+
+  return prisma.reserva.findMany({
+    where: {
+      inicio: {
+        gte: instanteDe(periodo.de, "00:00"),
+        lt: instanteDe(somarDias(periodo.ate, 1), "00:00"),
+      },
+      OR: [
+        // O que o cliente respondeu.
+        { empresaId },
+        // E as reservas ANTIGAS daqueles telefones, que nunca foram
+        // perguntadas. A condicao de empresa nula importa: sem ela, uma
+        // reserva que a pessoa marcou para OUTRA empresa entraria aqui so
+        // porque o telefone dela esta vinculado a esta.
+        ...(vinculados.length > 0
+          ? [{ empresaId: null, telefone: { in: vinculados.map((v) => v.telefone) } }]
+          : []),
+      ],
+    },
+    select: {
+      inicio: true,
+      fim: true,
+      status: true,
+      profissao: true,
+      nomeCliente: true,
+      telefone: true,
+      empresaId: true,
+      empresa: { select: { nome: true } },
+      sala: { select: { nome: true, cor: true } },
+      valor: true,
+    },
+    orderBy: { inicio: "asc" },
+  });
+}
+
+/**
+ * O relatorio de UMA empresa. Nulo quando ela nao tem nada no periodo.
+ *
+ * Este e o unico lugar, junto do relatorio de um cliente, em que o dinheiro
+ * aparece. O relatorio GERAL e a BUSCA continuam sem valor nenhum.
+ */
+export async function montarDetalheDaEmpresa(
+  periodo: Periodo,
+  empresaId: string,
+): Promise<DetalheDaEmpresa | null> {
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: empresaId },
+    select: { id: true, nome: true },
+  });
+
+  if (!empresa) {
+    return null;
+  }
+
+  const todas = await reservasDaEmpresaNoPeriodo(periodo, empresaId);
+
+  if (todas.length === 0) {
+    return null;
+  }
+
+  const usadas = todas.filter(contouComoUso);
+
+  const porPessoa = new Map<string, { nome: string; horas: number; reservas: number }>();
+
+  for (const reserva of todas) {
+    const atual = porPessoa.get(reserva.telefone);
+    porPessoa.set(reserva.telefone, {
+      // A lista vem ordenada por inicio, entao o ultimo nome e o mais recente.
+      nome: reserva.nomeCliente,
+      horas: (atual?.horas ?? 0) + (contouComoUso(reserva) ? horasDe(reserva) : 0),
+      reservas: (atual?.reservas ?? 0) + 1,
+    });
+  }
+
+  return {
+    periodo,
+    id: empresa.id,
+    nome: empresa.nome,
+    horas: umaCasa(usadas.reduce((soma, reserva) => soma + horasDe(reserva), 0)),
+    totalDeReservas: todas.length,
+    faturamentoCentavos: usadas.reduce(
+      (soma, reserva) => soma + emCentavosDoBanco(reserva.valor),
+      0,
+    ),
+    porSala: contarPorSala(todas),
+    porStatus: contarPorStatus(todas),
+    pessoas: [...porPessoa.entries()]
+      .map(([telefone, dados]) => ({
+        nome: dados.nome,
+        telefoneVisivel: telefone,
+        horas: umaCasa(dados.horas),
+        reservas: dados.reservas,
+      }))
+      .sort((a, b) => b.horas - a.horas || a.nome.localeCompare(b.nome, "pt-BR")),
+  };
+}
+
 // -----------------------------------------------------------------------------
 // Montagem
 // -----------------------------------------------------------------------------
 
 export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
-  const reservas = await reservasDoPeriodo(periodo);
+  const [reservas, vinculos] = await Promise.all([
+    reservasDoPeriodo(periodo),
+    vinculosDeTelefone(),
+  ]);
 
   return {
     periodo,
@@ -613,6 +864,7 @@ export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
     porHora: contarPorHora(reservas),
     porProfissao: contarPorProfissao(reservas),
     horasPorCliente: somarHorasPorCliente(reservas),
+    horasPorEmpresa: somarHorasPorEmpresa(reservas, vinculos),
   };
 }
 
