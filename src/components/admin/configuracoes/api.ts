@@ -432,3 +432,58 @@ export function vincularTelefone(
     body: JSON.stringify({ telefone, empresaId }),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Profissoes (areas de atuacao)
+// -----------------------------------------------------------------------------
+
+export type ProfissaoDoPainel = {
+  id: string;
+  slug: string;
+  nome: string;
+  ativa: boolean;
+  bloqueada: boolean;
+  /** Ja resolvido pelo servidor: o texto proprio dela, ou o generico. */
+  avisoBloqueio: string;
+  ordem: number;
+  /** Quantas reservas ja usaram esta area. Ela nunca se apaga. */
+  reservas: number;
+};
+
+export function buscarProfissoesDoPainel(
+  sinal?: AbortSignal,
+): Promise<{ profissoes: ProfissaoDoPainel[] }> {
+  return pedir("/api/admin/profissoes", { signal: sinal });
+}
+
+export function criarProfissao(nome: string): Promise<{ profissao: ProfissaoDoPainel }> {
+  return pedir("/api/admin/profissoes", {
+    method: "POST",
+    body: JSON.stringify({ nome }),
+  });
+}
+
+export function editarProfissao(
+  id: string,
+  dados: {
+    nome?: string;
+    ativa?: boolean;
+    bloqueada?: boolean;
+    avisoBloqueio?: string | null;
+  },
+): Promise<{ profissao: ProfissaoDoPainel }> {
+  return pedir(`/api/admin/profissoes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function moverProfissao(
+  id: string,
+  mover: "SUBIR" | "DESCER",
+): Promise<{ profissoes: ProfissaoDoPainel[] }> {
+  return pedir(`/api/admin/profissoes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ mover }),
+  });
+}

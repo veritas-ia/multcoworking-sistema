@@ -21,7 +21,7 @@ import { instanteDe } from "@/lib/tempo";
 import { formatarEnquantoDigita, mascararTelefone } from "@/lib/telefone";
 import { variavelParecidaPreenchida } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoDelete, pedidoGet } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -82,7 +82,7 @@ describe("GET /api/publico/sessao", () => {
         salaId: sala.id,
         nomeCliente: "Karen Gomes",
         telefone: TELEFONE,
-        profissao: "OUTROS",
+        profissaoId: await idDaProfissao("OUTROS"),
         inicio: instanteDe("2026-11-10", "09:00"),
         fim: instanteDe("2026-11-10", "10:00"),
         duracaoMinutos: 60,

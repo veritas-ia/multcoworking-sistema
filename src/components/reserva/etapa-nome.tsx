@@ -4,14 +4,8 @@ import { useId, useState } from "react";
 
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
-import {
-  AVISO_PROFISSAO_BLOQUEADA,
-  PROFISSOES,
-  profissaoBloqueada,
-} from "@/lib/profissoes";
-
 import { TituloDaEtapa } from "./pecas";
-import type { EmpresaDoCliente } from "./tipos";
+import type { EmpresaDoCliente, ProfissaoDoCliente } from "./tipos";
 
 /**
  * Etapa 6 — nome (e, em algumas salas, quantas pessoas).
@@ -31,6 +25,7 @@ export function EtapaNome({
   perguntarPessoas,
   capacidade,
   profissao,
+  profissoes,
   empresas,
   empresaId,
   aoMudar,
@@ -48,8 +43,10 @@ export function EtapaNome({
   perguntarPessoas: boolean;
   /** Teto de pessoas da sala. Nulo = a sala nao tem teto cadastrado. */
   capacidade: number | null;
-  /** Vazio ate a pessoa escolher. Obrigatorio para continuar. */
+  /** O identificador da area escolhida. Vazio ate escolher; obrigatorio. */
   profissao: string;
+  /** As areas de atuacao cadastradas pela equipe, na ordem do painel. */
+  profissoes: ProfissaoDoCliente[];
   /** As empresas mensalistas cadastradas. Vazia = a pergunta nao aparece. */
   empresas: EmpresaDoCliente[];
   /** A empresa escolhida, ou nulo para "nao sou de empresa mensalista". */
@@ -75,7 +72,12 @@ export function EtapaNome({
     empresaId === null ? null : true,
   );
 
-  const bloqueada = profissaoBloqueada(profissao);
+  /**
+   * A area escolhida, se houver. A trava do bloqueio sai dela: a lista veio
+   * do servidor e ja diz quais nao podem reservar.
+   */
+  const escolhida = profissoes.find((opcao) => opcao.id === profissao) ?? null;
+  const bloqueada = escolhida?.bloqueada === true;
 
   /** Sem empresa cadastrada no painel, a pergunta nao faz sentido nenhum. */
   const perguntarEmpresa = empresas.length > 0;
@@ -113,10 +115,10 @@ export function EtapaNome({
           return;
         }
 
-        // A trava do contrato de exclusividade. O servidor recusa de
-        // qualquer jeito; aqui e so para o cliente nao preencher o resto a
-        // toa e levar a recusa so no fim.
-        if (profissaoBloqueada(profissao)) {
+        // A trava da area bloqueada. O servidor recusa de qualquer jeito;
+        // aqui e so para o cliente nao preencher o resto a toa e levar a
+        // recusa so no fim.
+        if (bloqueada) {
           return;
         }
 
@@ -220,9 +222,9 @@ export function EtapaNome({
           }`}
         >
           <option value="">Escolha…</option>
-          {PROFISSOES.map((opcao) => (
-            <option key={opcao.valor} value={opcao.valor}>
-              {opcao.rotulo}
+          {profissoes.map((opcao) => (
+            <option key={opcao.id} value={opcao.id}>
+              {opcao.nome}
             </option>
           ))}
         </select>
@@ -319,7 +321,7 @@ export function EtapaNome({
           role="status"
           className="rounded-lg border border-destructive bg-bg-primary p-4 text-sm leading-relaxed text-text-primary"
         >
-          {AVISO_PROFISSAO_BLOQUEADA}
+          {escolhida?.avisoBloqueio}
         </p>
       ) : null}
 

@@ -16,7 +16,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { criarReservaNaRecepcao, reagendarComoAdmin } from "@/lib/agenda-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 
 /** Uma terca-feira distante, para nao esbarrar em nada. */
 const DIA = "2027-03-09";
@@ -70,7 +70,7 @@ async function reservar(entrada: {
     salaId: salaReuniao,
     telefone: TELEFONE,
     nomeCliente: "Cliente de Teste",
-    profissao: "OUTROS",
+    profissaoId: await idDaProfissao("OUTROS"),
     inicio: instanteDe(entrada.dia, entrada.inicio),
     fim: instanteDe(entrada.dia, entrada.fim),
     pessoas: entrada.pessoas,

@@ -22,9 +22,8 @@
  */
 import type { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
-import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { PROFISSOES, rotuloDaProfissao } from "@/lib/profissoes";
+import { rotuloDaProfissao } from "@/lib/profissoes";
 import { normalizarTelefone } from "@/lib/telefone";
 import {
   dataLocalDe,
@@ -214,7 +213,7 @@ type ReservaContada = {
   inicio: Date;
   fim: Date;
   status: StatusReserva;
-  profissao: CategoriaProfissao | null;
+  profissao: { nome: string } | null;
   nomeCliente: string;
   telefone: string;
   /** A empresa respondida nesta reserva. Nula na maioria. */
@@ -241,7 +240,7 @@ async function reservasDoPeriodo(periodo: Periodo): Promise<ReservaContada[]> {
       inicio: true,
       fim: true,
       status: true,
-      profissao: true,
+      profissao: { select: { nome: true } },
       nomeCliente: true,
       telefone: true,
       empresaId: true,
@@ -280,7 +279,7 @@ async function reservasDoClienteNoPeriodo(
       inicio: true,
       fim: true,
       status: true,
-      profissao: true,
+      profissao: { select: { nome: true } },
       nomeCliente: true,
       telefone: true,
       empresaId: true,
@@ -380,17 +379,33 @@ function contarPorHora(reservas: ReservaContada[]): Fatia[] {
     .sort((a, b) => a.rotulo.localeCompare(b.rotulo));
 }
 
-function contarPorProfissao(reservas: ReservaContada[]): Fatia[] {
+/**
+ * A ordem em que as profissoes aparecem no painel.
+ *
+ * O grafico segue ESSA ordem, e nao a quantidade: assim as barras ficam no
+ * mesmo lugar quando a equipe troca de periodo, e da para comparar dois meses
+ * sem reler os rotulos. Antes a ordem era uma lista escrita no codigo; hoje
+ * ela e a coluna "ordem", que a equipe arrasta no painel.
+ */
+async function ordemDasProfissoes(): Promise<string[]> {
+  const linhas = await prisma.profissao.findMany({
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    select: { nome: true },
+  });
+
+  return linhas.map((linha) => linha.nome);
+}
+
+function contarPorProfissao(
+  reservas: ReservaContada[],
+  emOrdem: string[],
+): Fatia[] {
   const mapa = new Map<string, number>();
 
   for (const reserva of reservas) {
     const rotulo = rotuloDaProfissao(reserva.profissao);
     mapa.set(rotulo, (mapa.get(rotulo) ?? 0) + 1);
   }
-
-  // Ordem fixa das opcoes, com "Não informado" por ultimo — ele nao e uma
-  // area de atuacao, e so a marca das reservas anteriores ao campo.
-  const emOrdem = PROFISSOES.map((opcao) => opcao.rotulo);
 
   return [...mapa.entries()]
     .map(([rotulo, total]) => ({ rotulo, total }))
@@ -770,7 +785,7 @@ async function reservasDaEmpresaNoPeriodo(
       inicio: true,
       fim: true,
       status: true,
-      profissao: true,
+      profissao: { select: { nome: true } },
       nomeCliente: true,
       telefone: true,
       empresaId: true,
@@ -849,9 +864,10 @@ export async function montarDetalheDaEmpresa(
 // -----------------------------------------------------------------------------
 
 export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
-  const [reservas, vinculos] = await Promise.all([
+  const [reservas, vinculos, ordem] = await Promise.all([
     reservasDoPeriodo(periodo),
     vinculosDeTelefone(),
+    ordemDasProfissoes(),
   ]);
 
   return {
@@ -862,7 +878,7 @@ export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
     porDia: contarPorDia(reservas, periodo),
     porDiaDaSemana: contarPorDiaDaSemana(reservas),
     porHora: contarPorHora(reservas),
-    porProfissao: contarPorProfissao(reservas),
+    porProfissao: contarPorProfissao(reservas, ordem),
     horasPorCliente: somarHorasPorCliente(reservas),
     horasPorEmpresa: somarHorasPorEmpresa(reservas, vinculos),
   };

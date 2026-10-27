@@ -10,12 +10,11 @@
  */
 import { StatusReserva } from "@/generated/prisma/enums";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
-import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import {
   empresaEscolhidaEhValida,
   lembrarEmpresaDoTelefone,
 } from "@/lib/empresas";
-import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
+import { recusaDaProfissao } from "@/lib/profissoes";
 import type { CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { minutosEntre } from "@/lib/tempo";
@@ -94,7 +93,7 @@ export async function criarReservaPublica(entrada: {
   /** Por hora ou dia inteiro. Padrao: HORA. */
   categoria?: CategoriaReserva;
   /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
-  profissao: CategoriaProfissao;
+  profissaoId: string;
   /**
    * A empresa mensalista, escolhida pelo cliente. Nulo = nao e de empresa,
    * que e o caso da maioria. Nao muda preco nem disponibilidade: serve ao
@@ -106,13 +105,15 @@ export async function criarReservaPublica(entrada: {
   // nao ha por que conferir horario e preco de uma reserva que nao pode
   // existir. E e aqui, no servidor, que ela vale — esconder o botao na tela
   // nao para quem manda o pedido direto.
-  if (profissaoBloqueada(entrada.profissao)) {
+  const recusa = await recusaDaProfissao(entrada.profissaoId);
+
+  if (recusa) {
     return {
       criada: false,
       falha: {
         tipo: "REGRA",
         codigo: "PROFISSAO_BLOQUEADA",
-        motivo: AVISO_PROFISSAO_BLOQUEADA,
+        motivo: recusa.motivo,
       },
     };
   }
@@ -193,7 +194,7 @@ export async function criarReservaPublica(entrada: {
           status: StatusReserva.CONFIRMADA,
           origem: "PUBLICO",
           categoria,
-          profissao: entrada.profissao,
+          profissaoId: entrada.profissaoId,
           empresaId: entrada.empresaId ?? null,
         },
         select: { id: true },

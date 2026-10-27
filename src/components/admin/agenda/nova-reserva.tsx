@@ -9,17 +9,13 @@ import { AvisoDeErro } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
 import { serieporExtenso, type SemanaDoMes } from "@/lib/datas-recorrencia";
-import {
-  AVISO_PROFISSAO_BLOQUEADA,
-  PROFISSOES,
-  profissaoBloqueada,
-} from "@/lib/profissoes";
 import { formatarEnquantoDigita } from "@/lib/telefone";
 import { cn } from "@/lib/utils";
 
 import {
   buscarEmpresasAtivas,
   buscarNomeDoCliente,
+  buscarProfissoesAtivas,
   criarNaRecepcao,
   criarSerie,
   type RelatorioDaSerie,
@@ -87,6 +83,28 @@ export function NovaReserva({
   const [erro, setErro] = useState<string | null>(null);
   /** Quando o telefone ja reservou antes, o nome dele aparece aqui. */
   const [nomeConhecido, setNomeConhecido] = useState<string | null>(null);
+  /** As areas de atuacao, na ordem do painel. */
+  const [profissoes, setProfissoes] = useState<
+    { id: string; nome: string; bloqueada: boolean; avisoBloqueio: string }[]
+  >([]);
+
+  useEffect(() => {
+    const controle = new AbortController();
+
+    buscarProfissoesAtivas(controle.signal)
+      .then((resposta) => {
+        if (!controle.signal.aborted) {
+          setProfissoes(resposta.profissoes);
+        }
+      })
+      .catch(() => {
+        // Sem a lista o campo fica vazio e o botao de criar nao libera. E o
+        // certo: lancar reserva sem area de atuacao sujaria o relatorio.
+      });
+
+    return () => controle.abort();
+  }, []);
+
   /** As empresas mensalistas. Vazia = o campo nao aparece. */
   const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([]);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
@@ -163,14 +181,18 @@ export function NovaReserva({
   const faltaAlgoDaSerie =
     repetir && (diasDaSemana.length === 0 || !dataFim || dataFim < data);
 
+  /** A area escolhida, de onde sai a trava do bloqueio. */
+  const profissaoEscolhida =
+    profissoes.find((opcao) => opcao.id === profissao) ?? null;
+
   const invalido =
     fim <= inicio ||
     nome.trim().length < 2 ||
     telefone.length < 14 ||
     profissao === "" ||
-    // A trava do contrato de exclusividade vale para a recepcao tambem: nao
-    // e regra comercial (que ela fura), e compromisso com outra empresa.
-    profissaoBloqueada(profissao) ||
+    // A area bloqueada vale para a recepcao tambem: nao e regra comercial
+    // (que ela fura), e compromisso com outra empresa.
+    profissaoEscolhida?.bloqueada === true ||
     faltaAlgoDaSerie;
 
   async function salvar(): Promise<void> {
@@ -182,7 +204,7 @@ export function NovaReserva({
           salaId,
           telefone,
           nome: nome.trim(),
-          profissao,
+          profissaoId: profissao,
           empresaId,
           inicio,
           fim,
@@ -200,7 +222,7 @@ export function NovaReserva({
         salaId,
         telefone,
         nome: nome.trim(),
-        profissao,
+        profissaoId: profissao,
         empresaId,
         data,
         inicio,
@@ -289,9 +311,9 @@ export function NovaReserva({
             className="min-h-12 w-full rounded-lg border border-border bg-bg-primary px-4 text-base text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
           >
             <option value="">Escolha…</option>
-            {PROFISSOES.map((opcao) => (
-              <option key={opcao.valor} value={opcao.valor}>
-                {opcao.rotulo}
+            {profissoes.map((opcao) => (
+              <option key={opcao.id} value={opcao.id}>
+                {opcao.nome}
               </option>
             ))}
           </select>
@@ -299,12 +321,12 @@ export function NovaReserva({
             Entra no relatório do painel. Não muda o valor da reserva.
           </span>
 
-          {profissaoBloqueada(profissao) ? (
+          {profissaoEscolhida?.bloqueada ? (
             <span
               role="status"
               className="rounded-lg border border-destructive bg-bg-primary p-3 text-sm leading-relaxed text-text-primary"
             >
-              {AVISO_PROFISSAO_BLOQUEADA}
+              {profissaoEscolhida.avisoBloqueio}
             </span>
           ) : null}
         </label>

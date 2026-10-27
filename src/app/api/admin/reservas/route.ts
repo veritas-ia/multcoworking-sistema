@@ -19,9 +19,17 @@ const Corpo = z.object({
   /** A empresa mensalista. Ausente ou nula = nao e de empresa. */
   empresaId: z.string().min(1).nullish(),
   /** Obrigatoria em reserva nova; so o passado tem reserva sem profissao. */
-  profissao: z.enum(["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"], {
-    message: "Escolha a área de atuação do cliente.",
-  }),
+  /**
+   * A area de atuacao, pelo identificador dela.
+   *
+   * Deixou de ser uma lista escrita aqui em 27/10/2026: a equipe edita
+   * as profissoes no painel, entao a lista mora no banco. Quem confere
+   * que ela existe, esta ativa e nao esta bloqueada e o servidor, em
+   * "recusaDaProfissao".
+   */
+  profissaoId: z
+    .string({ error: "Escolha a área de atuação do cliente." })
+    .min(1, "Escolha a área de atuação do cliente."),
   /** "DIARIA" ignora inicio/fim: o horario vem da configuracao. */
   categoria: z.enum(["HORA", "DIARIA"]).optional(),
   pessoas: z.number().int().min(1).max(500).nullish(),
@@ -79,7 +87,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
-    profissao: corpo.data.profissao,
+    profissaoId: corpo.data.profissaoId,
     empresaId: corpo.data.empresaId ?? null,
     pessoas: corpo.data.pessoas ?? null,
     categoria,

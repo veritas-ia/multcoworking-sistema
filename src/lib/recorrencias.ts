@@ -24,12 +24,11 @@ import {
   type Frequencia,
   type SemanaDoMes,
 } from "@/lib/datas-recorrencia";
-import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import {
   empresaEscolhidaEhValida,
   lembrarEmpresaDoTelefone,
 } from "@/lib/empresas";
-import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
+import { recusaDaProfissao } from "@/lib/profissoes";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import { historicoCom } from "@/lib/historico-reserva";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +65,7 @@ export async function criarSerie(entrada: {
   telefone: string;
   nomeCliente: string;
   /** Area de atuacao do cliente, perguntada UMA vez para a serie inteira. */
-  profissao: CategoriaProfissao;
+  profissaoId: string;
   /**
    * A empresa mensalista da serie. Perguntada UMA vez; todas as ocorrencias
    * nascem com ela, igual a profissao.
@@ -83,8 +82,10 @@ export async function criarSerie(entrada: {
 }): Promise<Resultado<RelatorioDaSerie>> {
   // A trava do contrato de exclusividade. Uma serie cria MUITAS reservas de
   // uma vez; deixar passar aqui seria a maior brecha das tres portas.
-  if (profissaoBloqueada(entrada.profissao)) {
-    return { ok: false, falha: { codigo: "REGRA", motivo: AVISO_PROFISSAO_BLOQUEADA } };
+  const recusa = await recusaDaProfissao(entrada.profissaoId);
+
+  if (recusa) {
+    return { ok: false, falha: { codigo: "REGRA", motivo: recusa.motivo } };
   }
 
   if (!(await empresaEscolhidaEhValida(entrada.empresaId))) {
@@ -198,7 +199,7 @@ export async function criarSerie(entrada: {
           salaId: entrada.salaId,
           nomeCliente: entrada.nomeCliente,
           telefone: entrada.telefone,
-          profissao: entrada.profissao,
+          profissaoId: entrada.profissaoId,
           empresaId: entrada.empresaId ?? null,
           inicio,
           fim,

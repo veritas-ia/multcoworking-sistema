@@ -31,7 +31,7 @@ import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { dataLocalDe, instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -114,7 +114,7 @@ async function criarSeriePelaRota(entrada: Entrada) {
         salaId: entrada.salaId ?? salaCI,
         telefone: CLIENTE,
         nome: "Cliente Recorrente",
-        profissao: "OUTROS",
+        profissaoId: await idDaProfissao("OUTROS"),
         inicio: entrada.inicio ?? "09:00",
         fim: entrada.fim ?? "10:00",
         diasDaSemana: entrada.diasDaSemana,

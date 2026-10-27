@@ -30,7 +30,7 @@ import {
 import { criarReservaPublica } from "@/lib/reservas";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 
 const PREFIXO = "ZZ Empresa";
 const TELEFONES = ["+5511900000701", "+5511900000702", "+5511900000703"];
@@ -103,7 +103,7 @@ async function reserva(
       salaId,
       nomeCliente: nome,
       telefone,
-      profissao: "OUTROS",
+      profissaoId: await idDaProfissao("OUTROS"),
       empresaId,
       inicio: instanteDe(dia, `${hora}:00`),
       fim: instanteDe(dia, `${hora}:30`),
@@ -419,7 +419,7 @@ describe("criar reserva no site com empresa", () => {
       salaId: salaContainer,
       telefone: TELEFONES[0]!,
       nomeCliente: "Cliente de Teste",
-      profissao: "OUTROS",
+      profissaoId: await idDaProfissao("OUTROS"),
       empresaId,
       inicio: instanteDe(DIA, hora),
       fim: instanteDe(DIA, `${String(Number(hora.slice(0, 2)) + 1).padStart(2, "0")}:00`),

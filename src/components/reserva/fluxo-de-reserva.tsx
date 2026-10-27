@@ -11,6 +11,7 @@ import {
   buscarAgenda,
   buscarSalas,
   buscarEmpresas,
+  buscarProfissoes,
   buscarSessao,
   criarReserva,
   encerrarSessao,
@@ -31,6 +32,7 @@ import {
   type Agenda,
   type EmpresaDoCliente,
   type Etapa,
+  type ProfissaoDoCliente,
   type ReservaCriada,
   type Sala,
 } from "./tipos";
@@ -99,6 +101,8 @@ export function FluxoDeReserva({
   const [nomeJaConhecido, setNomeJaConhecido] = useState(false);
   /** As empresas mensalistas cadastradas. Vazia = a pergunta nao aparece. */
   const [empresas, setEmpresas] = useState<EmpresaDoCliente[]>([]);
+  /** As areas de atuacao, na ordem que a equipe definiu no painel. */
+  const [profissoes, setProfissoes] = useState<ProfissaoDoCliente[]>([]);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [telefoneMascarado, setTelefoneMascarado] = useState<string | null>(null);
 
@@ -123,8 +127,11 @@ export function FluxoDeReserva({
       buscarAgenda(controle.signal),
       buscarSessao(controle.signal),
       buscarEmpresas(controle.signal),
+      buscarProfissoes(controle.signal),
     ])
-      .then(([resultadoSalas, agenda, sessao, resultadoEmpresas]) => {
+      .then((
+        [resultadoSalas, agenda, sessao, resultadoEmpresas, resultadoProfissoes],
+      ) => {
         if (controle.signal.aborted) {
           return;
         }
@@ -149,6 +156,7 @@ export function FluxoDeReserva({
         }
 
         setEmpresas(resultadoEmpresas.empresas);
+        setProfissoes(resultadoProfissoes.profissoes);
 
         // A EMPRESA TAMBEM JA VEM ESCOLHIDA, pelo mesmo motivo do nome: quem
         // e da Prestare nao precisa dizer isso toda vez. So vale se ela
@@ -312,7 +320,7 @@ export function FluxoDeReserva({
         nome: nome.trim(),
         pessoas: perguntarPessoas && pessoas !== "" ? Number(pessoas) : null,
         categoria,
-        profissao,
+        profissaoId: profissao,
         empresaId,
       });
       setReserva(criada);
@@ -540,6 +548,7 @@ export function FluxoDeReserva({
             perguntarPessoas={perguntarPessoas}
             capacidade={sala?.capacidade ?? null}
             profissao={profissao}
+            profissoes={profissoes}
             empresas={empresas}
             empresaId={empresaId}
             aoMudar={setNome}

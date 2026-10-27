@@ -21,7 +21,7 @@ import { validarReserva } from "@/lib/disponibilidade";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoPost } from "./apoio/requisicao";
 
 /**
@@ -103,7 +103,7 @@ async function diaria(dia: string, salaId = salaReuniao) {
     salaId,
     telefone: TELEFONE,
     nomeCliente: "Cliente da Diária",
-    profissao: "OUTROS",
+    profissaoId: await idDaProfissao("OUTROS"),
     inicio: instanteDe(dia, "08:00"),
     fim: instanteDe(dia, "18:00"),
     categoria: "DIARIA",
@@ -145,7 +145,7 @@ describe("preco e horario", () => {
           salaId: salaReuniao,
           telefone: TELEFONE,
           nome: "Esperto",
-          profissao: "OUTROS",
+          profissaoId: await idDaProfissao("OUTROS"),
           data: TERCA,
           categoria: "DIARIA",
           // Pedindo uma "diaria" de uma hora, para pagar R$350 por 1h — ou,

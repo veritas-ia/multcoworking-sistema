@@ -56,8 +56,8 @@ export function buscarReserva(
 
 export function criarNaRecepcao(entrada: {
   salaId: string;
-  /** Area de atuacao do cliente. Obrigatoria. */
-  profissao: string;
+  /** O identificador da area de atuacao. Obrigatorio. */
+  profissaoId: string;
   /** A empresa mensalista, ou nulo. So afeta o relatorio. */
   empresaId?: string | null;
   telefone: string;
@@ -94,6 +94,18 @@ export function reagendarComoAdmin(
     method: "POST",
     body: JSON.stringify(entrada),
   });
+}
+
+/**
+ * As areas de atuacao, para o campo do balcao.
+ *
+ * Reaproveita a rota publica de proposito: e a mesma lista que o cliente ve,
+ * e duas rotas devolvendo a mesma coisa acabariam discordando.
+ */
+export function buscarProfissoesAtivas(sinal?: AbortSignal): Promise<{
+  profissoes: { id: string; nome: string; bloqueada: boolean; avisoBloqueio: string }[];
+}> {
+  return pedir("/api/publico/profissoes", { signal: sinal });
 }
 
 /**
@@ -257,8 +269,8 @@ export type RelatorioDaSerie = {
 
 export type DadosDaSerie = {
   salaId: string;
-  /** Area de atuacao do cliente, perguntada uma vez para a serie. */
-  profissao: string;
+  /** A area de atuacao, perguntada uma vez para a serie. */
+  profissaoId: string;
   /** A empresa mensalista da serie, perguntada uma vez. */
   empresaId?: string | null;
   telefone: string;

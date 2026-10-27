@@ -73,6 +73,19 @@ export type Sessao = {
 /** Uma empresa mensalista, do jeito que o cliente a ve: so o nome. */
 export type EmpresaDoCliente = { id: string; nome: string };
 
+/**
+ * Uma area de atuacao, do jeito que a tela precisa dela.
+ *
+ * Vem do servidor desde 27/10/2026, quando a lista virou editavel no painel.
+ * A bloqueada aparece na lista e traz o aviso que explica a recusa.
+ */
+export type ProfissaoDoCliente = {
+  id: string;
+  nome: string;
+  bloqueada: boolean;
+  avisoBloqueio: string;
+};
+
 export type ReservaCriada = {
   id: string;
   sala: string;

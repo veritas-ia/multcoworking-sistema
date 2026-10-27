@@ -24,12 +24,11 @@ import {
   type ResultadoValidacao,
 } from "@/lib/disponibilidade";
 import { historicoCom, type Momento } from "@/lib/historico-reserva";
-import type { CategoriaProfissao } from "@/generated/prisma/enums";
 import {
   empresaEscolhidaEhValida,
   lembrarEmpresaDoTelefone,
 } from "@/lib/empresas";
-import { AVISO_PROFISSAO_BLOQUEADA, profissaoBloqueada } from "@/lib/profissoes";
+import { recusaDaProfissao } from "@/lib/profissoes";
 import { BLOCO_MINUTOS, type CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
@@ -210,7 +209,7 @@ export async function criarReservaNaRecepcao(entrada: {
   /** Por hora ou dia inteiro. Padrao: HORA. */
   categoria?: CategoriaReserva;
   /** Area de atuacao do cliente. Obrigatoria em reserva nova. */
-  profissao: CategoriaProfissao;
+  profissaoId: string;
   /** A empresa mensalista. Nulo = nao e de empresa. So afeta o relatorio. */
   empresaId?: string | null;
   operador: Operador;
@@ -218,11 +217,10 @@ export async function criarReservaNaRecepcao(entrada: {
   // A trava do contrato de exclusividade vale TAMBEM para a recepcao. Ela
   // fura regra comercial (antecedencia, duracao, expediente), mas esta nao e
   // regra comercial: e compromisso com outra empresa.
-  if (profissaoBloqueada(entrada.profissao)) {
-    return {
-      ok: false,
-      falha: { codigo: "REGRA", motivo: AVISO_PROFISSAO_BLOQUEADA },
-    };
+  const recusa = await recusaDaProfissao(entrada.profissaoId);
+
+  if (recusa) {
+    return { ok: false, falha: { codigo: "REGRA", motivo: recusa.motivo } };
   }
 
   if (!(await empresaEscolhidaEhValida(entrada.empresaId))) {
@@ -261,7 +259,7 @@ export async function criarReservaNaRecepcao(entrada: {
         telefone: entrada.telefone,
         pessoas: entrada.pessoas ?? null,
         categoria: entrada.categoria ?? "HORA",
-        profissao: entrada.profissao,
+        profissaoId: entrada.profissaoId,
         empresaId: entrada.empresaId ?? null,
         inicio: entrada.inicio,
         fim: entrada.fim,

@@ -35,14 +35,6 @@ enum OrigemReserva {
 
 /// Em que area o cliente trabalha. Perguntado na reserva, usado so no
 /// relatorio do painel — nao muda preco nem disponibilidade.
-enum CategoriaProfissao {
-  MARKETING
-  JURIDICO
-  CONTABIL
-  SAUDE
-  OUTROS
-}
-
 /// Como a reserva foi vendida.
 enum CategoriaReserva {
   /// Por hora, na grade de 30 min. E o padrao desde sempre.
@@ -227,6 +219,44 @@ model TentativaLogin {
 ///
 /// Existe porque o relatorio por CLIENTE nao bastava: a Prestare aparece em
 /// tres telefones diferentes, e as vezes quem paga a conta do mes e a empresa.
+/// A area de atuacao do cliente, perguntada na reserva.
+///
+/// Virou tabela em 27/10/2026 para a equipe poder editar a lista no painel.
+/// Antes era um tipo fixo do PostgreSQL, que nao da para mexer por tela.
+///
+/// Nao entra em preco, disponibilidade nem em regra nenhuma da agenda: serve
+/// ao relatorio — com UMA excecao, o bloqueio abaixo.
+model Profissao {
+  id String @id @default(uuid(7))
+
+  /// O nome interno, que NUNCA muda depois de criado. Renomear mexe em "nome".
+  slug String @unique
+  nome String @unique
+
+  /// Desligada some do site, da recepcao e da serie. Continua no relatorio:
+  /// o historico de quem ja escolheu nao pode sumir.
+  ativa Boolean @default(true)
+
+  /// NAO PODE RESERVAR. Diferente de desligada: continua visivel na lista, e
+  /// a recusa explica o motivo. Hoje e o caso do Juridico, por contrato de
+  /// exclusividade com uma empresa de advocacia.
+  bloqueada Boolean @default(false)
+
+  /// O texto mostrado quando bloqueada. Fica aqui, e nao no codigo, porque o
+  /// texto de hoje fala em "area juridica" — bloquear outra area amanha com a
+  /// mesma frase seria mentira. Nulo usa o aviso generico.
+  avisoBloqueio String? @map("aviso_bloqueio")
+
+  ordem Int @default(0)
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  reservas Reserva[]
+
+  @@map("profissoes")
+}
+
 model Empresa {
   id    String  @id @default(uuid(7))
   nome  String  @unique
@@ -304,7 +334,8 @@ model Reserva {
   /// relatorio trata essas como "nao informado". Para reserva NOVA e
   /// obrigatorio, e quem cobra isso e a aplicacao: a coluna precisa aceitar
   /// nulo por causa do passado.
-  profissao CategoriaProfissao?
+  profissaoId String?    @map("profissao_id")
+  profissao   Profissao? @relation(fields: [profissaoId], references: [id])
 
   /// A empresa que esta reserva pertence, respondida por quem reservou.
   ///

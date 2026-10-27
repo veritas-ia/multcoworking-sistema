@@ -20,7 +20,7 @@ import { COOKIE_SESSAO, criarSessao } from "@/lib/sessao-cliente";
 import { instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -59,6 +59,14 @@ async function cookieDeSessao(telefone = TELEFONE): Promise<string> {
   return `${COOKIE_SESSAO}=${sessao.token}`;
 }
 
+/**
+ * O id da area de atuacao usada nas reservas destes testes.
+ *
+ * Guardado uma vez no beforeAll porque "corpoDeReserva" e chamado em dezenas
+ * de lugares e nao vale transformar todos em await so por causa disto.
+ */
+let profissaoPadrao: string;
+
 function corpoDeReserva(extra: Record<string, unknown> = {}) {
   return {
     salaId: salaCI,
@@ -66,7 +74,7 @@ function corpoDeReserva(extra: Record<string, unknown> = {}) {
     inicio: "10:00",
     fim: "11:00",
     nome: "Cliente de Teste",
-    profissao: "OUTROS",
+    profissaoId: profissaoPadrao,
     aceitePolitica: true,
     ...extra,
   };
@@ -74,6 +82,8 @@ function corpoDeReserva(extra: Record<string, unknown> = {}) {
 
 beforeAll(async () => {
   await aquecerConexao();
+
+  profissaoPadrao = await idDaProfissao("OUTROS");
 
   const salas = await bancoDeTeste.sala.findMany({
     where: { slug: { in: ["sala-ci", "sala-container"] } },

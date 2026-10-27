@@ -14,9 +14,17 @@ export const dynamic = "force-dynamic";
 const Corpo = z.object({
   salaId: z.string().min(1, "Escolha uma sala."),
   /** Obrigatoria em reserva nova; so o passado tem reserva sem profissao. */
-  profissao: z.enum(["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"], {
-    message: "Escolha a sua área de atuação.",
-  }),
+  /**
+   * A area de atuacao, pelo identificador dela.
+   *
+   * Deixou de ser uma lista escrita aqui em 27/10/2026: a equipe edita
+   * as profissoes no painel, entao a lista mora no banco. Quem confere
+   * que ela existe, esta ativa e nao esta bloqueada e o servidor, em
+   * "recusaDaProfissao".
+   */
+  profissaoId: z
+    .string({ error: "Escolha a sua área de atuação." })
+    .min(1, "Escolha a sua área de atuação."),
   /**
    * A empresa mensalista, quando a pessoa disse que e de uma. Ausente ou nula
    * e o caso normal. O servidor confere se ela existe e esta ativa.
@@ -85,7 +93,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
-    profissao: corpo.data.profissao,
+    profissaoId: corpo.data.profissaoId,
     empresaId: corpo.data.empresaId ?? null,
     pessoas: corpo.data.pessoas ?? null,
     categoria,

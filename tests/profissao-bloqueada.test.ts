@@ -1,5 +1,10 @@
 /**
- * CATEGORIA BLOQUEADA — o contrato de exclusividade com a advocacia.
+ * AREA BLOQUEADA — o contrato de exclusividade com a advocacia.
+ *
+ * O BLOQUEIO VIROU COLUNA em 27/10/2026, editavel no painel: o dono quer
+ * destravar o Juridico sozinho quando o contrato acabar. Antes era uma
+ * constante no codigo. O Juridico ja nasce bloqueado pela migracao, do jeito
+ * que estava em producao.
  *
  * O que estes testes protegem:
  *  1. o SERVIDOR recusa, e nao so a tela. Esconder o botao nao para quem
@@ -9,7 +14,10 @@
  *     seria pior do que trava nenhuma;
  *  3. reserva de Juridico que JA EXISTE continua de pe, e a equipe continua
  *     podendo remarcar — a regra vale so para reserva nova;
- *  4. o aviso que chega a tela e o texto combinado, e nao um erro tecnico.
+ *  4. o aviso que chega a tela e o texto DA PROPRIA AREA, e nao um erro
+ *     tecnico nem uma frase escrita no codigo;
+ *  5. desbloquear no painel libera a reserva na hora — e o dia em que o
+ *     contrato acabar.
  *
  * Precisa do banco no ar e com o seed carregado.
  */
@@ -27,17 +35,15 @@ import {
 import { POST as postReservaAdmin } from "@/app/api/admin/reservas/route";
 import { reagendarComoAdmin } from "@/lib/agenda-admin";
 import {
-  AVISO_PROFISSAO_BLOQUEADA,
-  PROFISSOES,
-  PROFISSOES_BLOQUEADAS,
-  profissaoBloqueada,
+  listarProfissoesParaEscolher,
+  recusaDaProfissao,
 } from "@/lib/profissoes";
 import { criarSerie } from "@/lib/recorrencias";
 import { criarReservaPublica } from "@/lib/reservas";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
 import { pedidoPost } from "./apoio/requisicao";
 
 /**
@@ -58,6 +64,9 @@ const USUARIO = "zz.bloqueio";
 const OPERADOR = { id: "", nome: "Recepção de Teste" };
 let salaId: string;
 let cookie: string;
+const ID: Record<string, string> = {};
+/** O aviso que a propria area carrega, lido do banco. */
+let avisoDoJuridico: string;
 
 beforeAll(async () => {
   await aquecerConexao();
@@ -77,6 +86,16 @@ beforeAll(async () => {
 
   OPERADOR.id = admin.id;
   cookie = `${COOKIE_ADMIN}=${await assinarToken(admin.id)}`;
+
+  for (const slug of ["MARKETING", "JURIDICO", "CONTABIL", "SAUDE", "OUTROS"]) {
+    ID[slug] = await idDaProfissao(slug);
+  }
+
+  const juridico = await bancoDeTeste.profissao.findUniqueOrThrow({
+    where: { slug: "JURIDICO" },
+    select: { avisoBloqueio: true },
+  });
+  avisoDoJuridico = juridico.avisoBloqueio!;
 });
 
 async function limpar(): Promise<void> {
@@ -102,12 +121,12 @@ afterAll(async () => {
 });
 
 /** Corpo de um pedido de reserva pelo painel. */
-function corpoDoPainel(profissao: string, hora = "10:00") {
+function corpoDoPainel(profissaoId: string, hora = "10:00") {
   return {
     salaId,
     telefone: TELEFONE,
     nome: "Cliente de Teste",
-    profissao,
+    profissaoId,
     data: TERCA,
     inicio: hora,
     fim: `${String(Number(hora.slice(0, 2)) + 1).padStart(2, "0")}:00`,
@@ -116,19 +135,24 @@ function corpoDoPainel(profissao: string, hora = "10:00") {
 
 // -----------------------------------------------------------------------------
 
-describe("a regra num lugar so", () => {
-  it("bloqueia Juridico e nenhuma outra categoria", () => {
-    expect([...PROFISSOES_BLOQUEADAS]).toEqual(["JURIDICO"]);
+describe("quem esta bloqueado hoje", () => {
+  it("so o Juridico, e as outras quatro reservam", async () => {
+    const lista = await listarProfissoesParaEscolher();
 
-    for (const opcao of PROFISSOES) {
-      expect(profissaoBloqueada(opcao.valor), opcao.rotulo).toBe(
-        opcao.valor === "JURIDICO",
-      );
+    for (const opcao of lista) {
+      expect(opcao.bloqueada, opcao.nome).toBe(opcao.nome === "Jurídico");
     }
   });
 
-  it("nao bloqueia quem nao informou categoria (reservas antigas)", () => {
-    expect(profissaoBloqueada(null)).toBe(false);
+  it("a recusa traz o aviso DA AREA, nao um texto do codigo", async () => {
+    const recusa = await recusaDaProfissao(ID.JURIDICO!);
+
+    expect(recusa?.motivo).toBe(avisoDoJuridico);
+    expect(recusa?.motivo).toMatch(/área jurídica/i);
+  });
+
+  it("area que reserva normalmente nao devolve recusa", async () => {
+    expect(await recusaDaProfissao(ID.CONTABIL!)).toBeNull();
   });
 });
 
@@ -140,7 +164,7 @@ describe("pelo site", () => {
       salaId,
       telefone: TELEFONE,
       nomeCliente: "Advogado Teste",
-      profissao: "JURIDICO",
+      profissaoId: ID.JURIDICO!,
       inicio: instanteDe(TERCA, "10:00"),
       fim: instanteDe(TERCA, "11:00"),
     });
@@ -148,7 +172,7 @@ describe("pelo site", () => {
     expect(resultado.criada).toBe(false);
     if (!resultado.criada && resultado.falha.tipo === "REGRA") {
       expect(resultado.falha.codigo).toBe("PROFISSAO_BLOQUEADA");
-      expect(resultado.falha.motivo).toBe(AVISO_PROFISSAO_BLOQUEADA);
+      expect(resultado.falha.motivo).toBe(avisoDoJuridico);
     } else {
       throw new Error("Esperava uma recusa de REGRA.");
     }
@@ -161,7 +185,7 @@ describe("pelo site", () => {
       salaId,
       telefone: TELEFONE,
       nomeCliente: "Cliente Teste",
-      profissao: "CONTABIL",
+      profissaoId: ID.CONTABIL!,
       inicio: instanteDe(TERCA, "10:00"),
       fim: instanteDe(TERCA, "11:00"),
     });
@@ -173,26 +197,28 @@ describe("pelo site", () => {
 describe("pelo painel", () => {
   it("recusa Juridico com o texto combinado", async () => {
     const resposta = await postReservaAdmin(
-      pedidoPost("/api/admin/reservas", corpoDoPainel("JURIDICO"), { cookie }),
+      pedidoPost("/api/admin/reservas", corpoDoPainel(ID.JURIDICO!), { cookie }),
     );
 
     expect(resposta.status).toBe(422);
-    expect((await resposta.json()).erro).toBe(AVISO_PROFISSAO_BLOQUEADA);
+    expect((await resposta.json()).erro).toBe(avisoDoJuridico);
     expect(await bancoDeTeste.reserva.count({ where: { telefone: TELEFONE } })).toBe(0);
   });
 
   it("as outras categorias reservam normalmente", async () => {
-    const outras = PROFISSOES.filter((opcao) => opcao.valor !== "JURIDICO");
+    const outras = (await listarProfissoesParaEscolher()).filter(
+      (opcao) => !opcao.bloqueada,
+    );
 
     for (const [indice, opcao] of outras.entries()) {
       // Horarios diferentes para nao esbarrarem umas nas outras.
       const hora = `${String(9 + indice * 2).padStart(2, "0")}:00`;
 
       const resposta = await postReservaAdmin(
-        pedidoPost("/api/admin/reservas", corpoDoPainel(opcao.valor, hora), { cookie }),
+        pedidoPost("/api/admin/reservas", corpoDoPainel(opcao.id, hora), { cookie }),
       );
 
-      expect(resposta.status, opcao.rotulo).toBe(201);
+      expect(resposta.status, opcao.nome).toBe(201);
     }
 
     expect(await bancoDeTeste.reserva.count({ where: { telefone: TELEFONE } })).toBe(
@@ -209,7 +235,7 @@ describe("pela serie recorrente", () => {
       salaId,
       telefone: TELEFONE,
       nomeCliente: "Escritório Teste",
-      profissao: "JURIDICO",
+      profissaoId: ID.JURIDICO!,
       horaInicio: "09:00",
       horaFim: "10:00",
       diasDaSemana: [2],
@@ -221,7 +247,7 @@ describe("pela serie recorrente", () => {
 
     expect(resultado.ok).toBe(false);
     if (!resultado.ok) {
-      expect(resultado.falha.motivo).toBe(AVISO_PROFISSAO_BLOQUEADA);
+      expect(resultado.falha.motivo).toBe(avisoDoJuridico);
     }
 
     expect(await bancoDeTeste.reserva.count({ where: { telefone: TELEFONE } })).toBe(0);
@@ -236,7 +262,7 @@ describe("reservas que ja existem", () => {
         salaId,
         nomeCliente: "Cliente Antigo",
         telefone: TELEFONE,
-        profissao: "JURIDICO",
+        profissaoId: ID.JURIDICO!,
         inicio: instanteDe(TERCA, "14:00"),
         fim: instanteDe(TERCA, "15:00"),
         duracaoMinutos: 60,
@@ -259,8 +285,39 @@ describe("reservas que ja existem", () => {
 
     const noBanco = await bancoDeTeste.reserva.findUniqueOrThrow({
       where: { id: antiga.id },
+      include: { profissao: { select: { nome: true } } },
     });
-    expect(noBanco.profissao).toBe("JURIDICO");
+    expect(noBanco.profissao?.nome).toBe("Jurídico");
     expect(noBanco.inicio).toEqual(instanteDe(QUARTA, "14:00"));
+  });
+});
+
+describe("desbloquear no painel", () => {
+  it("libera a reserva na hora — é o dia em que o contrato acabar", async () => {
+    // Era isto que antes exigia mexer no codigo e publicar de novo. O dono
+    // pediu o botao justamente para nao depender disso.
+    await bancoDeTeste.profissao.update({
+      where: { slug: "JURIDICO" },
+      data: { bloqueada: false },
+    });
+
+    try {
+      const resultado = await criarReservaPublica({
+        salaId,
+        telefone: TELEFONE,
+        nomeCliente: "Advogado Teste",
+        profissaoId: ID.JURIDICO!,
+        inicio: instanteDe(TERCA, "10:00"),
+        fim: instanteDe(TERCA, "11:00"),
+      });
+
+      expect(resultado.criada).toBe(true);
+    } finally {
+      // Devolve o estado de producao: o contrato ainda vale.
+      await bancoDeTeste.profissao.update({
+        where: { slug: "JURIDICO" },
+        data: { bloqueada: true },
+      });
+    }
   });
 });

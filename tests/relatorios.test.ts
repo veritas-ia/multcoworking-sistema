@@ -29,7 +29,7 @@ import { ATALHOS, ATALHO_PADRAO } from "@/components/admin/relatorios/periodos";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
 import { pedidoGet } from "./apoio/requisicao";
 
 /** 2026-11-02 e uma SEGUNDA. */
@@ -107,6 +107,7 @@ async function reserva(entrada: {
   fim: string;
   salaId?: string;
   status?: "CONFIRMADA" | "CANCELADA" | "CONCLUIDA" | "REAGENDADA";
+  /** O nome interno da area. Nulo grava sem area, como as reservas antigas. */
   profissao?: "MARKETING" | "JURIDICO" | "CONTABIL" | "SAUDE" | "OUTROS" | null;
   nome?: string;
   telefone?: string;
@@ -118,7 +119,10 @@ async function reserva(entrada: {
       salaId: entrada.salaId ?? salaCI,
       nomeCliente: entrada.nome ?? "Cliente de Teste",
       telefone: entrada.telefone ?? TELEFONE,
-      profissao: entrada.profissao === undefined ? "MARKETING" : entrada.profissao,
+      profissaoId:
+        entrada.profissao === null
+          ? null
+          : await idDaProfissao(entrada.profissao ?? "MARKETING"),
       inicio: instanteDe(entrada.dia, entrada.inicio),
       fim: instanteDe(entrada.dia, entrada.fim),
       // O banco exige que a duracao bata com o horario (trava

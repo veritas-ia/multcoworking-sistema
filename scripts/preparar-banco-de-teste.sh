@@ -27,11 +27,18 @@ docker exec "$CONTAINER" sh -c \
   "pg_dump -U coworking --schema-only $ORIGEM | psql -U coworking -d $DESTINO -q"
 
 # Os cadastros que os testes esperam encontrar: salas, horario de
-# funcionamento, parametros e modelos de mensagem.
+# funcionamento, parametros, modelos de mensagem e areas de atuacao.
+#
+# ATENCAO ao acrescentar tabela de cadastro nova aqui. As areas de atuacao
+# (profissoes) entraram em 27/10/2026, quando a lista deixou de ser um tipo
+# fixo do banco: sem esta linha o banco de teste nasce sem nenhuma area, e
+# TODO teste que cria reserva falha dizendo que nao achou o registro — uma
+# falha que nao tem nada a ver com a regra sendo testada.
 docker exec "$CONTAINER" sh -c \
   "pg_dump -U coworking --data-only \
      --table=salas --table=horarios_funcionamento \
      --table=configuracoes --table=templates_mensagem \
+     --table=profissoes \
      $ORIGEM | psql -U coworking -d $DESTINO -q"
 
 echo "Pronto. Agora \`npm test\` usa o $DESTINO e nao encosta nos seus dados."

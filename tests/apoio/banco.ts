@@ -34,3 +34,31 @@ export function maisMinutos(base: Date, minutos: number): Date {
 export async function aquecerConexao(): Promise<void> {
   await bancoDeTeste.$queryRaw`SELECT 1`;
 }
+
+/**
+ * O identificador de uma area de atuacao, pelo nome interno dela.
+ *
+ * As profissoes deixaram de ser um tipo fixo do banco em 27/10/2026 e viraram
+ * tabela, para a equipe editar a lista no painel. Os testes guardavam o texto
+ * ("OUTROS", "MARKETING"); agora precisam do identificador da linha.
+ *
+ * O resultado fica guardado em memoria porque os nomes internos nunca mudam —
+ * sem isso cada reserva de teste faria uma consulta a mais.
+ */
+const idsDeProfissao = new Map<string, string>();
+
+export async function idDaProfissao(slug = "OUTROS"): Promise<string> {
+  const guardado = idsDeProfissao.get(slug);
+
+  if (guardado) {
+    return guardado;
+  }
+
+  const profissao = await bancoDeTeste.profissao.findUniqueOrThrow({
+    where: { slug },
+    select: { id: true },
+  });
+
+  idsDeProfissao.set(slug, profissao.id);
+  return profissao.id;
+}

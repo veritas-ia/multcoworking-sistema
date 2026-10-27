@@ -26,7 +26,7 @@ import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -371,7 +371,7 @@ describe("dia fechado", () => {
           salaId: salaCI,
           telefone: CLIENTE,
           nome: "Evento Interno",
-          profissao: "OUTROS",
+          profissaoId: await idDaProfissao("OUTROS"),
           data: SEXTA_FECHADA,
           inicio: "10:00",
           fim: "12:00",
@@ -404,7 +404,7 @@ describe("dia fechado", () => {
           salaId: salaCI,
           telefone: CLIENTE,
           nome: "Evento à Noite",
-          profissao: "OUTROS",
+          profissaoId: await idDaProfissao("OUTROS"),
           data: QUARTA,
           inicio: "22:30",
           fim: "23:30",
@@ -432,7 +432,7 @@ describe("dia fechado", () => {
           salaId: salaCI,
           telefone: CLIENTE,
           nome: "Primeiro",
-          profissao: "OUTROS",
+          profissaoId: await idDaProfissao("OUTROS"),
           data: SEXTA_FECHADA,
           inicio: "10:00",
           fim: "12:00",
@@ -448,7 +448,7 @@ describe("dia fechado", () => {
           salaId: salaCI,
           telefone: CLIENTE,
           nome: "Segundo",
-          profissao: "OUTROS",
+          profissaoId: await idDaProfissao("OUTROS"),
           data: SEXTA_FECHADA,
           inicio: "11:00",
           fim: "13:00",

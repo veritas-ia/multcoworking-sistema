@@ -9,6 +9,7 @@ import type {
   Agenda,
   Bloco,
   EmpresaDoCliente,
+  ProfissaoDoCliente,
   ReservaCriada,
   Sala,
   Sessao,
@@ -85,6 +86,19 @@ export function buscarEmpresas(
   return pedir("/api/publico/empresas", { signal: sinal });
 }
 
+/**
+ * As areas de atuacao cadastradas pela equipe.
+ *
+ * Vem do servidor desde que a lista virou editavel no painel. A bloqueada vem
+ * na lista, com o aviso dela — esconder faria a pessoa escolher "Outros" e a
+ * reserva passaria.
+ */
+export function buscarProfissoes(
+  sinal?: AbortSignal,
+): Promise<{ profissoes: ProfissaoDoCliente[] }> {
+  return pedir("/api/publico/profissoes", { signal: sinal });
+}
+
 export function encerrarSessao(): Promise<{ mensagem: string }> {
   return pedir("/api/publico/sessao", { method: "DELETE" });
 }
@@ -139,8 +153,8 @@ export function criarReserva(entrada: {
   pessoas?: number | null;
   /** "DIARIA" faz o servidor usar o horario fixo, ignorando inicio/fim. */
   categoria?: "HORA" | "DIARIA";
-  /** Area de atuacao do cliente. Obrigatoria. */
-  profissao: string;
+  /** O identificador da area de atuacao. Obrigatorio. */
+  profissaoId: string;
   /** A empresa mensalista escolhida, ou nulo. */
   empresaId?: string | null;
   salaId: string;

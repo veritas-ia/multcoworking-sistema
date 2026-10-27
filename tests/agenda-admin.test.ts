@@ -32,7 +32,7 @@ import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -125,7 +125,7 @@ async function criarPelaRecepcao(entrada: {
         salaId: entrada.salaId ?? salaCI,
         telefone: CLIENTE,
         nome: "Cliente do Balcão",
-        profissao: "OUTROS",
+        profissaoId: await idDaProfissao("OUTROS"),
         data: entrada.data,
         inicio: entrada.inicio,
         fim: entrada.fim,
@@ -401,7 +401,7 @@ describe("criar reserva pela recepcao", () => {
           salaId: salaCI,
           telefone: "1234",
           nome: "Fulano",
-          profissao: "OUTROS",
+          profissaoId: await idDaProfissao("OUTROS"),
           data: QUARTA,
           inicio: "10:00",
           fim: "11:00",

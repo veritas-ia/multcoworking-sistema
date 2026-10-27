@@ -245,9 +245,11 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   ao salvar, é ali que estoura.
 
 ### Categoria de profissão e relatórios
-- Toda reserva guarda a **categoria de profissão** do cliente: Marketing, Jurídico,
-  Contábil, Área da Saúde ou Outros. O campo se chama `profissao` no banco — `categoria`
-  já é de "hora ou diária" e as duas coisas não podem se misturar.
+- Toda reserva guarda a **área de atuação** do cliente. As cinco iniciais são
+  Marketing, Jurídico, Contábil, Área da Saúde e Outros, mas **a lista é editável no
+  painel desde 27/10/2026** — ver "Áreas de atuação editáveis no painel". A reserva
+  aponta para a área pelo campo `profissao_id`; `categoria` já é de "hora ou diária" e
+  as duas coisas não podem se misturar.
 - É **obrigatório** nas três portas que criam reserva: site, recepção e série recorrente.
   A série pergunta uma vez e todas as ocorrências nascem com a resposta.
 - A coluna aceita nulo **de propósito**: quem cobra a obrigatoriedade é a aplicação. As
@@ -538,24 +540,75 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - A reordenação no painel é por botões de mover, e não arrastando: arrastar é ruim no
   tablet, que é onde a recepção mexe, e não funciona pelo teclado.
 
-### Categorias de profissão bloqueadas
+### Áreas de atuação editáveis no painel (27/10/2026)
+- **A lista deixou de ser um tipo fixo do banco e virou TABELA** (`profissoes`), por
+  pedido do dono: a equipe acrescenta e tira áreas em **Configurações → Áreas de
+  atuação**, sem programador. Um enum do PostgreSQL não serve para isso — ele aceita
+  acrescentar valor, mas nunca remover, e nem isso pode ser feito na mesma transação
+  que o usa.
+- A migração `20261027300000_profissoes_editaveis` **cria as cinco de hoje e religa
+  cada reserva existente** pelo nome interno. Ela confere no fim que nenhuma reserva
+  que tinha profissão ficou sem; se sobrar alguma, a migração inteira é desfeita. As
+  cinco entram **pela migração, não pelo seed** — o deploy roda `migrate deploy` e não
+  roda o seed, e uma lista só no seed deixaria o formulário de reserva sem opção
+  nenhuma em produção.
+- **O nome interno (`slug`) nunca muda.** Renomear mexe só em `nome`. É o slug que
+  amarra a área ao que já está gravado; mudando, um relatório antigo deixaria de bater
+  com a lista.
+- **Três ações, três significados diferentes:**
+  - **renomear** troca o rótulo em todo lugar, **inclusive nas reservas antigas** — elas
+    apontam para a área e não guardam o texto, então área que mudou de nome não vira
+    duas no relatório. A linha da reserva fica intacta (há teste comparando antes e
+    depois);
+  - **desligar** tira a área das telas de reserva (site, recepção e série). O histórico
+    fica: as reservas antigas continuam de pé e a área segue no relatório;
+  - **bloquear** deixa a área **na lista, visível**, e recusa a reserva.
+- **Excluir não existe**, mesma regra das salas e das empresas. A chave estrangeira é
+  `ON DELETE RESTRICT`.
+- **A ÚLTIMA área que pode reservar não se desliga nem se bloqueia.** Sem nenhuma área
+  escolhível, o formulário não fecha e **ninguém consegue reservar** — nem no site, nem
+  no balcão. O erro apareceria como "escolha a área" numa lista vazia, e ninguém ligaria
+  uma coisa à outra. Há teste para desligar e para bloquear.
+- A **ordem** é definida no painel por botões de mover (não arrastando: a recepção mexe
+  no tablet, e arrastar não funciona pelo teclado). Essa ordem é a que o cliente vê **e
+  a do gráfico no relatório** — por ordem, e não por quantidade, para as barras ficarem
+  no mesmo lugar quando a equipe troca de período. A reordenação regrava a ordem de
+  todas em bloco, para nunca haver dois números iguais.
+
+### O bloqueio do Jurídico (virou botão em 27/10/2026)
 - **A área jurídica não pode reservar.** Motivo: o coworking tem contrato de
   exclusividade com uma empresa de advocacia, então não aceita reservas de outros
-  advogados.
-- O aviso mostrado é: *"No momento não realizamos reservas para a área jurídica. Para
-  mais informações, entre em contato com a recepção."*
+  advogados. **O Jurídico já nasce bloqueado pela migração**, do jeito que estava em
+  produção.
+- **MUDANÇA DE DECISÃO:** até 27/10/2026 o bloqueio era a constante
+  `PROFISSOES_BLOQUEADAS` no código, e a decisão registrada era de que ficaria lá. O
+  dono mudou: *"vira botão no painel mas no caso do jurídico, já deixa configurado pra
+  não poder reservar"*. O motivo é prático — ele quer destravar sozinho no dia em que o
+  contrato acabar, sem publicar versão nova.
+- **O AVISO ficou na própria área** (coluna `aviso_bloqueio`), editável, e não escrito
+  no código. O texto de hoje fala em "área jurídica"; se a equipe bloquear outra área
+  amanhã com a mesma frase, a mensagem mentiria. Sem texto próprio, vale o genérico de
+  `AVISO_BLOQUEIO_GENERICO`.
+- **A área bloqueada CONTINUA aparecendo na lista**, de propósito. Escondida, o advogado
+  não acharia a opção dele, escolheria "Outros" e a reserva passaria. Aparecendo, a
+  recusa explica o motivo e ele fala com a recepção.
 - Vale para o **cliente no site** e para a **recepção no painel**. A recepção fura regra
   comercial (antecedência, duração, expediente), mas esta não é regra comercial: é
   compromisso com outra empresa.
-- A recusa é do **servidor**, nas três portas que criam reserva: site, recepção e série
-  recorrente. A tela também bloqueia, mas só para a pessoa não preencher o resto à toa —
-  esconder o botão não para quem manda o pedido direto.
+- A recusa é do **servidor** (`recusaDaProfissao`), nas três portas que criam reserva. A
+  tela também bloqueia, mas só para a pessoa não preencher o resto à toa — esconder o
+  botão não para quem manda o pedido direto. Há teste nas três portas.
 - **Reservas de Jurídico que já existem não são afetadas:** continuam de pé, e a equipe
   continua podendo remarcar e cancelar. A regra vale só para reserva nova.
-- As outras categorias (Marketing, Contábil, Área da Saúde, Outros) reservam normalmente.
-- **O contrato tem prazo.** Quando acabar, é só esvaziar `PROFISSOES_BLOQUEADAS` em
-  `src/lib/profissoes.ts` — a lista e o texto do aviso moram lá, num lugar só, e nada
-  mais precisa mudar.
+- Há teste que **desbloqueia e confirma que a reserva passa na hora** — é o dia em que o
+  contrato acabar.
+
+### Ao acrescentar tabela de cadastro nova
+- `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
+  tabelas** (salas, horários, configurações, templates e profissões). Tabela de cadastro
+  nova que fique fora dessa lista faz o banco de teste nascer sem ela, e **todo teste
+  que cria reserva falha** por registro não encontrado — uma falha que não tem nada a
+  ver com a regra sendo testada. Foi o que aconteceu ao criar as profissões.
 
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.

@@ -23,7 +23,7 @@ import { enderecoDe } from "@/lib/salas-admin";
 import { instanteDe } from "@/lib/tempo";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
 import { pedidoGet, pedidoPatch, pedidoPost } from "./apoio/requisicao";
 
 const USUARIO = "teste.fase11.salas";
@@ -487,7 +487,7 @@ describe("preços de grupo editáveis na tela", () => {
       salaId: id,
       telefone: "+5511900000777",
       nomeCliente: "Cliente de Teste",
-      profissao: "OUTROS",
+      profissaoId: await idDaProfissao("OUTROS"),
       inicio: instanteDe("2027-05-04", "14:00"),
       fim: instanteDe("2027-05-04", "16:00"),
       pessoas: 6,
@@ -516,7 +516,7 @@ describe("preços de grupo editáveis na tela", () => {
       salaId: id,
       telefone: "+5511900000777",
       nomeCliente: "Cliente de Teste",
-      profissao: "OUTROS",
+      profissaoId: await idDaProfissao("OUTROS"),
       inicio: instanteDe("2027-05-05", "14:00"),
       fim: instanteDe("2027-05-05", "16:00"),
       pessoas: 6,
@@ -536,7 +536,7 @@ describe("preços de grupo editáveis na tela", () => {
       salaId: id,
       telefone: "+5511900000777",
       nomeCliente: "Cliente de Teste",
-      profissao: "OUTROS",
+      profissaoId: await idDaProfissao("OUTROS"),
       inicio: instanteDe("2027-05-06", "14:00"),
       fim: instanteDe("2027-05-06", "16:00"),
       pessoas: 6,
