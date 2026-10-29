@@ -1110,3 +1110,111 @@ describe("empresa desligada", () => {
     expect(relatorio.horasPorEmpresa.find((item) => item.id === dela.id)?.horas).toBe(1);
   });
 });
+
+// -----------------------------------------------------------------------------
+// A BUSCA PRECISA BATER COM O GRAFICO (29/10/2026)
+//
+// Defeito real, achado pelo dono: a busca somava apenas as reservas cujo NOME
+// batia, e nao as do cliente. Quem escreveu o proprio nome de dois jeitos
+// aparecia na busca com uma fracao das horas, enquanto o grafico logo abaixo
+// — que sempre agrupou pelo telefone — mostrava o total certo.
+//
+// Os dois numeros discordavam NA MESMA TELA. O dono escreveu: "como que eu
+// chego a confiar no painel". E a pergunta certa, e e por isso que estes
+// testes comparam os dois lados em vez de conferir so um numero.
+// -----------------------------------------------------------------------------
+
+describe("busca por nome x gráfico de horas", () => {
+  it("soma TODAS as reservas do telefone, não só as que têm o nome procurado", async () => {
+    // O caso do Rafael: duas reservas, uma escrita "Rafael Dos Passos" e
+    // outra "Rafael Passos", no MESMO telefone.
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Rafael Dos Passos",
+    });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "17:00", nome: "Rafael", salaId: salaContainer,
+    });
+
+    const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "passos");
+
+    expect(achados).toHaveLength(1);
+    // 2h + 3h. Antes da correcao dava 2h, porque so uma reserva tinha "Passos".
+    expect(achados[0]?.horas).toBe(5);
+    expect(achados[0]?.reservas).toBe(2);
+  });
+
+  it("o número da busca é IGUAL ao da barra do gráfico", async () => {
+    // A garantia que importa: os dois lados da mesma tela nao podem
+    // discordar. Se discordarem, a equipe nao sabe em qual acreditar.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Rafael Dos Passos" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "17:00", nome: "Rafael", salaId: salaContainer,
+    });
+
+    const periodo = { de: SEGUNDA, ate: SEGUNDA };
+    const naBusca = (await procurarClientes(periodo, "passos"))[0];
+    const noGrafico = (await montarRelatorio(periodo)).horasPorCliente.find(
+      (cliente) => cliente.telefone === TELEFONE,
+    );
+
+    expect(naBusca?.horas).toBe(noGrafico?.horas);
+    expect(naBusca?.reservas).toBe(noGrafico?.reservas);
+    expect(naBusca?.nome).toBe(noGrafico?.nome);
+  });
+
+  it("e IGUAL ao do relatório individual do cliente", async () => {
+    // Terceiro lado da mesma informacao: o que abre ao tocar no cliente.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Rafael Dos Passos" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "17:00", nome: "Rafael", salaId: salaContainer,
+    });
+
+    const periodo = { de: SEGUNDA, ate: SEGUNDA };
+    const naBusca = (await procurarClientes(periodo, "passos"))[0];
+    const detalhe = await montarDetalheDoCliente(periodo, TELEFONE);
+
+    expect(naBusca?.horas).toBe(detalhe?.horas);
+  });
+
+  it("procurar pelo telefone dá o mesmo que procurar pelo nome", async () => {
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Rafael Dos Passos" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "17:00", nome: "Rafael", salaId: salaContainer,
+    });
+
+    const periodo = { de: SEGUNDA, ate: SEGUNDA };
+    const porNome = await procurarClientes(periodo, "passos");
+    const porTelefone = await procurarClientes(periodo, TELEFONE);
+
+    expect(porNome[0]?.horas).toBe(porTelefone[0]?.horas);
+  });
+
+  it("dois telefones DIFERENTES continuam sendo dois clientes", async () => {
+    // O outro lado do mesmo cuidado: juntar demais seria tao errado quanto
+    // separar demais. Duas pessoas de mesmo sobrenome nao viram uma.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "11:00", nome: "Rafael Dos Passos" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:30", nome: "Rafael Passos",
+      telefone: TELEFONE_B, salaId: salaContainer,
+    });
+
+    const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "passos");
+
+    expect(achados).toHaveLength(2);
+    expect(achados.map((cliente) => cliente.horas).sort()).toEqual([1.5, 2]);
+  });
+
+  it("quem só tem reserva cancelada continua aparecendo, com zero horas", async () => {
+    // Sem isso a equipe nao acharia essa pessoa na busca.
+    await reserva({
+      dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Rafael Dos Passos",
+      status: "CANCELADA",
+    });
+
+    const achados = await procurarClientes({ de: SEGUNDA, ate: SEGUNDA }, "passos");
+
+    expect(achados).toHaveLength(1);
+    expect(achados[0]?.horas).toBe(0);
+    expect(achados[0]?.reservas).toBe(0);
+  });
+});

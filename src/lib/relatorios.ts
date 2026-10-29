@@ -549,25 +549,43 @@ export async function procurarClientes(
   // Busca por nome: sem diferenciar maiuscula nem acento, porque ninguem
   // digita "Joao" e "João" do mesmo jeito duas vezes seguidas.
   const alvo = semAcento(procurado);
-  const encontrados = reservas.filter((reserva) =>
-    semAcento(reserva.nomeCliente).includes(alvo),
+
+  // O NOME SO SERVE PARA ACHAR O TELEFONE. Dai em diante vale o telefone.
+  //
+  // Este era um defeito de verdade, corrigido em 29/10/2026: a busca somava
+  // apenas as reservas cujo NOME batia, e nao as do cliente. Quem escreveu o
+  // proprio nome de dois jeitos aparecia aqui com uma fracao das horas, e o
+  // grafico logo abaixo — que sempre agrupou pelo telefone — mostrava o total
+  // certo. Os dois numeros discordavam na mesma tela, e o dono perdeu a
+  // confianca no painel inteiro por causa disso. O caso real: um cliente com
+  // duas reservas escritas "Rafael Dos Passos" e "Rafael Passos".
+  const telefonesAchados = new Set(
+    reservas
+      .filter((reserva) => semAcento(reserva.nomeCliente).includes(alvo))
+      .map((reserva) => reserva.telefone),
+  );
+
+  const doCliente = reservas.filter((reserva) =>
+    telefonesAchados.has(reserva.telefone),
   );
 
   // O ranking soma so o que contou como uso; um cliente que aparece no periodo
   // apenas com reserva cancelada sumiria da busca. Por isso ele e reposto aqui
   // com zero horas — a equipe precisa conseguir achar essa pessoa.
-  const comHoras = somarHorasPorCliente(encontrados);
+  const comHoras = somarHorasPorCliente(doCliente);
   const jaListados = new Set(comHoras.map((cliente) => cliente.telefone));
 
-  for (const reserva of encontrados) {
+  // A lista vem ordenada por inicio, entao o ultimo nome visto e o mais
+  // recente — o mesmo que o grafico mostra.
+  for (const reserva of doCliente) {
     if (!jaListados.has(reserva.telefone)) {
-      jaListados.add(reserva.telefone);
       comHoras.push({
         telefone: reserva.telefone,
         nome: reserva.nomeCliente,
         horas: 0,
         reservas: 0,
       });
+      jaListados.add(reserva.telefone);
     }
   }
 

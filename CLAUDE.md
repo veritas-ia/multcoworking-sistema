@@ -291,6 +291,9 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   devolve um cliente só; o nome é busca auxiliar, sem diferenciar maiúscula nem
   acento, e devolve a lista para a equipe escolher. Procura apenas entre quem tem
   reserva **no período** — o campo filtra o relatório, não vasculha a base inteira.
+- **O NOME SÓ SERVE PARA ACHAR O TELEFONE.** Daí em diante vale o telefone, e a soma é
+  sobre **todas** as reservas dele. Ver "A busca somava só as reservas com o nome
+  procurado".
 - Quem só tem reserva **cancelada** no período ainda aparece na busca, com zero horas:
   sem isso a equipe não conseguiria achar essa pessoa.
 - Com um cliente aberto, o relatório **geral some da tela**. Os dois juntos são dois
@@ -781,3 +784,23 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - **Editar o nome NUNCA criou cliente novo.** O agrupamento sempre foi pelo telefone; o
   que troca é o rótulo, que é o nome da reserva mais recente. Há teste provando isso,
   com dois nomes no mesmo número dando um cliente só.
+
+### A busca somava só as reservas com o nome procurado (corrigido em 29/10/2026)
+- **Defeito de verdade, achado pelo dono na tela.** Procurando "passos", a busca mostrava
+  *"Rafael Dos Passos — 2 h em 1 reserva"*, enquanto o gráfico "Horas por cliente", logo
+  abaixo na MESMA tela, mostrava **28 h** para o mesmo cliente.
+- **A causa:** `procurarClientes` filtrava as **reservas cujo nome batia** e somava só
+  essas. Quem escreveu o próprio nome de dois jeitos aparecia na busca com uma fração
+  das horas. Era o problema dos "44 nomes para 25 telefones" voltando por outra porta.
+- **O gráfico e o relatório individual SEMPRE estiveram certos**: os dois agrupam pelo
+  telefone, sobre todas as reservas. Quem mentia era só a busca. Isso importa porque o
+  dono escreveu *"como que eu chego a confiar no painel"* — a métrica geral nunca esteve
+  errada.
+- **A correção:** o nome passou a servir **só para achar o telefone**. Achado o telefone,
+  a soma é sobre todas as reservas dele, exatamente como o gráfico faz.
+- **Os testes comparam os TRÊS lados da mesma informação** — busca, gráfico e relatório
+  individual — em vez de conferir um número só. Dois números que discordam na mesma tela
+  destroem a confiança no painel inteiro, e nenhum teste que olhe para um lado só pegaria
+  isso. Há também teste de que a correção **não junta demais**: dois telefones diferentes
+  com sobrenome igual continuam sendo dois clientes.
+- Foi conferido que o teste **falha antes da correção** (dá 2 em vez de 5) e passa depois.
