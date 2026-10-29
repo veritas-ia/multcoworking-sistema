@@ -86,7 +86,7 @@ export type HorasDaEmpresa = {
  */
 export type HorasDoCliente = {
   telefone: string;
-  /** O nome da reserva MAIS RECENTE dele no periodo. */
+  /** O nome da PRIMEIRA reserva dele no periodo. Ver "somarHorasPorCliente". */
   nome: string;
   horas: number;
   reservas: number;
@@ -463,8 +463,20 @@ function umaCasa(horas: number): number {
 /**
  * Quantas horas cada cliente usou, do maior para o menor.
  *
- * As reservas ja vem ordenadas por inicio crescente, entao a ultima que o laco
- * encontra e a mais recente — e e dela que sai o nome mostrado.
+ * O NOME MOSTRADO E O DA PRIMEIRA RESERVA do numero, nao o da mais recente
+ * (mudado em 29/10/2026, decisao do dono). As reservas vem ordenadas por
+ * inicio crescente, entao o primeiro nome visto e o que fica.
+ *
+ * O motivo veio de um caso real: o telefone do atendimento comercial do
+ * coworking acumulou 14 reservas de QUATRO clientes diferentes (Toca,
+ * Prestare, Matheus Toca e Rafael Passos). Pela regra antiga, o bloco inteiro
+ * de 28 horas levava o nome da ULTIMA reserva — "Rafael Passos" — e o dono leu
+ * aquilo como 28 horas de um cliente que tinha 1,5. O primeiro nome e o da
+ * reserva mais antiga, que e a que deu origem ao numero no relatorio.
+ *
+ * Isto NAO conserta o agrupamento, so o rotulo: quem resolve o numero
+ * compartilhado e o cadastro de clientes, onde o nome vira campo proprio e
+ * deixa de depender do periodo que a equipe escolheu na tela.
  */
 function somarHorasPorCliente(reservas: ReservaContada[]): HorasDoCliente[] {
   const mapa = new Map<string, { nome: string; horas: number; reservas: number }>();
@@ -476,7 +488,9 @@ function somarHorasPorCliente(reservas: ReservaContada[]): HorasDoCliente[] {
 
     const atual = mapa.get(reserva.telefone);
     mapa.set(reserva.telefone, {
-      nome: reserva.nomeCliente,
+      // O primeiro que entrou manda: so usa o nome desta reserva quando ainda
+      // nao havia nenhum guardado para este telefone.
+      nome: atual?.nome ?? reserva.nomeCliente,
       horas: (atual?.horas ?? 0) + horasDe(reserva),
       reservas: (atual?.reservas ?? 0) + 1,
     });
@@ -575,8 +589,8 @@ export async function procurarClientes(
   const comHoras = somarHorasPorCliente(doCliente);
   const jaListados = new Set(comHoras.map((cliente) => cliente.telefone));
 
-  // A lista vem ordenada por inicio, entao o ultimo nome visto e o mais
-  // recente — o mesmo que o grafico mostra.
+  // A lista vem ordenada por inicio, e o laco guarda o PRIMEIRO nome de cada
+  // telefone — o mesmo que o grafico mostra.
   for (const reserva of doCliente) {
     if (!jaListados.has(reserva.telefone)) {
       comHoras.push({
@@ -629,8 +643,9 @@ export async function montarDetalheDoCliente(
   return {
     periodo,
     telefone,
-    // A ultima reserva do periodo, que e a mais recente: a lista vem ordenada.
-    nome: todas[todas.length - 1]!.nomeCliente,
+    // A PRIMEIRA reserva do periodo: a lista vem ordenada por inicio. Mesma
+    // regra do grafico, para os dois nunca discordarem na mesma tela.
+    nome: todas[0]!.nomeCliente,
     profissao: profissao.rotulo,
     profissaoDivergente: profissao.divergente,
     horas: umaCasa(usadas.reduce((soma, reserva) => soma + horasDe(reserva), 0)),
@@ -847,8 +862,9 @@ export async function montarDetalheDaEmpresa(
   for (const reserva of todas) {
     const atual = porPessoa.get(reserva.telefone);
     porPessoa.set(reserva.telefone, {
-      // A lista vem ordenada por inicio, entao o ultimo nome e o mais recente.
-      nome: reserva.nomeCliente,
+      // A lista vem ordenada por inicio: fica o nome da PRIMEIRA reserva,
+      // mesma regra do grafico de horas por cliente.
+      nome: atual?.nome ?? reserva.nomeCliente,
       horas: (atual?.horas ?? 0) + (contouComoUso(reserva) ? horasDe(reserva) : 0),
       reservas: (atual?.reservas ?? 0) + 1,
     });

@@ -374,10 +374,10 @@ describe("horas por cliente", () => {
 
     const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
 
-    // Uma linha so, com as duas horas somadas e o nome MAIS RECENTE.
+    // Uma linha so, com as duas horas somadas e o nome da PRIMEIRA reserva.
     expect(relatorio.horasPorCliente).toHaveLength(1);
     expect(relatorio.horasPorCliente[0]?.horas).toBe(2);
-    expect(relatorio.horasPorCliente[0]?.nome).toBe("Maria Silva");
+    expect(relatorio.horasPorCliente[0]?.nome).toBe("maria");
   });
 
   it("A RESERVA DAS 21H DE SEGUNDA conta na segunda, e não na terça", async () => {
@@ -983,7 +983,7 @@ describe("editar o nome NÃO cria um cliente novo", () => {
   it("dois nomes no mesmo telefone continuam sendo um cliente só", async () => {
     // O dono desconfiou disso ao ver o painel: dois nomes no mesmo numero
     // parecem dois clientes. Nao sao — o agrupamento sempre foi pelo telefone,
-    // e o que troca e so o rotulo, que mostra o nome da reserva mais recente.
+    // e o que troca e so o rotulo, que mostra o nome da PRIMEIRA reserva.
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", nome: "Toca" });
     await reserva({
       dia: SEGUNDA, inicio: "14:00", fim: "15:00", nome: "Toca Imóveis",
@@ -998,8 +998,53 @@ describe("editar o nome NÃO cria um cliente novo", () => {
     expect(doTelefone).toHaveLength(1);
     expect(doTelefone[0]?.horas).toBe(2);
     expect(doTelefone[0]?.reservas).toBe(2);
-    // O nome mostrado e o da reserva mais recente.
-    expect(doTelefone[0]?.nome).toBe("Toca Imóveis");
+    // O nome mostrado e o da PRIMEIRA reserva do numero.
+    expect(doTelefone[0]?.nome).toBe("Toca");
+  });
+
+  it("o nome da PRIMEIRA reserva manda, e não o da última", async () => {
+    // O caso real que motivou a troca (29/10/2026): o telefone do atendimento
+    // comercial do coworking juntou 14 reservas de quatro clientes. Pela regra
+    // antiga o bloco inteiro levava o nome da ULTIMA reserva, e 28 horas que
+    // eram quase todas da Toca apareceram no painel como "Rafael Passos".
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "12:00", nome: "Toca" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", nome: "Rafael Passos",
+      salaId: salaContainer,
+    });
+
+    const relatorio = await montarRelatorio({ de: SEGUNDA, ate: SEGUNDA });
+    const doTelefone = relatorio.horasPorCliente.find(
+      (cliente) => cliente.telefone === TELEFONE,
+    );
+
+    expect(doTelefone?.horas).toBe(4);
+    expect(doTelefone?.nome).toBe("Toca");
+    expect(doTelefone?.nome).not.toBe("Rafael Passos");
+  });
+
+  it("a busca e o relatório individual usam o MESMO nome do gráfico", async () => {
+    // Tres lugares mostram o nome do mesmo cliente. Se discordarem, a equipe
+    // le um achando que e o outro — foi assim que a confianca no painel caiu.
+    await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "12:00", nome: "Toca" });
+    await reserva({
+      dia: SEGUNDA, inicio: "14:00", fim: "15:00", nome: "Rafael Passos",
+      salaId: salaContainer,
+    });
+
+    const periodo = { de: SEGUNDA, ate: SEGUNDA };
+    const relatorio = await montarRelatorio(periodo);
+    const noGrafico = relatorio.horasPorCliente.find(
+      (cliente) => cliente.telefone === TELEFONE,
+    );
+    const naBusca = (await procurarClientes(periodo, "rafael")).find(
+      (cliente) => cliente.telefone === TELEFONE,
+    );
+    const individual = await montarDetalheDoCliente(periodo, TELEFONE);
+
+    expect(noGrafico?.nome).toBe("Toca");
+    expect(naBusca?.nome).toBe("Toca");
+    expect(individual?.nome).toBe("Toca");
   });
 });
 

@@ -286,7 +286,9 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   mais desmarca.
 - O agrupamento é pelo **telefone**, nunca pelo nome: o telefone é o identificador
   único e validado, enquanto a mesma pessoa escreve o nome diferente a cada reserva
-  ("Maria", "Maria Silva", "maria"). Na tela aparece o nome da reserva mais recente.
+  ("Maria", "Maria Silva", "maria"). Na tela aparece o nome da **primeira**
+  reserva do número no período (mudado em 29/10/2026 — era o da mais recente;
+  ver "O telefone compartilhado e as 28 horas do Rafael").
 - **Busca de cliente**: o telefone manda (normalizado, aceita qualquer formatação) e
   devolve um cliente só; o nome é busca auxiliar, sem diferenciar maiúscula nem
   acento, e devolve a lista para a equipe escolher. Procura apenas entre quem tem
@@ -438,7 +440,7 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
   pessoas usaram mais de um nome. O pior caso é uma cliente que apareceu como
   "Prestare", "Prestare Karen", "Prestare - Karen" e "Prestare - Cliente Dani".
 - **Os números do relatório NUNCA estiveram errados:** ele sempre agrupou pelo
-  **telefone** e mostra o nome mais recente. O que a bagunça suja é a **busca** e a
+  **telefone** e mostra um nome daquele número. O que a bagunça suja é a **busca** e a
   leitura da equipe — e a sensação de que o sistema perdeu o cliente.
 - **No site:** quando o telefone já reservou antes, o campo do nome vem **preenchido e
   travado**, com "Trocar o nome" do lado. Não é para impedir a pessoa de se corrigir —
@@ -782,7 +784,7 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   frente não aparece em atalho nenhum (em produção a Giovanna tem reserva até 31/10 e a
   Nicole até 29/10). Fica **em aberto**, por decisão de escopo do dono.
 - **Editar o nome NUNCA criou cliente novo.** O agrupamento sempre foi pelo telefone; o
-  que troca é o rótulo, que é o nome da reserva mais recente. Há teste provando isso,
+  que troca é o rótulo, que é o nome da primeira reserva. Há teste provando isso,
   com dois nomes no mesmo número dando um cliente só.
 
 ### A busca somava só as reservas com o nome procurado (corrigido em 29/10/2026)
@@ -792,10 +794,13 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
 - **A causa:** `procurarClientes` filtrava as **reservas cujo nome batia** e somava só
   essas. Quem escreveu o próprio nome de dois jeitos aparecia na busca com uma fração
   das horas. Era o problema dos "44 nomes para 25 telefones" voltando por outra porta.
-- **O gráfico e o relatório individual SEMPRE estiveram certos**: os dois agrupam pelo
-  telefone, sobre todas as reservas. Quem mentia era só a busca. Isso importa porque o
-  dono escreveu *"como que eu chego a confiar no painel"* — a métrica geral nunca esteve
-  errada.
+- **O gráfico e o relatório individual seguem a regra deles**: agrupam pelo telefone,
+  sobre todas as reservas. Quem mentia era a busca, que somava outra coisa. Isso importa
+  porque o dono escreveu *"como que eu chego a confiar no painel"*.
+- **CORREÇÃO DE 29/10/2026:** aqui estava escrito que "a métrica geral nunca esteve
+  errada". **Isso é forte demais.** O gráfico está certo *pela regra dele*, mas a regra
+  — telefone = cliente — quebra quando um número é usado por várias pessoas. Ver "O
+  telefone compartilhado e as 28 horas do Rafael".
 - **A correção:** o nome passou a servir **só para achar o telefone**. Achado o telefone,
   a soma é sobre todas as reservas dele, exatamente como o gráfico faz.
 - **Os testes comparam os TRÊS lados da mesma informação** — busca, gráfico e relatório
@@ -804,3 +809,36 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   isso. Há também teste de que a correção **não junta demais**: dois telefones diferentes
   com sobrenome igual continuam sendo dois clientes.
 - Foi conferido que o teste **falha antes da correção** (dá 2 em vez de 5) e passa depois.
+### O telefone compartilhado e as 28 horas do Rafael (29/10/2026)
+- **O que o dono viu:** no gráfico "Horas por cliente", *"Rafael Passos — 28 h"*. O
+  Rafael tem **6,5 horas na vida toda**. Ele procurou essas reservas na agenda e não
+  achou nenhuma com o nome dele.
+- **O que estava acontecendo, conferido em produção:** o telefone **+5514996040233**, que
+  é o do **atendimento comercial do próprio coworking**, acumulou **14 reservas de quatro
+  clientes diferentes** — Toca (11 reservas, 22,5 h), Prestare (1, 3 h), Matheus Toca
+  (1, 1 h) e Rafael Passos (1, 1,5 h). Somadas, exatamente 28,0 h.
+- **A prova de que não é uma pessoa:** no dia 26/10 três dessas reservas acontecem **ao
+  mesmo tempo, em três salas diferentes** (Container 13:00–17:30, Privativa 15:00–18:00,
+  Reunião 17:00–18:30). Ninguém ocupa três salas de uma vez, e o banco não permite
+  sobreposição dentro da mesma sala. **As 14 são todas de origem ADMIN** — nenhuma veio
+  do site. O vazamento é no balcão.
+- **A agenda sempre mostrou a verdade.** Ela exibe o `nomeCliente` de cada reserva: Toca
+  no dia 05, Prestare no dia 26. Quem inventou o "Rafael com 28 horas" foi o rótulo do
+  relatório, não a agenda. Nenhuma reserva estava escondida.
+- **O rótulo passou a ser o nome da PRIMEIRA reserva do número**, e não o da mais recente
+  (decisão do dono: *"é só manter o nome da primeira reserva que ela fez"*). No caso
+  acima, o bloco deixa de se chamar "Rafael Passos" e passa a se chamar "Toca", que é
+  quem tem 22,5 das 28 horas. Vale nos **quatro** lugares que mostram nome de cliente —
+  gráfico, busca, relatório individual e "quem reservou" da empresa —, porque dois
+  rótulos diferentes para a mesma pessoa na mesma tela é o que derruba a confiança. Há
+  teste comparando os três lados.
+- **Isto é rótulo, não agrupamento.** As 28 horas continuam somadas no mesmo bloco. O que
+  resolve de verdade é o cadastro de clientes (Fase 14): o nome vira campo próprio, para
+  de depender do período escolhido na tela, e o telefone da casa deixa de ser identidade.
+- **O telefone continua sendo o critério mais forte que o nome** (palavra do dono): mesmo
+  número com nome escrito diferente é **um cliente só**. A exceção é o telefone
+  compartilhado, que precisa ser marcado como tal — não dá para adivinhar.
+- **Como o sistema sabe que Matheus e Vinícius, com telefones diferentes, são os dois da
+  Toca:** pela **empresa gravada na reserva**, que já existe desde 27/10/2026. O cadastro
+  de clientes resolve "quem é a pessoa"; a empresa resolve "de quem é a conta". São duas
+  perguntas diferentes e cada uma tem o campo dela.
