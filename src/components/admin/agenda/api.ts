@@ -133,6 +133,29 @@ export function buscarNomeDoCliente(
   });
 }
 
+export type ClienteConhecido = {
+  telefone: string;
+  nome: string;
+  outrosNomes: string[];
+  reservas: number;
+  ultimaReserva: string;
+};
+
+/**
+ * Procura quem ja reservou, por um pedaco do nome ou do telefone.
+ *
+ * E o caminho inverso do "buscarNomeDoCliente": ali a recepcao tem o numero e
+ * quer o nome; aqui ela tem o nome e quer o numero. Sem isto, quando ela nao
+ * tem o telefone do cliente na mao, acaba lancando a reserva no numero da
+ * propria recepcao — e o cliente nunca recebe lembrete nenhum.
+ */
+export function procurarClientes(
+  termo: string,
+  sinal?: AbortSignal,
+): Promise<{ clientes: ClienteConhecido[] }> {
+  return pedir(`/api/admin/clientes?q=${encodeURIComponent(termo)}`, { signal: sinal });
+}
+
 /**
  * Estica o termino porque o cliente ficou mais tempo.
  *

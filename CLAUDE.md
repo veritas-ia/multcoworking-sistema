@@ -842,3 +842,48 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   Toca:** pela **empresa gravada na reserva**, que já existe desde 27/10/2026. O cadastro
   de clientes resolve "quem é a pessoa"; a empresa resolve "de quem é a conta". São duas
   perguntas diferentes e cada uma tem o campo dela.
+
+### A recepção procura o cliente em vez de digitar (29/10/2026)
+- **A CAUSA do telefone compartilhado, e não o sintoma.** O telefone é campo
+  **obrigatório e validado** na reserva do balcão. Quando o cliente liga, passa na
+  frente ou manda mensagem pelo Instagram, a recepção não tem o número dele na mão — e
+  o formulário não deixa salvar sem um. O único número sempre à mão é o da própria
+  recepção. **O sistema empurrou a equipe para isso.**
+- **O balcão NUNCA precisou de código de WhatsApp** (a rota diz isso por escrito). A
+  trava nunca foi a verificação: era a obrigatoriedade do telefone.
+- **O segundo estrago, que ninguém tinha visto:** as mensagens automáticas vão para o
+  telefone **gravado na reserva**. As 14 reservas do número da recepção mandaram
+  confirmação e os lembretes de 13h e 3h **para o WhatsApp da própria recepção**. Os
+  clientes da Toca, da Prestare e o Rafael nunca receberam aviso nenhum.
+- **A busca:** a recepção digita um pedaço do nome ("toca", "rafa") ou do telefone,
+  escolhe na lista, e **o telefone DELE** entra na reserva. Procurar é mais rápido do
+  que digitar um número inteiro, então o atalho ruim deixa de ser atalho.
+- **A lista sai das próprias reservas**, não de um cadastro: cada telefone que já
+  reservou é um "cliente conhecido". É o mesmo dado que o relatório já usa. O cadastro
+  de verdade — com identificador próprio e com o Rafael dos dois números virando um só
+  — é a fase seguinte.
+- **O NOME SÓ SERVE PARA ACHAR O TELEFONE**, mesma regra da busca do relatório: achado
+  o número, vem o cliente inteiro, com todas as reservas e todos os nomes dele. Há
+  teste com a mesma pessoa escrita de três jeitos.
+- **Os outros nomes do número aparecem na lista, de propósito.** Num telefone de balcão
+  eles são **pessoas diferentes**, e ver "Toca · também: Prestare, Rafael Passos" de uma
+  vez é o que impede a recepção de escolher aquele número sem perceber.
+- **Cliente novo continua entrando na mão.** Não achou ninguém, a tela diz isso e a
+  recepção digita nome e telefone como sempre. Travar aí impediria a primeira reserva
+  de qualquer cliente.
+- **A conversão do telefone tem teste próprio.** O banco guarda `+5511900000802` e o
+  campo mostra `(11) 90000-0802`: quem traduz é `telefoneVisivel`. Usar
+  `formatarEnquantoDigita` (o formatador que roda a cada tecla) produz
+  `(55) 11900-0008` — corta no 11º dígito e come o DDD. A reserva nasceria com o
+  telefone errado e **o campo pareceria preenchido**. Há teste de ida e volta.
+- **Nada mudou no site público, no relatório nem em reserva nenhuma que já existe.**
+
+### Detectar telefone usado por mais de uma pessoa
+- **Sobreposição de horário NÃO é prova sozinha.** Uma pessoa pode reservar duas salas
+  ao mesmo tempo — em produção o Matheus e o Rafael fazem isso, cada um com o nome dele
+  nas duas. O critério certo é **sobreposição com nomes DIFERENTES**.
+- Por esse critério, em 29/10/2026 **só o +5514996040233** (atendimento comercial do
+  coworking) é telefone de balcão: em 26/10, das 15h às 17h30, tem "Toca" na Container e
+  "Prestare" na Privativa ao mesmo tempo.
+- O número do Vinícius (+5514996173797) está limpo: 4 reservas, três dele e uma lançada
+  como "Toca" pelo balcão. Uma linha torta, não um número compartilhado.

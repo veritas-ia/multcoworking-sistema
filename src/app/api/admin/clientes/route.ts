@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { respostaErro } from "@/lib/api";
+import { procurarClientesConhecidos } from "@/lib/clientes";
 import { empresaConhecidaDoTelefone } from "@/lib/empresas";
 import { prisma } from "@/lib/prisma";
 import { normalizarTelefone } from "@/lib/telefone";
@@ -11,22 +12,37 @@ import { operadorDaRequisicao } from "../operador";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/admin/clientes?telefone=...
+ * GET /api/admin/clientes — quem ja reservou, para o balcao nao digitar errado.
  *
- * O nome e a empresa que este telefone usou na ULTIMA reserva, para o
- * formulario da recepcao preencher sozinho.
+ * Dois usos, e por isso dois parametros:
  *
- * Existe pelo mesmo motivo do campo travado no site: a mesma pessoa vinha
- * sendo cadastrada de varios jeitos ("Prestare", "Prestare Karen",
- * "Prestare - Karen"), e metade dessas reservas foi lancada pelo balcao. O
- * agrupamento do relatorio sempre foi pelo telefone, entao os numeros nunca
- * estiveram errados — o que suja e a busca e a leitura da equipe.
+ * - "?telefone=..." devolve o nome e a empresa que aquele numero usou, para o
+ *   formulario preencher sozinho enquanto a recepcao digita;
+ * - "?q=..." PROCURA, por um pedaco do nome ou do telefone, e devolve a lista
+ *   de clientes para a recepcao escolher.
  *
- * So responde para quem esta logado no painel: devolve nome de cliente.
+ * A busca por nome e o conserto da causa de um problema real: o telefone e
+ * obrigatorio na reserva do balcao, e quando a recepcao nao tem o numero do
+ * cliente na mao ela digita o da propria recepcao. Isso juntou quatro
+ * clientes diferentes num "cliente" so no relatorio, e mandou as
+ * confirmacoes e os lembretes deles todos para o WhatsApp da recepcao.
+ * Procurar "toca" e mais rapido do que digitar um numero inteiro.
+ *
+ * So responde para quem esta logado no painel: devolve nome e telefone
+ * INTEIRO de cliente. E a equipe olhando os proprios clientes, atras de
+ * login — mesma regra do relatorio de clientes.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
   if (!(await operadorDaRequisicao(requisicao))) {
     return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  }
+
+  const procurado = requisicao.nextUrl.searchParams.get("q");
+
+  if (procurado !== null) {
+    return NextResponse.json({
+      clientes: await procurarClientesConhecidos(procurado),
+    });
   }
 
   const telefone = normalizarTelefone(

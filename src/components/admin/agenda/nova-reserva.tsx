@@ -9,7 +9,7 @@ import { AvisoDeErro } from "@/components/ui/avisos";
 import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
 import { serieporExtenso, type SemanaDoMes } from "@/lib/datas-recorrencia";
-import { formatarEnquantoDigita } from "@/lib/telefone";
+import { formatarEnquantoDigita, telefoneVisivel } from "@/lib/telefone";
 import { cn } from "@/lib/utils";
 
 import {
@@ -18,6 +18,8 @@ import {
   buscarProfissoesAtivas,
   criarNaRecepcao,
   criarSerie,
+  procurarClientes,
+  type ClienteConhecido,
   type RelatorioDaSerie,
 } from "./api";
 
@@ -83,6 +85,9 @@ export function NovaReserva({
   const [erro, setErro] = useState<string | null>(null);
   /** Quando o telefone ja reservou antes, o nome dele aparece aqui. */
   const [nomeConhecido, setNomeConhecido] = useState<string | null>(null);
+  /** O que a recepcao digitou no "procurar cliente". */
+  const [procurado, setProcurado] = useState("");
+  const [achados, setAchados] = useState<ClienteConhecido[]>([]);
   /** As areas de atuacao, na ordem do painel. */
   const [profissoes, setProfissoes] = useState<
     { id: string; nome: string; bloqueada: boolean; avisoBloqueio: string }[]
@@ -170,6 +175,58 @@ export function NovaReserva({
 
     return () => controle.abort();
   }, [telefone]);
+
+  // PROCURAR O CLIENTE PELO NOME.
+  //
+  // O caminho inverso do efeito acima. A recepcao digita "toca" ou "rafa" e
+  // escolhe na lista; o telefone DELE entra na reserva. Sem isto, quando ela
+  // nao tem o numero do cliente na mao, acaba lancando no numero da propria
+  // recepcao — que foi como quatro clientes diferentes viraram um so no
+  // relatorio, e como os lembretes deles foram parar no WhatsApp do balcao.
+  useEffect(() => {
+    if (procurado.trim().length < 2) {
+      setAchados([]);
+      return;
+    }
+
+    const controle = new AbortController();
+    // Espera a pessoa parar de digitar: sem isto sai um pedido por tecla.
+    const relogio = setTimeout(() => {
+      procurarClientes(procurado, controle.signal)
+        .then((resposta) => {
+          if (!controle.signal.aborted) {
+            setAchados(resposta.clientes);
+          }
+        })
+        .catch(() => {
+          // Busca que falha nao trava o formulario: a recepcao digita o
+          // nome e o telefone na mao, como sempre fez.
+          if (!controle.signal.aborted) {
+            setAchados([]);
+          }
+        });
+    }, 300);
+
+    return () => {
+      clearTimeout(relogio);
+      controle.abort();
+    };
+  }, [procurado]);
+
+  /**
+   * A recepcao escolheu um cliente da lista: nome e telefone DELE entram.
+   *
+   * O telefone vem do banco em formato internacional ("+5514996040233") e o
+   * campo da tela mostra "(14) 99604-0233". Quem traduz e "telefoneVisivel":
+   * "formatarEnquantoDigita" cortaria o numero no 11o digito e deixaria o
+   * "55" do pais dentro do DDD.
+   */
+  function escolherCliente(cliente: ClienteConhecido): void {
+    setNome(cliente.nome);
+    setTelefone(telefoneVisivel(cliente.telefone));
+    setProcurado("");
+    setAchados([]);
+  }
 
   // --- repeticao ---
   const [repetir, setRepetir] = useState(false);
@@ -287,6 +344,65 @@ export function NovaReserva({
             ))}
           </select>
         </label>
+
+        {/* PROCURAR UM CLIENTE QUE JA RESERVOU.
+            Fica ANTES do nome de propósito: é o primeiro caminho que a
+            recepção deve tentar. Quando ela não tem o telefone do cliente na
+            mão, o atalho era lançar no número da recepção — e aí o cliente
+            não recebe lembrete nenhum, porque as mensagens vão para o
+            telefone gravado na reserva. */}
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-bg-secondary p-3">
+          <Campo
+            etiqueta="Procurar cliente que já reservou"
+            value={procurado}
+            placeholder="Nome ou telefone"
+            autoComplete="off"
+            onChange={(evento) => setProcurado(evento.target.value)}
+            dica="Escolha na lista para usar o telefone do próprio cliente."
+          />
+
+          {achados.length > 0 ? (
+            <ul className="flex flex-col gap-1.5">
+              {achados.map((cliente) => (
+                <li key={cliente.telefone}>
+                  <button
+                    type="button"
+                    onClick={() => escolherCliente(cliente)}
+                    className="flex w-full flex-col items-start gap-0.5 rounded-lg border border-border bg-bg-primary p-2.5 text-left hover:border-black focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+                  >
+                    <span className="text-sm font-bold text-text-primary">
+                      {cliente.nome}
+                    </span>
+                    <span className="text-sm tabular-nums text-text-primary">
+                      {telefoneVisivel(cliente.telefone)}
+                    </span>
+                    {/* Os outros nomes do mesmo número aparecem de propósito:
+                        num telefone de balcão eles são PESSOAS DIFERENTES, e
+                        ver isso é o que impede a recepção de escolher aquele
+                        número sem perceber. */}
+                    {cliente.outrosNomes.length > 0 ? (
+                      <span className="text-sm text-text-secondary">
+                        também: {cliente.outrosNomes.join(" · ")}
+                      </span>
+                    ) : null}
+                    <span className="text-sm text-text-secondary">
+                      {cliente.reservas}{" "}
+                      {cliente.reservas === 1 ? "reserva" : "reservas"} · última em{" "}
+                      {emDiaEMes(cliente.ultimaReserva)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {procurado.trim().length >= 2 && achados.length === 0 ? (
+            <p className="text-sm text-text-secondary">
+              Ninguém encontrado. Cliente novo: preencha o nome e o telefone
+              abaixo.
+            </p>
+          ) : null}
+        </div>
 
         <Campo
           etiqueta="Nome do cliente"
@@ -563,4 +679,10 @@ export function NovaReserva({
       </form>
     </div>
   );
+}
+
+/** "2026-10-26" -> "26/10". Curto o bastante para caber na lista. */
+function emDiaEMes(data: string): string {
+  const [, mes, dia] = data.split("-");
+  return `${dia}/${mes}`;
 }
