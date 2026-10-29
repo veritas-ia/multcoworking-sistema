@@ -96,10 +96,21 @@ export function BuscaDeCliente({
     };
   }, [termo, periodo]);
 
-  async function abrir(telefone: string): Promise<void> {
+  /**
+   * Abre o relatório de um cliente.
+   *
+   * O nome só vai junto quando a linha veio separada por nome, num telefone
+   * de balcão — sem ele, abrir "Rafael Passos" no número do atendimento
+   * comercial traria as reservas das quatro pessoas daquele telefone.
+   */
+  async function abrir(cliente: HorasDoCliente): Promise<void> {
     setErro(null);
     try {
-      const resposta = await buscarDetalheDoCliente(periodo, telefone);
+      const resposta = await buscarDetalheDoCliente(
+        periodo,
+        cliente.telefone,
+        cliente.separadoPorNome ? cliente.nome : undefined,
+      );
       setEscolhido(resposta.detalheDoCliente);
       aoAbrirCliente(true);
     } catch (falha) {
@@ -150,16 +161,21 @@ export function BuscaDeCliente({
           ) : (
             <ul className="flex flex-col gap-2">
               {achados.map((cliente) => (
-                <li key={cliente.telefone}>
+                <li key={`${cliente.telefone}-${cliente.nome}`}>
                   <button
                     type="button"
-                    onClick={() => void abrir(cliente.telefone)}
+                    onClick={() => void abrir(cliente)}
                     className="flex min-h-12 w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border border-border bg-bg-primary px-4 py-2.5 text-left hover:border-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
                   >
                     <span className="flex flex-col">
                       <span className="font-semibold text-text-primary">{cliente.nome}</span>
                       <span className="text-sm text-text-secondary">
                         {telefoneVisivel(cliente.telefone)}
+                        {/* Num telefone de balcão o número sozinho não
+                            identifica ninguém: sem este aviso a equipe veria
+                            três clientes com o mesmo telefone e acharia
+                            defeito. */}
+                        {cliente.separadoPorNome ? " · telefone do balcão" : ""}
                       </span>
                     </span>
                     <span className="text-sm text-text-secondary">

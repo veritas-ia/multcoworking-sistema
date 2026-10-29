@@ -25,6 +25,7 @@ import { StatusReserva } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { rotuloDaProfissao } from "@/lib/profissoes";
 import { normalizarTelefone } from "@/lib/telefone";
+import { telefonesDeBalcao } from "@/lib/telefones-balcao";
 import {
   dataLocalDe,
   diaDaSemanaDe,
@@ -90,6 +91,15 @@ export type HorasDoCliente = {
   nome: string;
   horas: number;
   reservas: number;
+  /**
+   * Verdadeiro quando o telefone foi marcado como de BALCAO e, por isso, esta
+   * linha e um nome dentro dele — e nao o numero inteiro.
+   *
+   * A tela precisa saber: para abrir este cliente, nao basta o telefone, tem
+   * de mandar o nome junto. Sem isso o relatorio individual traria as
+   * reservas das quatro pessoas do mesmo numero.
+   */
+  separadoPorNome: boolean;
 };
 
 /** Uma reserva na lista do cliente escolhido. */
@@ -474,38 +484,64 @@ function umaCasa(horas: number): number {
  * aquilo como 28 horas de um cliente que tinha 1,5. O primeiro nome e o da
  * reserva mais antiga, que e a que deu origem ao numero no relatorio.
  *
- * Isto NAO conserta o agrupamento, so o rotulo: quem resolve o numero
- * compartilhado e o cadastro de clientes, onde o nome vira campo proprio e
- * deixa de depender do periodo que a equipe escolheu na tela.
+ * O TELEFONE DE BALCAO e a excecao, e ele muda o AGRUPAMENTO, nao so o
+ * rotulo: num numero marcado pela equipe, cada NOME vira um cliente. E o que
+ * faz a Toca aparecer com as 22,5 horas dela e o Rafael com 1,5, em vez de um
+ * bloco de 28. Ver "telefones-balcao.ts".
  */
-function somarHorasPorCliente(reservas: ReservaContada[]): HorasDoCliente[] {
-  const mapa = new Map<string, { nome: string; horas: number; reservas: number }>();
+function somarHorasPorCliente(
+  reservas: ReservaContada[],
+  balcao: Set<string>,
+): HorasDoCliente[] {
+  const mapa = new Map<
+    string,
+    { telefone: string; nome: string; horas: number; reservas: number }
+  >();
 
   for (const reserva of reservas) {
     if (!contouComoUso(reserva)) {
       continue;
     }
 
-    const atual = mapa.get(reserva.telefone);
-    mapa.set(reserva.telefone, {
+    const chave = chaveDoCliente(reserva, balcao);
+    const atual = mapa.get(chave);
+
+    mapa.set(chave, {
+      telefone: reserva.telefone,
       // O primeiro que entrou manda: so usa o nome desta reserva quando ainda
-      // nao havia nenhum guardado para este telefone.
+      // nao havia nenhum guardado para este cliente.
       nome: atual?.nome ?? reserva.nomeCliente,
       horas: (atual?.horas ?? 0) + horasDe(reserva),
       reservas: (atual?.reservas ?? 0) + 1,
     });
   }
 
-  return [...mapa.entries()]
-    .map(([telefone, dados]) => ({
-      telefone,
+  return [...mapa.values()]
+    .map((dados) => ({
+      telefone: dados.telefone,
       nome: dados.nome,
       horas: umaCasa(dados.horas),
       reservas: dados.reservas,
+      separadoPorNome: balcao.has(dados.telefone),
     }))
     .sort(
       (a, b) => b.horas - a.horas || a.nome.localeCompare(b.nome, "pt-BR"),
     );
+}
+
+/**
+ * O que identifica um cliente dentro do relatorio.
+ *
+ * Normalmente o telefone, e so ele. Num telefone marcado como de balcao, o
+ * telefone sozinho juntaria pessoas diferentes, entao o nome entra na chave —
+ * sem acento e sem maiuscula, para "Toca" e "toca" nao virarem dois.
+ */
+function chaveDoCliente(reserva: ReservaContada, balcao: Set<string>): string {
+  if (!balcao.has(reserva.telefone)) {
+    return reserva.telefone;
+  }
+  // O separador e um caractere que nao aparece em telefone nem em nome.
+  return `${reserva.telefone}\u0000${semAcento(reserva.nomeCliente)}`;
 }
 
 /** A area de atuacao mais usada pelo cliente, e se houve mais de uma. */
@@ -551,12 +587,16 @@ export async function procurarClientes(
     return [];
   }
 
-  const reservas = await reservasDoPeriodo(periodo);
+  const [reservas, balcao] = await Promise.all([
+    reservasDoPeriodo(periodo),
+    telefonesDeBalcao(),
+  ]);
   const telefone = normalizarTelefone(procurado);
 
   if (telefone) {
     return somarHorasPorCliente(
       reservas.filter((reserva) => reserva.telefone === telefone),
+      balcao,
     );
   }
 
@@ -573,33 +613,46 @@ export async function procurarClientes(
   // certo. Os dois numeros discordavam na mesma tela, e o dono perdeu a
   // confianca no painel inteiro por causa disso. O caso real: um cliente com
   // duas reservas escritas "Rafael Dos Passos" e "Rafael Passos".
-  const telefonesAchados = new Set(
-    reservas
-      .filter((reserva) => semAcento(reserva.nomeCliente).includes(alvo))
-      .map((reserva) => reserva.telefone),
+  // NO TELEFONE DE BALCAO o nome volta a mandar, de proposito: ali ele nao e
+  // uma grafia da mesma pessoa, e uma pessoa diferente. Procurar "rafael"
+  // num numero de balcao tem de achar o Rafael, e nao os quatro.
+  const achadas = reservas.filter((reserva) =>
+    semAcento(reserva.nomeCliente).includes(alvo),
+  );
+  const chavesAchadas = new Set(
+    achadas.map((reserva) => chaveDoCliente(reserva, balcao)),
   );
 
   const doCliente = reservas.filter((reserva) =>
-    telefonesAchados.has(reserva.telefone),
+    chavesAchadas.has(chaveDoCliente(reserva, balcao)),
   );
 
   // O ranking soma so o que contou como uso; um cliente que aparece no periodo
   // apenas com reserva cancelada sumiria da busca. Por isso ele e reposto aqui
   // com zero horas — a equipe precisa conseguir achar essa pessoa.
-  const comHoras = somarHorasPorCliente(doCliente);
-  const jaListados = new Set(comHoras.map((cliente) => cliente.telefone));
+  const comHoras = somarHorasPorCliente(doCliente, balcao);
+  const jaListados = new Set(
+    comHoras.map((cliente) =>
+      cliente.separadoPorNome
+        ? `${cliente.telefone}\u0000${semAcento(cliente.nome)}`
+        : cliente.telefone,
+    ),
+  );
 
   // A lista vem ordenada por inicio, e o laco guarda o PRIMEIRO nome de cada
-  // telefone — o mesmo que o grafico mostra.
+  // cliente — o mesmo que o grafico mostra.
   for (const reserva of doCliente) {
-    if (!jaListados.has(reserva.telefone)) {
+    const chave = chaveDoCliente(reserva, balcao);
+
+    if (!jaListados.has(chave)) {
       comHoras.push({
         telefone: reserva.telefone,
         nome: reserva.nomeCliente,
         horas: 0,
         reservas: 0,
+        separadoPorNome: balcao.has(reserva.telefone),
       });
-      jaListados.add(reserva.telefone);
+      jaListados.add(chave);
     }
   }
 
@@ -624,6 +677,15 @@ function semAcento(texto: string): string {
 export async function montarDetalheDoCliente(
   periodo: Periodo,
   telefoneBruto: string,
+  /**
+   * So num TELEFONE DE BALCAO: qual das pessoas daquele numero abrir.
+   *
+   * Sem isto, abrir "Rafael Passos" no numero do atendimento comercial
+   * traria as reservas das quatro pessoas que usam aquele telefone, com o
+   * faturamento das quatro somado. O nome e ignorado nos numeros normais,
+   * onde ele e so uma grafia da mesma pessoa.
+   */
+  nomeBruto?: string,
 ): Promise<DetalheDoCliente | null> {
   const telefone = normalizarTelefone(telefoneBruto);
 
@@ -631,7 +693,19 @@ export async function montarDetalheDoCliente(
     return null;
   }
 
-  const todas = await reservasDoClienteNoPeriodo(periodo, telefone);
+  const [doTelefone, balcao] = await Promise.all([
+    reservasDoClienteNoPeriodo(periodo, telefone),
+    telefonesDeBalcao(),
+  ]);
+
+  const nome = nomeBruto?.trim();
+
+  const todas =
+    balcao.has(telefone) && nome
+      ? doTelefone.filter(
+          (reserva) => semAcento(reserva.nomeCliente) === semAcento(nome),
+        )
+      : doTelefone;
 
   if (todas.length === 0) {
     return null;
@@ -898,10 +972,11 @@ export async function montarDetalheDaEmpresa(
 // -----------------------------------------------------------------------------
 
 export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
-  const [reservas, vinculos, ordem] = await Promise.all([
+  const [reservas, vinculos, ordem, balcao] = await Promise.all([
     reservasDoPeriodo(periodo),
     vinculosDeTelefone(),
     ordemDasProfissoes(),
+    telefonesDeBalcao(),
   ]);
 
   return {
@@ -913,7 +988,10 @@ export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
     porDiaDaSemana: contarPorDiaDaSemana(reservas),
     porHora: contarPorHora(reservas),
     porProfissao: contarPorProfissao(reservas, ordem),
-    horasPorCliente: somarHorasPorCliente(reservas),
+    // O telefone de balcao e separado por NOME aqui, e so aqui: o relatorio
+    // por EMPRESA nao precisa disso, porque a empresa vem gravada na reserva
+    // e nao depende de quem e o dono do telefone.
+    horasPorCliente: somarHorasPorCliente(reservas, balcao),
     horasPorEmpresa: somarHorasPorEmpresa(reservas, vinculos),
   };
 }

@@ -487,3 +487,39 @@ export function moverProfissao(
     body: JSON.stringify({ mover }),
   });
 }
+
+// -----------------------------------------------------------------------------
+// Telefones do balcao
+// -----------------------------------------------------------------------------
+
+export type TelefoneDeBalcao = {
+  telefone: string;
+  motivo: string;
+  marcadoPor: string | null;
+  reservas: number;
+  nomes: string[];
+};
+
+export function buscarTelefonesDeBalcao(
+  sinal?: AbortSignal,
+): Promise<{ telefones: TelefoneDeBalcao[] }> {
+  return pedir("/api/admin/telefones-balcao", { signal: sinal });
+}
+
+export function marcarTelefoneDeBalcao(
+  telefone: string,
+  motivo: string,
+): Promise<{ telefone: TelefoneDeBalcao }> {
+  return pedir("/api/admin/telefones-balcao", {
+    method: "POST",
+    body: JSON.stringify({ telefone, motivo }),
+  });
+}
+
+export function desmarcarTelefoneDeBalcao(
+  telefone: string,
+): Promise<{ mensagem: string }> {
+  return pedir(`/api/admin/telefones-balcao?telefone=${encodeURIComponent(telefone)}`, {
+    method: "DELETE",
+  });
+}

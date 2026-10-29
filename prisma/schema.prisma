@@ -193,6 +193,7 @@ model Usuario {
 
   bloqueiosCriados    Bloqueio[]
   recorrenciasCriadas Recorrencia[]
+  telefonesDeBalcao   TelefoneDeBalcao[]
 
   @@map("usuarios")
 }
@@ -290,6 +291,37 @@ model TelefoneDaEmpresa {
 
   @@index([empresaId])
   @@map("telefones_empresa")
+}
+
+/// Telefones que NAO sao de um cliente: o do balcao, o do atendimento
+/// comercial, um celular de teste.
+///
+/// POR QUE ISTO EXISTE. O relatorio agrupa cliente pelo TELEFONE, e para 24
+/// dos 25 numeros isso esta certo. O do atendimento comercial do coworking,
+/// nao: a recepcao lanca nele a reserva de quem nao deixou o proprio numero,
+/// e ele acumulou 14 reservas de QUATRO clientes diferentes. No painel aquilo
+/// virava um "cliente" so, com 28 horas, levando o nome de um deles.
+///
+/// Marcado aqui, o relatorio passa a agrupar as reservas desse numero pelo
+/// NOME de cada uma. Nao e adivinhacao: a equipe marca, porque so ela sabe
+/// qual numero e da casa.
+///
+/// O TELEFONE E A CHAVE, e nao um id proprio: o mesmo numero nao pode ser
+/// marcado duas vezes. Desmarcar devolve tudo como era — nenhuma reserva e
+/// tocada, nem na marcacao nem na remocao.
+model TelefoneDeBalcao {
+  telefone String @id
+
+  /// Por que foi marcado, escrito pela equipe. Aparece no painel para a
+  /// proxima pessoa entender a marcacao sem precisar perguntar.
+  motivo String
+
+  criadoEm   DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  /// Quem marcou. Nulo quando o usuario foi desligado depois.
+  criadoPorId String? @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: SetNull)
+
+  @@map("telefones_balcao")
 }
 
 /// Parametros gerais do sistema, editaveis no painel (Fase 11).

@@ -13,6 +13,12 @@ export type HorasDoCliente = {
   nome: string;
   horas: number;
   reservas: number;
+  /**
+   * Esta linha é um NOME dentro de um telefone de balcão, e não o número
+   * inteiro. Para abrir, tem de mandar o nome junto — senão vêm as reservas
+   * de todas as pessoas que usam aquele telefone.
+   */
+  separadoPorNome: boolean;
 };
 
 export type ReservaDoCliente = {
@@ -116,10 +122,16 @@ export function buscarClientes(
   return pedir(`/api/admin/relatorios?${busca}`, { signal: sinal });
 }
 
-/** O relatorio de UM cliente no periodo. */
+/**
+ * O relatorio de UM cliente no periodo.
+ *
+ * O "nome" so e mandado quando a linha veio separada por nome, num telefone
+ * de balcao. Nos numeros normais o servidor ignora.
+ */
 export function buscarDetalheDoCliente(
   periodo: Periodo,
   telefone: string,
+  nome?: string,
   sinal?: AbortSignal,
 ): Promise<{ detalheDoCliente: DetalheDoCliente }> {
   const busca = new URLSearchParams({
@@ -127,6 +139,10 @@ export function buscarDetalheDoCliente(
     ate: periodo.ate,
     telefone,
   });
+
+  if (nome) {
+    busca.set("nomeCliente", nome);
+  }
 
   return pedir(`/api/admin/relatorios?${busca}`, { signal: sinal });
 }

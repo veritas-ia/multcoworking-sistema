@@ -12,6 +12,7 @@ import { AbaDeHorarios } from "./aba-horarios";
 import { AbaDeEmpresas } from "./aba-empresas";
 import { AbaDeProfissoes } from "./aba-profissoes";
 import { AbaDeSalas } from "./aba-salas";
+import { AbaDeTelefonesDeBalcao } from "./aba-telefones-balcao";
 import { AbaDeUsuarios } from "./aba-usuarios";
 
 type Aba = {
@@ -38,6 +39,11 @@ const ABAS: readonly Aba[] = [
     id: "profissoes",
     rotulo: "Áreas de atuação",
     conteudo: () => <AbaDeProfissoes />,
+  },
+  {
+    id: "telefones-balcao",
+    rotulo: "Telefones do balcão",
+    conteudo: () => <AbaDeTelefonesDeBalcao />,
   },
   { id: "usuarios", rotulo: "Usuários", conteudo: () => <AbaDeUsuarios /> },
 ];

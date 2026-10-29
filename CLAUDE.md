@@ -887,3 +887,42 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   "Prestare" na Privativa ao mesmo tempo.
 - O número do Vinícius (+5514996173797) está limpo: 4 reservas, três dele e uma lançada
   como "Toca" pelo balcão. Uma linha torta, não um número compartilhado.
+
+### Telefone de balcão: um número que não é de um cliente (29/10/2026)
+- **O que resolve:** o relatório agrupa cliente pelo **telefone**, e para 24 dos 25
+  números isso está certo. O do atendimento comercial do coworking, não: a recepção
+  lança nele a reserva de quem não deixou o próprio número, e ele acumulou **14 reservas
+  de quatro clientes diferentes** — que no painel viraram um "cliente" com 28 horas.
+- **A equipe MARCA o número** em Configurações → Telefones do balcão. Marcado, o
+  relatório agrupa as reservas dele **pelo NOME de cada uma**: a Toca aparece com as
+  22,5 h dela, a Prestare com 3, o Matheus Toca com 1 e o Rafael com 1,5.
+- **POR QUE A EQUIPE MARCA E O SISTEMA NÃO ADIVINHA.** O sinal mais forte que existe no
+  banco — duas reservas ao mesmo tempo em salas diferentes — **não basta**: uma pessoa
+  pode reservar duas salas de uma vez, e em produção o Matheus e o Rafael fazem
+  exatamente isso. Adivinhar errado quebraria um cliente de verdade em várias linhas, e
+  **ninguém desconfiaria**, porque cada linha continuaria parecendo certa.
+- **MARCAR NÃO TOCA EM RESERVA NENHUMA.** É uma lente na hora de montar o relatório.
+  Desmarcar devolve tudo exatamente como era — há teste que compara a linha inteira da
+  reserva antes e depois, e outro que desmarca e confere que o agrupamento voltou.
+- **Dentro do número marcado, a grafia ainda junta:** "Toca" e "toca" continuam sendo um
+  cliente só. O que separa são nomes diferentes, não maiúscula e acento.
+- **Fora do número marcado, nada muda:** quem escreve o próprio nome de dois jeitos
+  ("Giovana"/"Giovanna") continua sendo um cliente só, agrupado pelo telefone. Há teste —
+  sem ele, a correção reabriria o problema dos "44 nomes para 25 telefones".
+- **Abrir um cliente de número marcado exige o NOME junto** (`separadoPorNome` na
+  resposta, `?nomeCliente=` na rota). Sem isso, abrir "Rafael Passos" traria as reservas
+  **e o faturamento** das quatro pessoas daquele telefone. Há teste.
+- **A busca acha a pessoa certa dentro do número:** procurar "rafael" devolve o Rafael
+  com 1,5 h, e não os quatro. Procurar pelo **telefone** devolve os quatro separados —
+  quem digita o número quer ver quem está ali dentro.
+- **O motivo é obrigatório** ao marcar. Daqui a seis meses ninguém lembra por que aquele
+  número foi marcado, e sem explicação a próxima pessoa desmarca "para testar".
+- **Telefone torto é recusado:** gravado em outro formato, ele nunca casaria com as
+  reservas e a marcação não faria efeito — sem erro aparecer. Mesma recusa do vínculo de
+  empresa, pelo mesmo motivo.
+- **A tabela `telefones_balcao` NÃO entra** em `scripts/preparar-banco-de-teste.sh`: ela
+  precisa nascer **vazia** no banco de teste. Copiar os números marcados de produção
+  faria os testes de agrupamento mudarem de resultado conforme a equipe mexesse no
+  painel. Nenhuma reserva aponta para ela, então nada quebra por ela faltar.
+- **Isto arruma o passado. O futuro quem arruma é a busca de cliente no balcão** — ver
+  "A recepção procura o cliente em vez de digitar".
