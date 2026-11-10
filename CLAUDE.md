@@ -956,3 +956,64 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   relatório.
 - **Como medir se está funcionando:** a lista para de crescer. Entre 29/10 e 03/11 o
   número da recepção foi de 4 para 5 nomes (o "Miguel" entrou) e de 14 para 16 reservas.
+
+### Fase 14 — Cadastro de clientes (plano aprovado em 29/10/2026, ainda NÃO construído)
+> Registrado aqui em 10/11/2026. O plano foi combinado em 29/10 e ficou só na conversa
+> — o dono não lembrava do contexto uma semana depois. Plano que não entra neste
+> arquivo não existe.
+
+**O PROBLEMA DE FUNDO.** O sistema não tem cadastro de cliente. Quem é o cliente é
+adivinhado de dois campos soltos que a recepção digita em cada reserva: o nome e o
+telefone. Daí vem tudo — 44 nomes para 25 telefones, o Rafael em dois números, e o
+telefone da casa virando "cliente". As correções de 29/10 e 10/11 (busca no balcão,
+telefone de balcão, nome da primeira reserva) são **remendos que funcionam**; nenhuma
+tira a causa.
+
+**A IDEIA:** fazer com PESSOA o que já foi feito com EMPRESA — um cadastro de verdade,
+com a reserva apontando para ele.
+
+**O BANCO**
+- `clientes`: nome oficial, ativo, criado_em.
+- `telefones_cliente`: o **telefone é a CHAVE PRIMÁRIA**, igual a `telefones_empresa`.
+  É o banco impedindo sozinho que um número pertença a dois clientes e o faturamento
+  apareça dobrado.
+- `reservas.cliente_id`, com chave estrangeira. O banco passa a **recusar** reserva
+  apontando para cliente que não existe. Identidade deixa de ser texto livre, que é
+  onde o erro entra hoje.
+- **`nome_cliente` e `telefone` CONTINUAM gravados na reserva.** São a verdade daquele
+  dia — quem apareceu e qual número foi usado — e é o que a agenda mostra. Mesma
+  decisão da empresa.
+
+**A MIGRAÇÃO — como os primeiros cadastros nascem** (regra confirmada pelo dono em
+29/10 e de novo em 10/11: *"o critério do telefone tem que ser mais importante que o
+nome"*)
+- **Um cliente por TELEFONE.** Mesmo número com nome escrito de dois jeitos é **um
+  cliente só**, e fica o nome da **primeira** reserva daquele número.
+- **EXCEÇÃO, acrescentada em 10/11:** telefone marcado como **de balcão** não vira um
+  cliente. Ali cada **nome** vira um cliente, que é o que o relatório já faz desde
+  29/10. Sem essa exceção a migração criaria um "cliente" chamado Toca com as reservas
+  da Prestare, do Rafael e do Miguel dentro — e aí ficaria gravado no banco, em vez de
+  ser só um agrupamento de tela.
+- A migração confere no fim que **nenhuma reserva ficou sem cliente**; sobrando uma, ela
+  inteira é desfeita. Mesmo desenho da `profissoes_editaveis`.
+
+**EM TRÊS PARTES, uma de cada vez**
+- **Parte A — a fundação.** Tabelas, migração e as três portas achando-ou-criando o
+  cliente sozinhas. O relatório passa a agrupar por cliente em vez de por telefone. **Na
+  tela, nada muda** — é a base ficando correta embaixo.
+- **Parte B — o painel.** Configurações → Clientes: listar, corrigir o nome, **juntar
+  dois cadastros** (o Rafael dos dois números vira um) e ligar telefone. Com sugestões
+  automáticas de quem parece ser a mesma pessoa, como nas empresas — **sugere e nunca
+  junta sozinho**: um palpite errado viraria faturamento somado na pessoa errada e
+  ninguém reclamaria, porque o número continuaria parecendo certo.
+- **Parte C — o balcão.** A recepção passa a escolher um cliente **cadastrado** em vez
+  de digitar. Cliente novo, cadastra na hora.
+
+**O QUE ISSO RESOLVE E O QUE NÃO RESOLVE**
+- Resolve: Rafael em dois números; nome oficial que não depende do período escolhido na
+  tela; o telefone da casa deixando de ser identidade de alguém.
+- **Não resolve sozinho:** quem é a mesma pessoa em dois cadastros é a **equipe** que
+  decide, na Parte B. São ~25 números, trabalho de uma sentada, uma vez só.
+
+**EXCLUIR NÃO EXISTE**, mesma regra de salas, empresas e áreas de atuação: desliga-se.
+Apagar tiraria o histórico do relatório em silêncio.
