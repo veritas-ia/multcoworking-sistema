@@ -35,6 +35,11 @@ const Corpo = z.object({
   pessoas: z.number().int().min(1).max(500).nullish(),
   telefone: z.string().min(1, "Informe o telefone do cliente."),
   nome: z.string().trim().min(2, "Informe o nome do cliente.").max(120, "Nome muito longo."),
+  /**
+   * O cadastro escolhido na busca. Sem ele, o cliente é deduzido do telefone.
+   * Com ele, a recepção liga um número novo a um cadastro que já existe.
+   */
+  clienteId: z.string().min(1).nullish(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a data no formato AAAA-MM-DD."),
   inicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a hora no formato HH:MM."),
   fim: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a hora no formato HH:MM."),
@@ -87,6 +92,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     salaId: corpo.data.salaId,
     telefone,
     nomeCliente: corpo.data.nome,
+    clienteId: corpo.data.clienteId ?? null,
     profissaoId: corpo.data.profissaoId,
     empresaId: corpo.data.empresaId ?? null,
     pessoas: corpo.data.pessoas ?? null,

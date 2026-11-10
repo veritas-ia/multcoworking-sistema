@@ -18,7 +18,7 @@
  */
 import { Prisma } from "@/generated/prisma/client";
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
-import { garantirCliente } from "@/lib/clientes";
+import { garantirCliente, TelefoneDeOutroCliente } from "@/lib/clientes";
 import {
   calcularValor,
   validarReserva,
@@ -213,6 +213,15 @@ export async function criarReservaNaRecepcao(entrada: {
   profissaoId: string;
   /** A empresa mensalista. Nulo = nao e de empresa. So afeta o relatorio. */
   empresaId?: string | null;
+  /**
+   * O cadastro que a recepcao escolheu na busca, quando houve escolha.
+   *
+   * Sem ele, o cliente e deduzido do telefone — o que basta na maioria das
+   * vezes. Com ele, a recepcao consegue LIGAR um numero novo a um cadastro
+   * que ja existe: e assim que o "Miguel", que so tinha reserva no telefone
+   * do balcao, finalmente ganha um telefone proprio.
+   */
+  clienteId?: string | null;
   operador: Operador;
 }): Promise<Resultado<{ id: string; sala: string; valor: string }>> {
   // A trava do contrato de exclusividade vale TAMBEM para a recepcao. Ela
@@ -256,6 +265,7 @@ export async function criarReservaNaRecepcao(entrada: {
     const clienteId = await garantirCliente({
       telefone: entrada.telefone,
       nome: entrada.nomeCliente,
+      clienteEscolhidoId: entrada.clienteId ?? null,
     });
 
     const criada = await prisma.reserva.create({
@@ -296,6 +306,15 @@ export async function criarReservaNaRecepcao(entrada: {
       dados: { id: criada.id, sala: criada.sala.nome, valor: valor.toFixed(2) },
     };
   } catch (erro: unknown) {
+    // O telefone digitado e de OUTRO cadastro. Deixar passar ligaria o
+    // numero de alguem ao cliente errado — e, dali em diante, TODAS as
+    // reservas daquele numero cairiam na conta errada, sem ninguem
+    // desconfiar.
+    if (erro instanceof TelefoneDeOutroCliente) {
+      // Entra como REGRA (422): e uma recusa de regra, e a mensagem do
+      // proprio erro ja diz de quem e o telefone e o que fazer.
+      return { ok: false, falha: { codigo: "REGRA", motivo: erro.message } };
+    }
     if (ehConflitoDeHorario(erro)) {
       return {
         ok: false,

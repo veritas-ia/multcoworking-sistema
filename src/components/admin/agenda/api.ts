@@ -65,6 +65,8 @@ export function criarNaRecepcao(entrada: {
   data: string;
   inicio: string;
   fim: string;
+  /** O cadastro escolhido na busca, quando houve escolha. */
+  clienteId?: string | null;
 }): Promise<{ id: string }> {
   return pedir("/api/admin/reservas", {
     method: "POST",
@@ -134,11 +136,16 @@ export function buscarNomeDoCliente(
 }
 
 export type ClienteConhecido = {
-  telefone: string;
+  id: string;
   nome: string;
+  /**
+   * Os telefones do cadastro. PODE SER VAZIO: é o cliente que só tem reserva
+   * lançada no telefone do balcão e nunca deixou o número dele.
+   */
+  telefones: string[];
   outrosNomes: string[];
   reservas: number;
-  ultimaReserva: string;
+  ultimaReserva: string | null;
 };
 
 /**
@@ -152,7 +159,7 @@ export type ClienteConhecido = {
 export function procurarClientes(
   termo: string,
   sinal?: AbortSignal,
-): Promise<{ clientes: ClienteConhecido[]; soNoTelefoneDeBalcao: string[] }> {
+): Promise<{ clientes: ClienteConhecido[] }> {
   return pedir(`/api/admin/clientes?q=${encodeURIComponent(termo)}`, { signal: sinal });
 }
 

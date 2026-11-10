@@ -1107,3 +1107,31 @@ neste projeto (ver `12dcd9e`).
 - A lista do painel usa a **mesma regra de horas do relatório** (cancelada não conta),
   porque dois números que discordam na mesma tela derrubam a confiança no painel
   inteiro. A contagem de reservas conta todas.
+
+### Fase 14, Parte C — o balcão escolhe um cadastro (10/11/2026)
+- **A busca da nova reserva passou a olhar o CADASTRO**, e não mais as reservas soltas.
+  É a diferença que faz o **Rafael dos dois telefones aparecer UMA vez**, com os dois
+  números para a recepção escolher — antes ele aparecia duas, como se fossem duas
+  pessoas.
+- **A recepção escolhe QUAL telefone usar** quando o cadastro tem mais de um. O sistema
+  não decide sozinho porque é o telefone **gravado na reserva** que recebe a confirmação
+  e os lembretes.
+- **O telefone de balcão sumiu da busca de graça.** Ele nunca entra em
+  `telefones_cliente`, então não existe número de balcão para escolher. O que aparece é
+  a **pessoa** — "Miguel", sem telefone —, e a tela pede o número dela. O tratamento
+  especial que a versão anterior precisava (`soNoTelefoneDeBalcao`) deixou de existir: o
+  cadastro resolveu aquilo por desenho, e não por exceção.
+- **O momento que fecha o ciclo:** a recepção escolhe o cadastro do Miguel, digita o
+  número que acabou de conseguir, e os dois ficam ligados. Da próxima vez aquele
+  telefone cai no cadastro dele sozinho. É isso que tira gente do telefone da casa, uma
+  por uma, no uso normal — sem mutirão de limpeza.
+- **TELEFONE QUE JÁ É DE OUTRO CADASTRO É RECUSADO** (`TelefoneDeOutroCliente`, 422). A
+  mensagem diz de quem é o número. Deixar passar ligaria o telefone de alguém ao cliente
+  errado — e dali em diante **todas** as reservas daquele número cairiam na conta
+  errada, sem ninguém desconfiar. Há teste que tenta e confere que o vínculo antigo
+  ficou intacto.
+- **Cliente desligado não aparece na escolha.** Desligar é decisão sobre o futuro.
+- O campo do telefone usa `telefoneVisivel` para traduzir do formato do banco
+  (`+5511900000802`) para o da tela (`(11) 90000-0802`). `formatarEnquantoDigita` cortaria
+  no 11º dígito e comeria o DDD, e **o campo pareceria preenchido**. Há teste de ida e
+  volta — a armadilha é antiga e continua valendo.

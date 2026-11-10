@@ -88,8 +88,16 @@ export function NovaReserva({
   /** O que a recepcao digitou no "procurar cliente". */
   const [procurado, setProcurado] = useState("");
   const [achados, setAchados] = useState<ClienteConhecido[]>([]);
-  /** Nomes achados só dentro de um telefone do balcão: viram aviso. */
-  const [soNoBalcao, setSoNoBalcao] = useState<string[]>([]);
+  /**
+   * O cadastro escolhido na busca, quando houve escolha.
+   *
+   * Vai junto no pedido. É o que permite LIGAR um número novo a um cadastro
+   * que já existe — o caso de quem só tinha reserva no telefone do balcão e
+   * agora deixou o número dele.
+   */
+  const [clienteEscolhidoId, setClienteEscolhidoId] = useState<string | null>(null);
+  /** O cadastro escolhido não tinha telefone: a recepção precisa pedir. */
+  const [faltaTelefoneDe, setFaltaTelefoneDe] = useState<string | null>(null);
   /** As areas de atuacao, na ordem do painel. */
   const [profissoes, setProfissoes] = useState<
     { id: string; nome: string; bloqueada: boolean; avisoBloqueio: string }[]
@@ -188,7 +196,6 @@ export function NovaReserva({
   useEffect(() => {
     if (procurado.trim().length < 2) {
       setAchados([]);
-      setSoNoBalcao([]);
       return;
     }
 
@@ -199,7 +206,6 @@ export function NovaReserva({
         .then((resposta) => {
           if (!controle.signal.aborted) {
             setAchados(resposta.clientes);
-            setSoNoBalcao(resposta.soNoTelefoneDeBalcao);
           }
         })
         .catch(() => {
@@ -207,7 +213,6 @@ export function NovaReserva({
           // nome e o telefone na mao, como sempre fez.
           if (!controle.signal.aborted) {
             setAchados([]);
-            setSoNoBalcao([]);
           }
         });
     }, 300);
@@ -226,12 +231,25 @@ export function NovaReserva({
    * "formatarEnquantoDigita" cortaria o numero no 11o digito e deixaria o
    * "55" do pais dentro do DDD.
    */
-  function escolherCliente(cliente: ClienteConhecido): void {
+  function escolherCliente(cliente: ClienteConhecido, telefoneEscolhido?: string): void {
     setNome(cliente.nome);
-    setTelefone(telefoneVisivel(cliente.telefone));
+    setClienteEscolhidoId(cliente.id);
+
+    const numero = telefoneEscolhido ?? cliente.telefones[0];
+
+    if (numero) {
+      setTelefone(telefoneVisivel(numero));
+      setFaltaTelefoneDe(null);
+    } else {
+      // CADASTRO SEM TELEFONE: é alguém que só tem reserva lançada no número
+      // do balcão. O campo fica vazio de propósito — preenchê-lo com o
+      // número da casa seria repetir o erro que esta tela veio impedir.
+      setTelefone("");
+      setFaltaTelefoneDe(cliente.nome);
+    }
+
     setProcurado("");
     setAchados([]);
-    setSoNoBalcao([]);
   }
 
   // --- repeticao ---
@@ -285,6 +303,10 @@ export function NovaReserva({
         salaId,
         telefone,
         nome: nome.trim(),
+        // O cadastro escolhido na busca. É ele que liga um número novo a um
+        // cliente que já existe — sem isso, o servidor deduziria o cliente
+        // pelo telefone e criaria um cadastro novo para a mesma pessoa.
+        clienteId: clienteEscolhidoId,
         profissaoId: profissao,
         empresaId,
         data,
@@ -370,61 +392,85 @@ export function NovaReserva({
           {achados.length > 0 ? (
             <ul className="flex flex-col gap-1.5">
               {achados.map((cliente) => (
-                <li key={cliente.telefone}>
+                <li
+                  key={cliente.id}
+                  className="rounded-lg border border-border bg-bg-primary p-2.5"
+                >
                   <button
                     type="button"
                     onClick={() => escolherCliente(cliente)}
-                    className="flex w-full flex-col items-start gap-0.5 rounded-lg border border-border bg-bg-primary p-2.5 text-left hover:border-black focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+                    className="flex w-full flex-col items-start gap-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
                   >
                     <span className="text-sm font-bold text-text-primary">
                       {cliente.nome}
                     </span>
-                    <span className="text-sm tabular-nums text-text-primary">
-                      {telefoneVisivel(cliente.telefone)}
-                    </span>
-                    {/* Os outros nomes do mesmo número aparecem de propósito:
-                        num telefone de balcão eles são PESSOAS DIFERENTES, e
-                        ver isso é o que impede a recepção de escolher aquele
-                        número sem perceber. */}
+
+                    {/* CADASTRO SEM TELEFONE: é quem só tem reserva lançada
+                        no número do balcão. Aparece de propósito — sumir
+                        faria a recepção achar que o sistema perdeu o
+                        cliente —, e ao escolher, o campo do telefone fica
+                        vazio para ela pedir o número. */}
+                    {cliente.telefones.length === 0 ? (
+                      <span className="text-sm text-text-secondary">
+                        sem telefone no cadastro — peça o número
+                      </span>
+                    ) : null}
+
+                    {/* Os outros nomes que as reservas dele já usaram: é a
+                        variação que faz a equipe reconhecer de quem é. */}
                     {cliente.outrosNomes.length > 0 ? (
                       <span className="text-sm text-text-secondary">
                         também: {cliente.outrosNomes.join(" · ")}
                       </span>
                     ) : null}
+
                     <span className="text-sm text-text-secondary">
                       {cliente.reservas}{" "}
-                      {cliente.reservas === 1 ? "reserva" : "reservas"} · última em{" "}
-                      {emDiaEMes(cliente.ultimaReserva)}
+                      {cliente.reservas === 1 ? "reserva" : "reservas"}
+                      {cliente.ultimaReserva
+                        ? ` · última em ${emDiaEMes(cliente.ultimaReserva)}`
+                        : ""}
                     </span>
                   </button>
+
+                  {/* COM DOIS OU MAIS NÚMEROS a recepção escolhe QUAL usar: é
+                      o telefone gravado na reserva que recebe a confirmação e
+                      os lembretes, então o sistema não pode decidir sozinho. */}
+                  {cliente.telefones.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {cliente.telefones.map((telefoneDele) => (
+                        <button
+                          key={telefoneDele}
+                          type="button"
+                          onClick={() => escolherCliente(cliente, telefoneDele)}
+                          className="min-h-9 rounded-md border border-border bg-bg-secondary px-2.5 text-sm tabular-nums text-text-primary hover:border-black focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+                        >
+                          {telefoneVisivel(telefoneDele)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
           ) : null}
 
-          {/* ACHADO SÓ DENTRO DE UM TELEFONE DO BALCÃO.
-              Aquele número não é de um cliente, então não entra na lista de
-              escolha — escolhê-lo faria a reserva nova nascer no telefone da
-              recepção outra vez. Mas sumir calado faria a recepção achar que
-              o sistema perdeu o cliente. */}
-          {soNoBalcao.length > 0 ? (
+          {procurado.trim().length >= 2 && achados.length === 0 ? (
+            <p className="text-sm text-text-secondary">
+              Ninguém encontrado. Cliente novo: preencha o nome e o telefone
+              abaixo.
+            </p>
+          ) : null}
+
+          {/* O cadastro escolhido não tinha telefone. */}
+          {faltaTelefoneDe ? (
             <p
               role="status"
               className="rounded-lg border border-border bg-bg-primary p-3 text-sm leading-relaxed text-text-primary"
             >
-              <strong>{soNoBalcao.join(", ")}</strong>{" "}
-              {soNoBalcao.length === 1 ? "aparece" : "aparecem"} só num telefone
-              do balcão, que não é de nenhum cliente. Peça o telefone do cliente
-              e preencha abaixo.
-            </p>
-          ) : null}
-
-          {procurado.trim().length >= 2 &&
-          achados.length === 0 &&
-          soNoBalcao.length === 0 ? (
-            <p className="text-sm text-text-secondary">
-              Ninguém encontrado. Cliente novo: preencha o nome e o telefone
-              abaixo.
+              <strong>{faltaTelefoneDe}</strong> ainda não tem telefone no
+              cadastro. Peça o número do cliente e preencha abaixo — ele fica
+              ligado a este cadastro a partir desta reserva.
             </p>
           ) : null}
         </div>

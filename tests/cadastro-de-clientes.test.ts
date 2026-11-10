@@ -382,6 +382,109 @@ describe("o relatório passa a agrupar pelo cadastro", () => {
   });
 });
 
+describe("a recepção escolhe o cadastro (Fase 14, parte C)", () => {
+  it("cadastro SEM telefone ganha o número que a recepção acabou de conseguir", async () => {
+    // O caso do "Miguel": ele só existia porque alguém lançou uma reserva no
+    // telefone do balcão. Agora a recepção conseguiu o número dele, escolhe o
+    // cadastro na busca e digita o telefone — e os dois ficam ligados.
+    await marcarTelefoneDeBalcao(BALCAO, "Atendimento comercial", operador.id);
+
+    const noBalcao = await pelaRecepcao(BALCAO, "Miguel");
+    const miguel = await clienteDaReserva(noBalcao.ok ? noBalcao.dados.id : "");
+
+    // Antes: o cadastro existe e não tem telefone nenhum.
+    expect(
+      await bancoDeTeste.telefoneDoCliente.count({
+        where: { clienteId: miguel.clienteId! },
+      }),
+    ).toBe(0);
+
+    const { inicio, fim } = faixa();
+    const agora = await criarReservaNaRecepcao({
+      salaId: salaContainer,
+      telefone: DELE,
+      nomeCliente: "Miguel",
+      clienteId: miguel.clienteId,
+      profissaoId: await idDaProfissao("OUTROS"),
+      inicio,
+      fim,
+      operador,
+    });
+
+    expect(agora.ok).toBe(true);
+
+    const nova = await clienteDaReserva(agora.ok ? agora.dados.id : "");
+    expect(nova.clienteId).toBe(miguel.clienteId);
+
+    // E o número ficou ligado: a PRÓXIMA reserva dele cai no mesmo cadastro
+    // sozinha, sem ninguém escolher nada.
+    const vinculo = await bancoDeTeste.telefoneDoCliente.findUnique({
+      where: { telefone: DELE },
+    });
+    expect(vinculo?.clienteId).toBe(miguel.clienteId);
+  });
+
+  it("recusa ligar um telefone que já é de OUTRO cadastro", async () => {
+    // Deixar passar ligaria o número de alguém ao cliente errado — e dali em
+    // diante TODAS as reservas daquele número cairiam na conta errada, sem
+    // ninguém desconfiar.
+    const daOutra = await pelaRecepcao(DELA, "Giovana Lenharo");
+    const outra = await clienteDaReserva(daOutra.ok ? daOutra.dados.id : "");
+
+    const doRafael = await pelaRecepcao(DELE, "Rafael Passos", salaContainer);
+    const rafael = await clienteDaReserva(doRafael.ok ? doRafael.dados.id : "");
+
+    const { inicio, fim } = faixa();
+    const tentativa = await criarReservaNaRecepcao({
+      salaId: salaId,
+      // O telefone da Giovana, com o cadastro do Rafael escolhido.
+      telefone: DELA,
+      nomeCliente: "Rafael Passos",
+      clienteId: rafael.clienteId,
+      profissaoId: await idDaProfissao("OUTROS"),
+      inicio,
+      fim,
+      operador,
+    });
+
+    expect(tentativa.ok).toBe(false);
+    expect(tentativa.ok === false && tentativa.falha.motivo).toContain(
+      "Giovana Lenharo",
+    );
+
+    // E nada mudou: o telefone continua sendo dela.
+    const vinculo = await bancoDeTeste.telefoneDoCliente.findUnique({
+      where: { telefone: DELA },
+    });
+    expect(vinculo?.clienteId).toBe(outra.clienteId);
+  });
+
+  it("escolher o cadastro de um telefone que já é dele não muda nada", async () => {
+    const primeira = await pelaRecepcao(DELE, "Rafael dos Passos");
+    const dele = await clienteDaReserva(primeira.ok ? primeira.dados.id : "");
+
+    const { inicio, fim } = faixa();
+    const segunda = await criarReservaNaRecepcao({
+      salaId: salaContainer,
+      telefone: DELE,
+      nomeCliente: "Rafael Passos",
+      clienteId: dele.clienteId,
+      profissaoId: await idDaProfissao("OUTROS"),
+      inicio,
+      fim,
+      operador,
+    });
+
+    const nova = await clienteDaReserva(segunda.ok ? segunda.dados.id : "");
+    expect(nova.clienteId).toBe(dele.clienteId);
+
+    // Um telefone, um vínculo: nada foi duplicado.
+    expect(
+      await bancoDeTeste.telefoneDoCliente.count({ where: { telefone: DELE } }),
+    ).toBe(1);
+  });
+});
+
 describe("garantirCliente chamada direto", () => {
   it("devolve sempre o mesmo cadastro para o mesmo telefone", async () => {
     const um = await garantirCliente({ telefone: DELA, nome: "Giovana" });

@@ -1,29 +1,25 @@
 /**
- * Achar um cliente que ja reservou, pelo nome ou pelo telefone.
+ * Achar um cliente CADASTRADO, pelo nome ou pelo telefone, e gravar o
+ * cadastro na reserva.
  *
- * POR QUE ISTO EXISTE
+ * POR QUE A BUSCA EXISTE
  *
  * O telefone e campo OBRIGATORIO na reserva do balcao, e precisa ser valido.
  * Quando o cliente liga, passa na frente ou manda mensagem pelo Instagram, a
- * recepcao muitas vezes nao tem o numero dele na mao — e o formulario nao
- * deixa salvar sem um. O unico numero sempre a mao e o da propria recepcao.
+ * recepcao nao tem o numero dele na mao — e o formulario nao deixa salvar sem
+ * um. O unico numero sempre a mao e o da propria recepcao.
  *
  * Foi exatamente isso que aconteceu em producao: o telefone do atendimento
- * comercial acumulou 14 reservas de QUATRO clientes diferentes (Toca,
- * Prestare, Matheus Toca e Rafael Passos). No relatorio aquilo virou um
- * "cliente" so, com 28 horas, levando o nome de quem tinha 1,5. E pior: as
- * confirmacoes e os lembretes daquelas 14 reservas foram todos para o
- * WhatsApp da recepcao, porque as mensagens vao para o telefone GRAVADO na
- * reserva. Os clientes nunca receberam aviso nenhum.
+ * comercial acumulou reservas de CINCO clientes diferentes. No relatorio
+ * aquilo virou um "cliente" so, com 28 horas, levando o nome de quem tinha
+ * 1,5. E pior: as confirmacoes e os lembretes daquelas reservas foram todos
+ * para o WhatsApp da recepcao, porque as mensagens vao para o telefone
+ * GRAVADO na reserva. Os clientes nunca receberam aviso nenhum.
  *
- * Com a busca, procurar "toca" fica mais rapido do que digitar um numero
- * inteiro, e o telefone que entra na reserva e o do cliente. E o conserto da
- * CAUSA; marcar o telefone de balcao conserta o que ja esta gravado.
- *
- * NAO e um cadastro de clientes. A lista sai das proprias reservas: cada
- * telefone que ja reservou e um "cliente conhecido". O cadastro de verdade,
- * com identificador proprio e com o Rafael dos dois numeros virando um so,
- * e a fase seguinte.
+ * DESDE A FASE 14 A BUSCA OLHA O CADASTRO, e nao mais as reservas soltas. E
+ * a diferenca que faz o Rafael dos dois telefones aparecer UMA vez, com os
+ * dois numeros para a recepcao escolher — antes ele aparecia duas, como se
+ * fossem duas pessoas.
  */
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -35,24 +31,29 @@ import { telefonesDeBalcao } from "./telefones-balcao";
  *  relatorio: passando disso a recepcao para de conseguir ler. */
 const MAXIMO = 8;
 
-export type ClienteConhecido = {
-  /** Telefone COMPLETO. Area protegida: o CLAUDE.md permite aqui. */
-  telefone: string;
-  /** O nome da PRIMEIRA reserva deste numero, igual ao relatorio. */
+export type ClienteParaEscolher = {
+  id: string;
+  /** O nome OFICIAL do cadastro. */
   nome: string;
   /**
-   * Os outros nomes que este numero ja usou.
+   * Os telefones do cadastro, em formato internacional.
    *
-   * Aparecem de proposito, e e justamente a variacao ("Prestare", "Prestare
-   * Karen", "Prestare - Karen") que faz a recepcao reconhecer de quem e o
-   * numero. Num telefone de balcao sao nomes de pessoas DIFERENTES, e ver os
-   * quatro de uma vez e o que impede a recepcao de escolher aquele numero
-   * sem perceber.
+   * PODE SER VAZIO, e isso e informacao, nao defeito: sao os clientes que so
+   * tem reserva lancada no telefone do balcao e nunca deixaram o numero
+   * deles. Para esses a recepcao precisa pedir o telefone — e a tela diz
+   * isso, em vez de oferecer o numero da casa outra vez.
+   */
+  telefones: string[];
+  /**
+   * Os nomes que as reservas dele ja usaram, fora o oficial.
+   *
+   * E justamente a variacao ("Prestare", "Prestare Karen", "Prestare -
+   * Karen") que faz a recepcao reconhecer de quem e o cadastro.
    */
   outrosNomes: string[];
   reservas: number;
-  /** Data da ultima reserva, "AAAA-MM-DD", para a equipe se situar. */
-  ultimaReserva: string;
+  /** "AAAA-MM-DD" da reserva mais recente, ou null para cadastro sem reserva. */
+  ultimaReserva: string | null;
 };
 
 function semAcento(texto: string): string {
@@ -62,55 +63,31 @@ function semAcento(texto: string): string {
     .toLowerCase();
 }
 
-export type ResultadoDaBusca = {
-  clientes: ClienteConhecido[];
-  /**
-   * Nomes que só existem dentro de um TELEFONE DE BALCAO.
-   *
-   * Aparecem como aviso na tela, e nunca como opcao de escolha. O caso real: o
-   * "Miguel" tem uma reserva lancada no numero do atendimento comercial e
-   * nenhum telefone proprio no sistema. Oferecer aquele numero faria a reserva
-   * nova nascer no telefone da recepcao outra vez — exatamente o que esta tela
-   * veio impedir. Sumir calado seria pior: a recepcao acharia que o sistema
-   * perdeu o cliente, em vez de entender que precisa pedir o numero dele.
-   */
-  soNoTelefoneDeBalcao: string[];
-};
-
 /**
- * Procura entre quem ja reservou alguma vez.
+ * Procura entre os clientes CADASTRADOS.
  *
  * O termo pode ser um pedaco do nome ("toca", "rafa") ou um pedaco do
  * telefone ("99604", "(14) 99604-0233"). Numero e nome sao procurados ao
  * mesmo tempo: a recepcao digita o que tem na mao e nao escolhe o modo.
  *
- * TELEFONE DE BALCAO NUNCA ENTRA NA LISTA. A equipe marcou aquele numero
- * justamente porque ele nao e de um cliente; oferece-lo para escolher
- * devolveria o problema pela mesma porta.
+ * Procura TAMBEM nos nomes escritos nas reservas, e nao so no oficial: quem
+ * atende lembra do nome que o cliente usou, que pode nao ser o rotulo do
+ * cadastro.
  *
- * Termo curto demais devolve lista vazia — com uma letra so, viria metade da
- * base e a tela nao ajudaria ninguem.
+ * TELEFONE DE BALCAO NAO APARECE, e agora isso sai de graca: ele nunca entra
+ * em "telefones_cliente", entao nao ha numero de balcao para escolher. O que
+ * aparece e a PESSOA — "Miguel", sem telefone — e a tela pede o numero dela.
+ *
+ * Cliente DESLIGADO fica de fora: desligar e decisao sobre o futuro.
  */
-export async function procurarClientesConhecidos(
+export async function procurarClientesCadastrados(
   termo: string,
-): Promise<ResultadoDaBusca> {
+): Promise<ClienteParaEscolher[]> {
   const limpo = termo.trim();
 
   if (limpo.length < 2) {
-    return { clientes: [], soNoTelefoneDeBalcao: [] };
+    return [];
   }
-
-  // A busca e sobre os PARES telefone+nome, e nao sobre as reservas uma a
-  // uma: o banco ja devolve agrupado, com a contagem e as datas.
-  const [pares, balcao] = await Promise.all([
-    prisma.reserva.groupBy({
-      by: ["telefone", "nomeCliente"],
-      _count: { _all: true },
-      _min: { inicio: true },
-      _max: { inicio: true },
-    }),
-    telefonesDeBalcao(),
-  ]);
 
   const alvo = semAcento(limpo);
   const digitos = apenasDigitos(limpo);
@@ -118,136 +95,164 @@ export async function procurarClientesConhecidos(
   const porNumero = digitos.length >= 3;
   const telefoneInteiro = normalizarTelefone(limpo);
 
-  const achados = pares.filter((par) => {
-    if (telefoneInteiro && par.telefone === telefoneInteiro) {
-      return true;
-    }
-    if (porNumero && apenasDigitos(par.telefone).includes(digitos)) {
-      return true;
-    }
-    return semAcento(par.nomeCliente).includes(alvo);
+  const clientes = await prisma.cliente.findMany({
+    where: { ativo: true },
+    select: {
+      id: true,
+      nome: true,
+      telefones: { select: { telefone: true }, orderBy: { criadoEm: "asc" } },
+      reservas: {
+        select: { nomeCliente: true, inicio: true },
+        orderBy: { inicio: "asc" },
+      },
+    },
   });
 
-  // O NOME SO SERVE PARA ACHAR O TELEFONE, mesma regra da busca do relatorio:
-  // achado o telefone, o cliente vem inteiro, com TODOS os nomes e TODAS as
-  // reservas dele — e nao so as que bateram com o que foi digitado.
-  //
-  // Os telefones de BALCAO ficam de fora da lista de escolha, e o que foi
-  // achado dentro deles vira aviso.
-  const telefones = new Set(
-    achados.filter((par) => !balcao.has(par.telefone)).map((par) => par.telefone),
-  );
-
-  const porTelefone = new Map<string, typeof pares>();
-
-  for (const par of pares) {
-    if (!telefones.has(par.telefone)) {
-      continue;
+  const achados = clientes.filter((cliente) => {
+    if (
+      telefoneInteiro &&
+      cliente.telefones.some((ligado) => ligado.telefone === telefoneInteiro)
+    ) {
+      return true;
     }
-    porTelefone.set(par.telefone, [...(porTelefone.get(par.telefone) ?? []), par]);
-  }
 
-  const clientes = [...porTelefone.entries()].map(
-    ([telefone, doTelefone]): ClienteConhecido => {
-      // Do mais antigo para o mais novo: o primeiro nome e o que fica, igual
-      // ao relatorio. Dois rotulos diferentes para a mesma pessoa em telas
-      // diferentes e o que faz a equipe desconfiar do painel.
-      const emOrdem = [...doTelefone].sort(
-        (a, b) => (a._min.inicio?.getTime() ?? 0) - (b._min.inicio?.getTime() ?? 0),
-      );
+    if (
+      porNumero &&
+      cliente.telefones.some((ligado) =>
+        apenasDigitos(ligado.telefone).includes(digitos),
+      )
+    ) {
+      return true;
+    }
 
-      const ultima = doTelefone.reduce(
-        (maior, par) =>
-          (par._max.inicio?.getTime() ?? 0) > (maior?.getTime() ?? 0)
-            ? par._max.inicio!
-            : maior,
-        emOrdem[0]!._max.inicio!,
-      );
+    if (semAcento(cliente.nome).includes(alvo)) {
+      return true;
+    }
+
+    return cliente.reservas.some((reserva) =>
+      semAcento(reserva.nomeCliente).includes(alvo),
+    );
+  });
+
+  return achados
+    .map((cliente): ClienteParaEscolher => {
+      const nomes = new Set(cliente.reservas.map((reserva) => reserva.nomeCliente));
+      nomes.delete(cliente.nome);
+
+      const ultima = cliente.reservas[cliente.reservas.length - 1]?.inicio ?? null;
 
       return {
-        telefone,
-        nome: emOrdem[0]!.nomeCliente,
-        outrosNomes: emOrdem.slice(1).map((par) => par.nomeCliente),
-        reservas: doTelefone.reduce((soma, par) => soma + par._count._all, 0),
-        ultimaReserva: ultima.toISOString().slice(0, 10),
+        id: cliente.id,
+        nome: cliente.nome,
+        telefones: cliente.telefones.map((ligado) => ligado.telefone),
+        outrosNomes: [...nomes],
+        reservas: cliente.reservas.length,
+        ultimaReserva: ultima ? ultima.toISOString().slice(0, 10) : null,
       };
-    },
-  );
-
-  // Quem reservou mais recentemente primeiro: e quem a recepcao tem mais
-  // chance de estar atendendo agora.
-  const lista = clientes
-    .sort((a, b) => b.ultimaReserva.localeCompare(a.ultimaReserva))
+    })
+    // Quem reservou mais recentemente primeiro: e quem a recepcao tem mais
+    // chance de estar atendendo agora. Cadastro sem reserva vai para o fim.
+    .sort((a, b) => (b.ultimaReserva ?? "").localeCompare(a.ultimaReserva ?? ""))
     .slice(0, MAXIMO);
-
-  // O AVISO e so para quem NAO tem telefone proprio no sistema.
-  //
-  // "Prestare" tem reserva no numero do balcao E num numero proprio: ali a
-  // recepcao ja tem o que escolher, e avisar seria ruido. O "Miguel" so
-  // existe dentro do balcao — esse precisa do aviso, senao a tela nao
-  // explica por que nao achou ninguem.
-  const jaNaLista = new Set(
-    lista.flatMap((cliente) =>
-      [cliente.nome, ...cliente.outrosNomes].map(semAcento),
-    ),
-  );
-
-  const soNoTelefoneDeBalcao = [
-    ...new Set(
-      achados
-        .filter(
-          (par) =>
-            balcao.has(par.telefone) &&
-            semAcento(par.nomeCliente).includes(alvo) &&
-            !jaNaLista.has(semAcento(par.nomeCliente)),
-        )
-        .map((par) => par.nomeCliente),
-    ),
-  ];
-
-  return { clientes: lista, soNoTelefoneDeBalcao };
 }
 
 // -----------------------------------------------------------------------------
-// O cadastro de cliente (Fase 14, parte A)
+// Gravar o cadastro na reserva
 // -----------------------------------------------------------------------------
+
+export type FalhaDoCliente = { motivo: string; codigo: string };
+
+/**
+ * O telefone ja pertence a OUTRO cadastro?
+ *
+ * Sai como recusa quando a recepcao escolhe um cliente na busca e digita um
+ * numero que e de outra pessoa. Deixar passar ligaria o telefone de alguem ao
+ * cadastro errado — e, dali em diante, TODAS as reservas daquele numero
+ * cairiam na conta errada, sem ninguem desconfiar.
+ */
+export class TelefoneDeOutroCliente extends Error {
+  readonly codigo = "TELEFONE_DE_OUTRO_CLIENTE";
+
+  constructor(readonly nomeDoDono: string) {
+    super(
+      `Este telefone já é do cadastro "${nomeDoDono}". Escolha esse cliente ou use outro número.`,
+    );
+    this.name = "TelefoneDeOutroCliente";
+  }
+}
 
 /**
  * Acha ou cria o cliente de uma reserva, e devolve o identificador dele.
  *
- * Chamada pelas TRES portas que criam reserva. Do lado de fora nada muda: o
- * cliente continua so digitando nome e telefone, e o cadastro aparece sozinho.
+ * Chamada pelas TRES portas que criam reserva. Do lado do cliente nada muda:
+ * ele continua so digitando nome e telefone, e o cadastro aparece sozinho.
  *
  * A REGRA E A MESMA DA MIGRACAO, de proposito — se as duas divergissem, o
  * sistema agruparia o passado de um jeito e o futuro de outro, e ninguem
  * desconfiaria porque cada metade continuaria parecendo certa:
  *
  *  - telefone NORMAL: o numero manda. Ja tem dono, e esse dono; nao tem,
- *    nasce um cliente com o nome desta reserva e o numero fica ligado a ele.
- *    Nome escrito diferente no mesmo numero NAO cria cliente novo.
+ *    nasce um cadastro com o nome desta reserva e o numero fica ligado a ele.
+ *    Nome escrito diferente no mesmo numero NAO cria cadastro novo.
  *  - telefone de BALCAO: o numero nao e de ninguem, entao quem manda e o
- *    NOME. O telefone nunca e ligado a cliente nenhum.
+ *    NOME. O telefone nunca e ligado a cadastro nenhum.
+ *
+ * QUANDO A RECEPCAO ESCOLHE UM CLIENTE NA BUSCA ("clienteEscolhidoId"), ele
+ * manda — e e assim que o "Miguel", que so tinha reserva no telefone do
+ * balcao, finalmente ganha um numero proprio: a recepcao escolhe o cadastro
+ * dele e digita o telefone que acabou de conseguir.
  *
  * Roda DENTRO da transacao da reserva quando ela existe: cliente criado para
  * uma reserva que nao chegou a nascer viraria cadastro fantasma.
  */
 export async function garantirCliente(
-  entrada: { telefone: string; nome: string },
+  entrada: {
+    telefone: string;
+    nome: string;
+    /** O cadastro que a recepcao escolheu na busca, quando houve escolha. */
+    clienteEscolhidoId?: string | null;
+  },
   tx: Prisma.TransactionClient = prisma,
 ): Promise<string> {
   const ehDeBalcao = (await telefonesDeBalcao()).has(entrada.telefone);
+
+  const dono = await tx.telefoneDoCliente.findUnique({
+    where: { telefone: entrada.telefone },
+    select: { clienteId: true, cliente: { select: { nome: true } } },
+  });
+
+  if (entrada.clienteEscolhidoId) {
+    const escolhido = await tx.cliente.findUnique({
+      where: { id: entrada.clienteEscolhidoId },
+      select: { id: true },
+    });
+
+    if (!escolhido) {
+      throw new TelefoneDeOutroCliente("desconhecido");
+    }
+
+    // O numero ja e de OUTRA pessoa: recusa em vez de roubar o telefone.
+    if (dono && dono.clienteId !== escolhido.id) {
+      throw new TelefoneDeOutroCliente(dono.cliente.nome);
+    }
+
+    // Numero solto + cadastro escolhido = o momento em que alguem que so
+    // existia no telefone do balcao finalmente ganha um numero proprio.
+    if (!dono && !ehDeBalcao) {
+      await tx.telefoneDoCliente.create({
+        data: { telefone: entrada.telefone, clienteId: escolhido.id },
+      });
+    }
+
+    return escolhido.id;
+  }
 
   if (ehDeBalcao) {
     return clienteDoBalcao(entrada, tx);
   }
 
-  const vinculo = await tx.telefoneDoCliente.findUnique({
-    where: { telefone: entrada.telefone },
-    select: { clienteId: true },
-  });
-
-  if (vinculo) {
-    return vinculo.clienteId;
+  if (dono) {
+    return dono.clienteId;
   }
 
   const cliente = await tx.cliente.create({

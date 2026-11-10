@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { respostaErro } from "@/lib/api";
-import { procurarClientesConhecidos } from "@/lib/clientes";
+import { procurarClientesCadastrados } from "@/lib/clientes";
 import { empresaConhecidaDoTelefone } from "@/lib/empresas";
 import { prisma } from "@/lib/prisma";
 import { normalizarTelefone } from "@/lib/telefone";
@@ -40,7 +40,9 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
   const procurado = requisicao.nextUrl.searchParams.get("q");
 
   if (procurado !== null) {
-    return NextResponse.json(await procurarClientesConhecidos(procurado));
+    return NextResponse.json({
+      clientes: await procurarClientesCadastrados(procurado),
+    });
   }
 
   const telefone = normalizarTelefone(
