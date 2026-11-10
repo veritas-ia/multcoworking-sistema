@@ -43,7 +43,7 @@ import { criarReservaPublica } from "@/lib/reservas";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDaProfissao, idDoCliente } from "./apoio/banco";
 import { pedidoPost } from "./apoio/requisicao";
 
 /**
@@ -262,6 +262,7 @@ describe("reservas que ja existem", () => {
         salaId,
         nomeCliente: "Cliente Antigo",
         telefone: TELEFONE,
+        clienteId: await idDoCliente(TELEFONE, "Cliente Antigo"),
         profissaoId: ID.JURIDICO!,
         inicio: instanteDe(TERCA, "14:00"),
         fim: instanteDe(TERCA, "15:00"),

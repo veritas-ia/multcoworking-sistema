@@ -30,16 +30,15 @@ const Busca = z.object({
   compararAte: DATA.optional(),
   /** Texto do campo de busca: telefone ou nome. */
   cliente: z.string().max(120).optional(),
-  /** Telefone do cliente ja escolhido, para o relatorio individual. */
-  telefone: z.string().max(30).optional(),
   /**
-   * So quando o telefone e de BALCAO: qual das pessoas daquele numero.
+   * O CADASTRO do cliente ja escolhido, para o relatorio individual.
    *
-   * Ignorado nos numeros normais. Sem ele, abrir "Rafael Passos" no numero
-   * do atendimento comercial traria as reservas — e o faturamento — das
-   * quatro pessoas que usam aquele telefone.
+   * Era o telefone ate 10/11/2026. Um cadastro pode ter mais de um numero —
+   * e o caso que a Fase 14 veio resolver —, entao filtrar por telefone
+   * mostraria so uma parte das reservas dele, e o detalhe discordaria do
+   * grafico na mesma tela.
    */
-  nomeCliente: z.string().max(120).optional(),
+  clienteId: z.string().max(60).optional(),
   /** Empresa ja escolhida, para o relatorio dela. */
   empresaId: z.string().max(60).optional(),
 });
@@ -68,8 +67,7 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     compararDe: parametros.get("compararDe") ?? undefined,
     compararAte: parametros.get("compararAte") ?? undefined,
     cliente: parametros.get("cliente") ?? undefined,
-    telefone: parametros.get("telefone") ?? undefined,
-    nomeCliente: parametros.get("nomeCliente") ?? undefined,
+    clienteId: parametros.get("clienteId") ?? undefined,
     empresaId: parametros.get("empresaId") ?? undefined,
   });
 
@@ -88,12 +86,8 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
   }
 
   // --- relatorio de UM cliente -----------------------------------------------
-  if (busca.data.telefone) {
-    const detalhe = await montarDetalheDoCliente(
-      periodo,
-      busca.data.telefone,
-      busca.data.nomeCliente,
-    );
+  if (busca.data.clienteId) {
+    const detalhe = await montarDetalheDoCliente(periodo, busca.data.clienteId);
 
     return detalhe
       ? NextResponse.json({ detalheDoCliente: detalhe })

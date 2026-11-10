@@ -21,7 +21,7 @@ import { POST as postConferir } from "@/app/api/admin/horarios/conferir/route";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { dataLocalDe, diaDaSemanaDe, instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 const USUARIO = "teste.fase11.horarios";
@@ -140,6 +140,7 @@ async function reservar(data: string, inicio: string, fim: string): Promise<stri
       salaId,
       nomeCliente: "Cliente de Teste",
       telefone: TELEFONE,
+      clienteId: await idDoCliente(TELEFONE, "Cliente de Teste"),
       inicio: instanteDe(data, inicio),
       fim: instanteDe(data, fim),
       duracaoMinutos: 60,

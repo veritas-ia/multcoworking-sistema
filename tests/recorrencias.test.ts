@@ -31,7 +31,7 @@ import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { dataLocalDe, instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -364,6 +364,7 @@ describe("ocorrências puladas e o relatório", () => {
         salaId: salaCI,
         nomeCliente: "Quem chegou antes",
         telefone: CLIENTE,
+        clienteId: await idDoCliente(CLIENTE, "Quem chegou antes"),
         inicio: instanteDe("2026-10-13", "09:00"),
         fim: instanteDe("2026-10-13", "10:00"),
         duracaoMinutos: 60,
@@ -437,6 +438,7 @@ describe("ocorrências puladas e o relatório", () => {
         salaId: salaCI,
         nomeCliente: "Atravessador",
         telefone: CLIENTE,
+        clienteId: await idDoCliente(CLIENTE, "Atravessador"),
         inicio: instanteDe("2026-10-13", "09:00"),
         fim: instanteDe("2026-10-13", "10:00"),
         duracaoMinutos: 60,

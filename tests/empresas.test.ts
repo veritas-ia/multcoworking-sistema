@@ -30,7 +30,7 @@ import {
 import { criarReservaPublica } from "@/lib/reservas";
 import { instanteDe } from "@/lib/tempo";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 
 const PREFIXO = "ZZ Empresa";
 const TELEFONES = ["+5511900000701", "+5511900000702", "+5511900000703"];
@@ -103,6 +103,7 @@ async function reserva(
       salaId,
       nomeCliente: nome,
       telefone,
+      clienteId: await idDoCliente(telefone, nome),
       profissaoId: await idDaProfissao("OUTROS"),
       empresaId,
       inicio: instanteDe(dia, `${hora}:00`),

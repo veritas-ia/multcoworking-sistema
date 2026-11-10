@@ -204,9 +204,24 @@ async function criar(
   const fim = new Date(inicio.getTime() + 60 * 60_000);
   const sala = await prisma.sala.findUniqueOrThrow({ where: { id: salaId } });
 
+  // O cadastro do cliente: a reserva exige um desde a Fase 14. Acha pelo
+  // telefone ou cria, igual as tres portas de verdade fazem.
+  const cliente =
+    (await prisma.telefoneDoCliente.findUnique({ where: { telefone } }))?.clienteId ??
+    (
+      await prisma.cliente.create({
+        data: {
+          nome: "Reserva de teste",
+          telefones: { create: { telefone } },
+        },
+        select: { id: true },
+      })
+    ).id;
+
   await prisma.reserva.create({
     data: {
       salaId,
+      clienteId: cliente,
       nomeCliente: "Reserva de teste",
       telefone,
       inicio,

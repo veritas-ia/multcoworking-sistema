@@ -22,7 +22,7 @@ import { COOKIE_SESSAO, criarSessao } from "@/lib/sessao-cliente";
 import { instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -122,6 +122,7 @@ async function criarReserva(entrada: {
       salaId: entrada.salaId ?? salaCI,
       nomeCliente: "Cliente de Teste",
       telefone: entrada.telefone,
+      clienteId: await idDoCliente(entrada.telefone, "Cliente de Teste"),
       inicio,
       fim,
       duracaoMinutos: Math.round((fim.getTime() - inicio.getTime()) / 60_000),

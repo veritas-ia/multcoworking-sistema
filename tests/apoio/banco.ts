@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "@/generated/prisma/client";
+import { garantirCliente } from "@/lib/clientes";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -61,4 +62,21 @@ export async function idDaProfissao(slug = "OUTROS"): Promise<string> {
 
   idsDeProfissao.set(slug, profissao.id);
   return profissao.id;
+}
+
+/**
+ * O cadastro de um cliente, para a reserva criada DIRETO no banco.
+ *
+ * Desde a Fase 14 a reserva exige um cliente — a coluna "cliente_id" e
+ * obrigatoria, e e assim que o banco garante que nenhuma reserva fica sem
+ * dono. As tres portas que criam reserva preenchem isso sozinhas, mas os
+ * testes que montam cenario (disponibilidade, lembrete, preco) escrevem a
+ * linha na mao e precisam dizer de quem ela e.
+ *
+ * Usa o MESMO caminho da aplicacao ("garantirCliente"): acha o cadastro pelo
+ * telefone ou cria um. Assim o cenario de teste nasce com a mesma estrutura
+ * que a producao teria.
+ */
+export async function idDoCliente(telefone: string, nome = "Cliente de Teste"): Promise<string> {
+  return garantirCliente({ telefone, nome });
 }

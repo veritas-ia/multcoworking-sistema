@@ -9,16 +9,13 @@ export type BarraDoDia = { diaDaSemana: number; rotulo: string; total: number };
 export type Periodo = { de: string; ate: string };
 
 export type HorasDoCliente = {
+  /** O cadastro. É por ele que a tela abre o relatório individual. */
+  clienteId: string;
+  /** Um telefone do cliente, só para a tela mostrar algo reconhecível. */
   telefone: string;
   nome: string;
   horas: number;
   reservas: number;
-  /**
-   * Esta linha é um NOME dentro de um telefone de balcão, e não o número
-   * inteiro. Para abrir, tem de mandar o nome junto — senão vêm as reservas
-   * de todas as pessoas que usam aquele telefone.
-   */
-  separadoPorNome: boolean;
 };
 
 export type ReservaDoCliente = {
@@ -32,7 +29,9 @@ export type ReservaDoCliente = {
 
 export type DetalheDoCliente = {
   periodo: Periodo;
-  telefone: string;
+  clienteId: string;
+  /** Todos os telefones que ele usou no período. Pode ser mais de um. */
+  telefones: string[];
   nome: string;
   profissao: string;
   profissaoDivergente: boolean;
@@ -125,24 +124,20 @@ export function buscarClientes(
 /**
  * O relatorio de UM cliente no periodo.
  *
- * O "nome" so e mandado quando a linha veio separada por nome, num telefone
- * de balcao. Nos numeros normais o servidor ignora.
+ * Abre pelo CADASTRO, e nao pelo telefone: um cliente pode ter mais de um
+ * numero, e filtrar por telefone mostraria so parte das reservas dele — o
+ * detalhe discordaria do grafico na mesma tela.
  */
 export function buscarDetalheDoCliente(
   periodo: Periodo,
-  telefone: string,
-  nome?: string,
+  clienteId: string,
   sinal?: AbortSignal,
 ): Promise<{ detalheDoCliente: DetalheDoCliente }> {
   const busca = new URLSearchParams({
     de: periodo.de,
     ate: periodo.ate,
-    telefone,
+    clienteId,
   });
-
-  if (nome) {
-    busca.set("nomeCliente", nome);
-  }
 
   return pedir(`/api/admin/relatorios?${busca}`, { signal: sinal });
 }

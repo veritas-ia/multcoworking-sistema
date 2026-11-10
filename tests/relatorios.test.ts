@@ -29,7 +29,7 @@ import { ATALHOS, ATALHO_PADRAO } from "@/components/admin/relatorios/periodos";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDaProfissao, idDoCliente } from "./apoio/banco";
 import { pedidoGet } from "./apoio/requisicao";
 
 /** 2026-11-02 e uma SEGUNDA. */
@@ -71,6 +71,21 @@ const TELEFONE_B = "+5511900000788";
 
 const EMPRESA_DE_TESTE = "ZZ Relatorio";
 
+/**
+ * O cadastro ligado a um telefone.
+ *
+ * O relatorio individual abre pelo CADASTRO desde 10/11/2026: um cliente
+ * pode ter mais de um numero, e filtrar por telefone mostraria so parte das
+ * reservas dele — o detalhe discordaria do grafico na mesma tela.
+ */
+async function cadastroDe(telefone: string): Promise<string> {
+  const ligado = await bancoDeTeste.telefoneDoCliente.findUnique({
+    where: { telefone },
+    select: { clienteId: true },
+  });
+  return ligado?.clienteId ?? "sem-cadastro";
+}
+
 async function limpar(): Promise<void> {
   await bancoDeTeste.reserva.deleteMany({
     where: { telefone: { in: [TELEFONE, TELEFONE_B] } },
@@ -81,6 +96,15 @@ async function limpar(): Promise<void> {
   });
   await bancoDeTeste.empresa.deleteMany({
     where: { nome: { startsWith: EMPRESA_DE_TESTE } },
+  });
+  // Os cadastros de cliente que ficaram sem reserva e sem telefone somem:
+  // sem isto o PRIMEIRO teste do arquivo decide o nome oficial do telefone e
+  // todos os seguintes herdam esse nome, em vez do nome que eles gravaram.
+  await bancoDeTeste.telefoneDoCliente.deleteMany({
+    where: { telefone: { in: [TELEFONE, TELEFONE_B] } },
+  });
+  await bancoDeTeste.cliente.deleteMany({
+    where: { reservas: { none: {} }, telefones: { none: {} } },
   });
 }
 
@@ -119,6 +143,7 @@ async function reserva(entrada: {
       salaId: entrada.salaId ?? salaCI,
       nomeCliente: entrada.nome ?? "Cliente de Teste",
       telefone: entrada.telefone ?? TELEFONE,
+      clienteId: await idDoCliente(entrada.telefone ?? TELEFONE, entrada.nome ?? "Cliente de Teste"),
       profissaoId:
         entrada.profissao === null
           ? null
@@ -318,7 +343,7 @@ describe("dinheiro: só no relatório de UM cliente", () => {
   it("o relatório de UM cliente devolve o faturamento — e SÓ o total", async () => {
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     // O total aparece, em centavos.
     expect(detalhe?.faturamentoCentavos).toBe(4_000);
@@ -476,7 +501,7 @@ describe("faturamento do cliente", () => {
     });
     await reservaCom("265.00", { dia: SEGUNDA, inicio: "17:00", fim: "20:00" });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     // 40 + 150 + 265 = R$455,00
     expect(detalhe?.faturamentoCentavos).toBe(45_500);
@@ -488,7 +513,7 @@ describe("faturamento do cliente", () => {
       dia: SEGUNDA, inicio: "14:00", fim: "15:00", status: "CANCELADA",
     });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.faturamentoCentavos).toBe(10_000);
     // A cancelada continua aparecendo na contagem e na lista — so nao soma.
@@ -503,7 +528,7 @@ describe("faturamento do cliente", () => {
       dia: SEGUNDA, inicio: "11:00", fim: "12:00", status: "CONCLUIDA",
     });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.faturamentoCentavos).toBe(10_000);
   });
@@ -514,7 +539,7 @@ describe("faturamento do cliente", () => {
     // mexesse no preco — e discordaria do que a reserva guarda.
     await reservaCom("40.00", { dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
 
-    const antes = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const antes = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
     expect(antes?.faturamentoCentavos).toBe(4_000);
 
     await bancoDeTeste.sala.update({
@@ -523,7 +548,7 @@ describe("faturamento do cliente", () => {
     });
 
     try {
-      const depois = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+      const depois = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
       expect(depois?.faturamentoCentavos).toBe(4_000);
     } finally {
       await bancoDeTeste.sala.update({
@@ -543,7 +568,7 @@ describe("faturamento do cliente", () => {
       });
     }
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.faturamentoCentavos).toBe(9_999);
   });
@@ -553,7 +578,7 @@ describe("faturamento do cliente", () => {
       dia: SEGUNDA, inicio: "09:00", fim: "10:00", status: "CANCELADA",
     });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.faturamentoCentavos).toBe(0);
   });
@@ -571,7 +596,7 @@ describe("relatório de um cliente", () => {
       nome: "Maria", status: "CANCELADA",
     });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.nome).toBe("Maria");
     // 1h30 + 1h. A cancelada nao soma, mas aparece na contagem e na lista.
@@ -592,7 +617,7 @@ describe("relatório de um cliente", () => {
     await reserva({ dia: SEGUNDA, inicio: "11:00", fim: "12:00", profissao: "MARKETING" });
     await reserva({ dia: SEGUNDA, inicio: "14:00", fim: "15:00", profissao: "OUTROS" });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.profissao).toBe("Marketing");
     expect(detalhe?.profissaoDivergente).toBe(true);
@@ -602,7 +627,7 @@ describe("relatório de um cliente", () => {
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00", profissao: "SAUDE" });
     await reserva({ dia: SEGUNDA, inicio: "11:00", fim: "12:00", profissao: "SAUDE" });
 
-    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, TELEFONE);
+    const detalhe = await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, await cadastroDe(TELEFONE));
 
     expect(detalhe?.profissaoDivergente).toBe(false);
   });
@@ -610,8 +635,8 @@ describe("relatório de um cliente", () => {
   it("devolve nulo para telefone inválido ou sem reserva no período", async () => {
     await reserva({ dia: SEGUNDA, inicio: "09:00", fim: "10:00" });
 
-    expect(await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, "abc")).toBeNull();
-    expect(await montarDetalheDoCliente({ de: TERCA, ate: TERCA }, TELEFONE)).toBeNull();
+    expect(await montarDetalheDoCliente({ de: SEGUNDA, ate: SEGUNDA }, "nao-existe")).toBeNull();
+    expect(await montarDetalheDoCliente({ de: TERCA, ate: TERCA }, await cadastroDe(TELEFONE))).toBeNull();
   });
 });
 
@@ -680,7 +705,11 @@ describe("GET /api/admin/relatorios", () => {
     // O individual, sim: liberado pelo dono em 07/10/2026.
     const corpo = await (
       await getRelatorios(
-        pedidoGet("/api/admin/relatorios", { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE }, { cookie }),
+        pedidoGet(
+          "/api/admin/relatorios",
+          { de: SEGUNDA, ate: SEGUNDA, clienteId: await cadastroDe(TELEFONE) },
+          { cookie },
+        ),
       )
     ).json();
 
@@ -711,7 +740,7 @@ describe("GET /api/admin/relatorios", () => {
     const resposta = await getRelatorios(
       pedidoGet(
         "/api/admin/relatorios",
-        { de: SEGUNDA, ate: SEGUNDA, telefone: TELEFONE },
+        { de: SEGUNDA, ate: SEGUNDA, clienteId: await cadastroDe(TELEFONE) },
         { cookie },
       ),
     );
@@ -1040,7 +1069,7 @@ describe("editar o nome NÃO cria um cliente novo", () => {
     const naBusca = (await procurarClientes(periodo, "rafael")).find(
       (cliente) => cliente.telefone === TELEFONE,
     );
-    const individual = await montarDetalheDoCliente(periodo, TELEFONE);
+    const individual = await montarDetalheDoCliente(periodo, await cadastroDe(TELEFONE));
 
     expect(noGrafico?.nome).toBe("Toca");
     expect(naBusca?.nome).toBe("Toca");
@@ -1216,7 +1245,7 @@ describe("busca por nome x gráfico de horas", () => {
 
     const periodo = { de: SEGUNDA, ate: SEGUNDA };
     const naBusca = (await procurarClientes(periodo, "passos"))[0];
-    const detalhe = await montarDetalheDoCliente(periodo, TELEFONE);
+    const detalhe = await montarDetalheDoCliente(periodo, await cadastroDe(TELEFONE));
 
     expect(naBusca?.horas).toBe(detalhe?.horas);
   });

@@ -39,7 +39,7 @@ import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { dataLocalDe, horaLocalDe, instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -117,6 +117,7 @@ async function reservaDaquiA(
       salaId,
       nomeCliente: "Cliente de Teste",
       telefone: CLIENTE,
+      clienteId: await idDoCliente(CLIENTE, "Cliente de Teste"),
       inicio,
       fim,
       duracaoMinutos: 60,
@@ -442,6 +443,7 @@ describe("confirmação agrupada", () => {
         salaId: entrada.salaId ?? salaCI,
         nomeCliente: "Cliente de Teste",
         telefone: entrada.telefone ?? CLIENTE,
+        clienteId: await idDoCliente(entrada.telefone ?? CLIENTE, "Cliente de Teste"),
         inicio,
         fim,
         duracaoMinutos: 60,
@@ -756,6 +758,7 @@ describe("janela de silêncio", () => {
         salaId: salaCI,
         nomeCliente: "Cliente de Teste",
         telefone: CLIENTE,
+        clienteId: await idDoCliente(CLIENTE, "Cliente de Teste"),
         inicio,
         fim: new Date(inicio.getTime() + 60 * 60_000),
         duracaoMinutos: 60,

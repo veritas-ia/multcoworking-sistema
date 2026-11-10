@@ -64,7 +64,6 @@ export async function listarClientes(): Promise<ClienteDoPainel[]> {
       },
     }),
     prisma.reserva.findMany({
-      where: { clienteId: { not: null } },
       select: {
         clienteId: true,
         nomeCliente: true,

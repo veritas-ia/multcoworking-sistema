@@ -20,7 +20,7 @@ import { COOKIE_SESSAO, criarSessao } from "@/lib/sessao-cliente";
 import { instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes, renderizarTemplate } from "@/lib/whatsapp";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -522,6 +522,7 @@ describe("POST /api/publico/reservas", () => {
         salaId: salaCI,
         nomeCliente: "Outra Pessoa",
         telefone: OUTRO_TELEFONE,
+        clienteId: await idDoCliente(OUTRO_TELEFONE, "Outra Pessoa"),
         inicio: instanteDe(TERCA, "10:00"),
         fim: instanteDe(TERCA, "11:00"),
         duracaoMinutos: 60,

@@ -22,7 +22,7 @@ import {
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDaProfissao, idDoCliente } from "./apoio/banco";
 import { pedidoPost } from "./apoio/requisicao";
 
 const TERCA = "2026-10-20";
@@ -224,6 +224,7 @@ describe("reservas antigas", () => {
         salaId,
         nomeCliente: "Cliente Antigo",
         telefone: TELEFONE,
+        clienteId: await idDoCliente(TELEFONE, "Cliente Antigo"),
         inicio: instanteDe(TERCA, "16:00"),
         fim: instanteDe(TERCA, "17:00"),
         duracaoMinutos: 60,

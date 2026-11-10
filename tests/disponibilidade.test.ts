@@ -28,7 +28,7 @@ import {
 import { OrigemReserva } from "@/generated/prisma/enums";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
 const AGORA = new Date("2026-10-05T12:00:00.000Z");
@@ -59,6 +59,7 @@ async function criarReserva(
       salaId,
       nomeCliente: "Cliente de Teste",
       telefone: TELEFONE_TESTE,
+      clienteId: await idDoCliente(TELEFONE_TESTE, "Cliente de Teste"),
       inicio,
       fim,
       duracaoMinutos: Math.round((fim.getTime() - inicio.getTime()) / 60_000),

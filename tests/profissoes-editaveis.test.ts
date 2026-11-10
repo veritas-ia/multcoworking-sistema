@@ -29,7 +29,7 @@ import {
 } from "@/lib/profissoes";
 import { instanteDe } from "@/lib/tempo";
 
-import { aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 
 const PREFIXO = "ZZ Area";
 const TELEFONE = "+5511900000811";
@@ -93,6 +93,7 @@ async function reservaCom(profissaoId: string, hora = "09:00") {
       salaId,
       nomeCliente: "Cliente de Teste",
       telefone: TELEFONE,
+      clienteId: await idDoCliente(TELEFONE, "Cliente de Teste"),
       profissaoId,
       inicio: instanteDe("2026-11-10", hora),
       fim: instanteDe("2026-11-10", `${String(Number(hora.slice(0, 2)) + 1).padStart(2, "0")}:00`),

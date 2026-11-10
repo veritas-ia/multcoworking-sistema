@@ -1135,3 +1135,47 @@ neste projeto (ver `12dcd9e`).
   (`+5511900000802`) para o da tela (`(11) 90000-0802`). `formatarEnquantoDigita` cortaria
   no 11º dígito e comeria o DDD, e **o campo pareceria preenchido**. Há teste de ida e
   volta — a armadilha é antiga e continua valendo.
+
+### Fase 14 — FECHADA (10/11/2026)
+- **`cliente_id` virou OBRIGATÓRIO no banco.** Quem garante que nenhuma reserva fica sem
+  dono deixou de ser a aplicação e passou a ser o PostgreSQL. Ensaiado numa cópia de
+  produção: a coluna ficou `NOT NULL`, uma inserção sem cliente é **recusada pelo banco**,
+  e os números continuaram os mesmos (192 reservas, 36 cadastros, zero órfãs).
+- **O `?? telefone` do relatório morreu junto**, como estava previsto. `chaveDoCliente`
+  virou uma linha: o cadastro.
+- **Nos testes**, quem cria reserva direto no banco usa `idDoCliente(telefone, nome)`
+  (em `tests/apoio/banco.ts`), que chama o mesmo `garantirCliente` da aplicação. Foram
+  26 pontos em 19 arquivos. *Tentei primeiro uma extensão do Prisma que preenchia
+  sozinha — resolve o runtime mas não os tipos, então não valia a pena: o explícito
+  custa o mesmo e aparece.*
+- **A limpeza entre testes precisa apagar os cadastros órfãos.** Sem isso o PRIMEIRO
+  teste do arquivo decide o nome oficial daquele telefone e todos os seguintes herdam
+  esse nome, em vez do que eles gravaram — falha que não tem nada a ver com a regra
+  sendo testada.
+
+#### DEFEITO que eu mesmo deixei na Parte B, achado ao fechar
+- O gráfico já agrupava pelo **cadastro**, mas o relatório individual ainda filtrava por
+  **telefone**. Num cliente com dois números — o Rafael, depois de juntado — o gráfico
+  dizia **5 h** e abrir o cliente mostrava **2 h**.
+- **Dois números discordando na mesma tela é exatamente a doença que esta fase veio
+  curar**, e eu reintroduzi. O teste da Parte B conferia o gráfico depois de juntar e
+  nunca abria o detalhe.
+- Corrigido: `montarDetalheDoCliente(periodo, clienteId)`, e a rota recebe `?clienteId=`
+  no lugar de `?telefone=` e `?nomeCliente=`. O detalhe devolve **todos** os telefones
+  do cliente.
+- Há teste comparando gráfico e detalhe **depois da junção**. Conferido que ele falha
+  antes da correção (dá 2 em vez de 5) e passa depois.
+- **A lição:** teste que olha um lado só não pega discordância. Quando duas telas mostram
+  a mesma informação, o teste tem de comparar as duas.
+
+#### Marcar telefone de balcão virou AÇÃO SOBRE OS DADOS
+- Era uma lente na hora de montar o relatório. Agora **separa de verdade**: cria um
+  cadastro por nome, move as reservas e tira o número de `telefones_cliente`.
+- É o mesmo que a migração fez com o que já existia. Ter as duas regras no mesmo formato
+  importa: se divergissem, o sistema trataria o passado de um jeito e o futuro de outro,
+  e **ninguém desconfiaria**, porque cada metade continuaria parecendo certa.
+- **DESMARCAR NÃO JUNTA DE VOLTA**, e isso é de propósito: o sistema não tem como saber
+  que a Toca e a Prestare eram para ser a mesma pessoa — e não eram. Marcação errada se
+  conserta juntando os cadastros em Configurações → Clientes, escolhendo quais.
+- Marcar **troca o cadastro da reserva e nada mais nela**: horário, sala, valor, nome e
+  telefone ficam intactos. Há teste comparando a linha inteira.

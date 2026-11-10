@@ -31,7 +31,7 @@ import {
   separarTelefone,
   sugerirJuncoes,
 } from "@/lib/clientes-painel";
-import { montarRelatorio } from "@/lib/relatorios";
+import { montarDetalheDoCliente, montarRelatorio } from "@/lib/relatorios";
 import { criarReservaNaRecepcao } from "@/lib/agenda-admin";
 import { instanteDe } from "@/lib/tempo";
 
@@ -164,6 +164,33 @@ describe("juntar dois cadastros", () => {
     // 2 h + 3 h: nada foi inventado e nada se perdeu no caminho.
     expect(doRafael[0]?.horas).toBe(5);
     expect(doRafael[0]?.nome).toBe(`${PREFIXO}Rafael dos Passos`);
+  });
+
+  it("o GRÁFICO e o DETALHE contam a mesma coisa depois de juntar", async () => {
+    // DEFEITO REAL, achado ao fechar a fase em 10/11/2026: o gráfico já
+    // agrupava pelo cadastro, mas o relatório individual ainda filtrava por
+    // TELEFONE. Depois de juntar, o gráfico dizia 5 h e abrir o cliente
+    // mostrava 2 h — dois números discordando na mesma tela, que é
+    // exatamente a doença que esta fase veio curar.
+    await reservaDe(UM, `${PREFIXO}Rafael dos Passos`, salaId, 2);
+    await reservaDe(OUTRO, `${PREFIXO}Rafael Passos`, salaContainer, 3);
+
+    const principal = await cadastroDe(UM);
+    const absorvido = await cadastroDe(OUTRO);
+    await juntarClientes(principal!.clienteId, absorvido!.clienteId);
+
+    const relatorio = await montarRelatorio(PERIODO);
+    const noGrafico = relatorio.horasPorCliente.find((c) =>
+      TELEFONES.includes(c.telefone),
+    );
+
+    const detalhe = await montarDetalheDoCliente(PERIODO, noGrafico!.clienteId);
+
+    expect(noGrafico?.horas).toBe(5);
+    expect(detalhe?.horas).toBe(5);
+    expect(detalhe?.totalDeReservas).toBe(noGrafico?.reservas);
+    // E o detalhe mostra os DOIS números, que é o que a equipe precisa ver.
+    expect(detalhe?.telefones.sort()).toEqual([UM, OUTRO].sort());
   });
 
   it("os DOIS telefones passam para o cadastro que ficou", async () => {

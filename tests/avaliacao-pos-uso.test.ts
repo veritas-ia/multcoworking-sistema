@@ -26,7 +26,7 @@ import {
 } from "@/lib/rotinas";
 import { CHAVE_DO_LINK } from "@/lib/templates-admin";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste, maisMinutos } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, maisMinutos, idDoCliente } from "./apoio/banco";
 
 const TELEFONE = "+5511900000999";
 const LINK = "https://g.page/r/mult-coworking-teste";
@@ -95,6 +95,7 @@ async function reservaTerminadaHa(
       salaId,
       nomeCliente: "Cliente de Teste",
       telefone: TELEFONE,
+      clienteId: await idDoCliente(TELEFONE, "Cliente de Teste"),
       profissaoId: await idDaProfissao("OUTROS"),
       inicio,
       fim,
@@ -311,6 +312,7 @@ describe("uma vez por cliente", () => {
         salaId,
         nomeCliente: "Outra Pessoa",
         telefone: OUTRO,
+        clienteId: await idDoCliente(OUTRO, "Outra Pessoa"),
         profissaoId: await idDaProfissao("OUTROS"),
         inicio: maisMinutos(fim, -60),
         fim,

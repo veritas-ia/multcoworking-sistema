@@ -432,14 +432,12 @@ model Reserva {
 
   /// QUEM e o cliente desta reserva (Fase 14).
   ///
-  /// Nulo e um estado DE TRANSICAO, nao um estado normal: a migracao preenche
-  /// todas as reservas que ja existem, e as tres portas que criam reserva
-  /// preenchem as novas. A coluna so continua aceitando nulo enquanto a fase
-  /// nao fecha — ver "Fase 14" no CLAUDE.md. O agrupamento do relatorio usa
-  /// "clienteId ?? telefone", entao nenhuma reserva some do relatorio se um
-  /// nulo escapar; ela so fica agrupada do jeito antigo.
-  clienteId String?  @map("cliente_id")
-  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+  /// OBRIGATORIO desde 10/11/2026: quem garante que nenhuma reserva fica sem
+  /// dono e o BANCO, e nao a aplicacao. O nome e o telefone continuam
+  /// gravados na linha de proposito — eles sao a verdade daquele dia, e e o
+  /// que a agenda mostra.
+  clienteId String  @map("cliente_id")
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
 
   recorrenciaId String?      @map("recorrencia_id")
   recorrencia   Recorrencia? @relation(fields: [recorrenciaId], references: [id], onDelete: SetNull)

@@ -23,7 +23,7 @@ import { enderecoDe } from "@/lib/salas-admin";
 import { instanteDe } from "@/lib/tempo";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoGet, pedidoPatch, pedidoPost } from "./apoio/requisicao";
 
 const USUARIO = "teste.fase11.salas";
@@ -266,6 +266,7 @@ describe("ligar e desligar", () => {
         salaId: id,
         nomeCliente: "Cliente de Teste",
         telefone: "+5511900000099",
+        clienteId: await idDoCliente("+5511900000099", "Cliente de Teste"),
         inicio,
         fim: new Date(inicio.getTime() + 60 * 60_000),
         duracaoMinutos: 60,

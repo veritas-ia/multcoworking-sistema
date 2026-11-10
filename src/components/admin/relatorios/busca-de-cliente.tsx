@@ -97,20 +97,17 @@ export function BuscaDeCliente({
   }, [termo, periodo]);
 
   /**
-   * Abre o relatório de um cliente.
+   * Abre o relatório de um cliente, pelo CADASTRO dele.
    *
-   * O nome só vai junto quando a linha veio separada por nome, num telefone
-   * de balcão — sem ele, abrir "Rafael Passos" no número do atendimento
-   * comercial traria as reservas das quatro pessoas daquele telefone.
+   * Era pelo telefone até 10/11/2026, e isso era um defeito: um cliente com
+   * dois números aparecia no gráfico com as horas somadas e, ao abrir,
+   * mostrava só as de um dos telefones. Dois números discordando na mesma
+   * tela é exatamente o que derruba a confiança no painel.
    */
   async function abrir(cliente: HorasDoCliente): Promise<void> {
     setErro(null);
     try {
-      const resposta = await buscarDetalheDoCliente(
-        periodo,
-        cliente.telefone,
-        cliente.separadoPorNome ? cliente.nome : undefined,
-      );
+      const resposta = await buscarDetalheDoCliente(periodo, cliente.clienteId);
       setEscolhido(resposta.detalheDoCliente);
       aoAbrirCliente(true);
     } catch (falha) {
@@ -161,7 +158,7 @@ export function BuscaDeCliente({
           ) : (
             <ul className="flex flex-col gap-2">
               {achados.map((cliente) => (
-                <li key={`${cliente.telefone}-${cliente.nome}`}>
+                <li key={cliente.clienteId}>
                   <button
                     type="button"
                     onClick={() => void abrir(cliente)}
@@ -171,11 +168,6 @@ export function BuscaDeCliente({
                       <span className="font-semibold text-text-primary">{cliente.nome}</span>
                       <span className="text-sm text-text-secondary">
                         {telefoneVisivel(cliente.telefone)}
-                        {/* Num telefone de balcão o número sozinho não
-                            identifica ninguém: sem este aviso a equipe veria
-                            três clientes com o mesmo telefone e acharia
-                            defeito. */}
-                        {cliente.separadoPorNome ? " · telefone do balcão" : ""}
                       </span>
                     </span>
                     <span className="text-sm text-text-secondary">
@@ -208,7 +200,7 @@ function DetalheDoClienteEscolhido({
     <div className="grid gap-4 lg:grid-cols-2">
       <Cartao
         titulo={dados.nome}
-        apoio={`${telefoneVisivel(dados.telefone)} · ${porExtensoCurto(dados.periodo.de)} a ${porExtensoCurto(dados.periodo.ate)}`}
+        apoio={`${dados.telefones.map(telefoneVisivel).join(" · ")} · ${porExtensoCurto(dados.periodo.de)} a ${porExtensoCurto(dados.periodo.ate)}`}
         largo
       >
         <div className="flex flex-col gap-4">

@@ -24,6 +24,7 @@
  * desmarcar. E uma lente na hora de montar o relatorio, e desmarcar devolve
  * tudo exatamente como era.
  */
+import type { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
 
 import { prisma } from "./prisma";
@@ -207,8 +208,12 @@ export async function marcarTelefoneDeBalcao(
     };
   }
 
-  await prisma.telefoneDeBalcao.create({
-    data: { telefone, motivo: texto, criadoPorId: usuarioId },
+  await prisma.$transaction(async (tx) => {
+    await tx.telefoneDeBalcao.create({
+      data: { telefone, motivo: texto, criadoPorId: usuarioId },
+    });
+
+    await separarPorNome(tx, telefone);
   });
 
   const lista = await listarTelefonesDeBalcao();
@@ -219,10 +224,88 @@ export async function marcarTelefoneDeBalcao(
 }
 
 /**
+ * SEPARA as reservas de um telefone de balcao em um cliente por NOME.
+ *
+ * Desde a Fase 14 marcar um numero nao e mais uma lente na hora de montar o
+ * relatorio: e uma acao sobre os dados. Quem diz quem e quem passou a ser o
+ * CADASTRO, e um numero de balcao nao pode ter um cadastro so — ele carrega
+ * gente diferente.
+ *
+ * E o mesmo que a migracao 20261110100000 fez com o que ja existia. Ter as
+ * duas regras no mesmo formato importa: se divergissem, o sistema trataria o
+ * passado de um jeito e o futuro de outro e ninguem desconfiaria, porque cada
+ * metade continuaria parecendo certa.
+ *
+ * O TELEFONE TAMBEM SAI de "telefones_cliente": ele nao e de ninguem, e
+ * deixa-lo ligado faria a proxima reserva de outra pessoa cair no cadastro
+ * de quem estava la antes.
+ */
+async function separarPorNome(
+  tx: Prisma.TransactionClient,
+  telefone: string,
+): Promise<void> {
+  const reservas = await tx.reserva.findMany({
+    where: { telefone },
+    select: { id: true, nomeCliente: true, clienteId: true },
+    orderBy: { inicio: "asc" },
+  });
+
+  const porNome = new Map<string, { nome: string; ids: string[] }>();
+
+  for (const reserva of reservas) {
+    const chave = reserva.nomeCliente
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    const atual = porNome.get(chave);
+    porNome.set(chave, {
+      // Fica o primeiro nome visto: a lista vem ordenada por inicio.
+      nome: atual?.nome ?? reserva.nomeCliente,
+      ids: [...(atual?.ids ?? []), reserva.id],
+    });
+  }
+
+  const antigos = new Set(reservas.map((reserva) => reserva.clienteId));
+
+  for (const grupo of porNome.values()) {
+    const novo = await tx.cliente.create({
+      data: { nome: grupo.nome },
+      select: { id: true },
+    });
+
+    await tx.reserva.updateMany({
+      where: { id: { in: grupo.ids } },
+      data: { clienteId: novo.id },
+    });
+  }
+
+  await tx.telefoneDoCliente.deleteMany({ where: { telefone } });
+
+  // Os cadastros antigos que ficaram sem nada somem. Os que ainda tem
+  // reserva de OUTRO telefone ficam: aquele numero nao era o unico deles.
+  for (const antigo of antigos) {
+    const sobrou = await tx.reserva.count({ where: { clienteId: antigo } });
+    const numeros = await tx.telefoneDoCliente.count({
+      where: { clienteId: antigo },
+    });
+
+    if (sobrou === 0 && numeros === 0) {
+      await tx.cliente.delete({ where: { id: antigo } });
+    }
+  }
+}
+
+/**
  * Desfaz a marcacao.
  *
- * Volta tudo como era: as reservas daquele numero tornam a ser somadas num
- * cliente so. Nenhuma reserva e tocada aqui — nem foi na marcacao.
+ * O numero volta a aceitar vinculo e a proxima reserva dele cai num cadastro
+ * so, como qualquer outro telefone.
+ *
+ * O QUE DESMARCAR NAO FAZ: nao junta de volta os cadastros que a marcacao
+ * separou. O sistema nao tem como saber que a Toca e a Prestare eram para
+ * ser a mesma pessoa — e nao eram. Se a marcacao foi engano, a equipe junta
+ * os cadastros em Configuracoes -> Clientes, escolhendo quais.
  */
 export async function desmarcarTelefoneDeBalcao(
   telefoneBruto: string,

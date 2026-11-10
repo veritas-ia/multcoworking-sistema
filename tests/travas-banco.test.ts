@@ -11,7 +11,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
 
-import { aquecerConexao, bancoDeTeste, emUtc, maisMinutos } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, emUtc, maisMinutos, idDoCliente } from "./apoio/banco";
 
 const TELEFONE = "+5511987654321";
 
@@ -31,6 +31,7 @@ async function criarReserva(opcoes: {
       salaId: opcoes.salaId,
       nomeCliente: "Cliente de Teste",
       telefone: TELEFONE,
+      clienteId: await idDoCliente(TELEFONE, "Cliente de Teste"),
       inicio: opcoes.inicio,
       fim: maisMinutos(opcoes.inicio, opcoes.minutos),
       duracaoMinutos: opcoes.minutos,
@@ -349,6 +350,7 @@ describe("coerencia dos dados", () => {
           salaId: salaA,
           nomeCliente: "Cliente de Teste",
           telefone: "11987654321",
+          clienteId: await idDoCliente("11987654321", "Cliente de Teste"),
           inicio: DEZ_HORAS,
           fim: maisMinutos(DEZ_HORAS, 60),
           duracaoMinutos: 60,
@@ -380,6 +382,7 @@ describe("duas pessoas reservando ao mesmo tempo", () => {
             salaId: salaA,
             nomeCliente: "Cliente de Teste",
             telefone: TELEFONE,
+            clienteId: await idDoCliente(TELEFONE, "Cliente de Teste"),
             inicio: DEZ_HORAS,
             fim: maisMinutos(DEZ_HORAS, 60),
             duracaoMinutos: 60,
@@ -455,6 +458,7 @@ describe("o banco grava horários no instante certo", () => {
         salaId: salaA,
         nomeCliente: "Cliente de Teste",
         telefone: TELEFONE,
+        clienteId: await idDoCliente(TELEFONE, "Cliente de Teste"),
         inicio: new Date(agoraNode + 86_400_000),
         fim: new Date(agoraNode + 86_400_000 + 3_600_000),
         duracaoMinutos: 60,

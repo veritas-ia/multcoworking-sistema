@@ -25,7 +25,6 @@ import { StatusReserva } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { rotuloDaProfissao } from "@/lib/profissoes";
 import { normalizarTelefone } from "@/lib/telefone";
-import { telefonesDeBalcao } from "@/lib/telefones-balcao";
 import {
   dataLocalDe,
   diaDaSemanaDe,
@@ -86,20 +85,14 @@ export type HorasDaEmpresa = {
  * varias linhas.
  */
 export type HorasDoCliente = {
+  /** O cadastro. E por ele que a tela abre o relatorio individual. */
+  clienteId: string;
+  /** Um telefone do cliente, so para a tela mostrar algo reconhecivel. */
   telefone: string;
   /** O nome da PRIMEIRA reserva dele no periodo. Ver "somarHorasPorCliente". */
   nome: string;
   horas: number;
   reservas: number;
-  /**
-   * Verdadeiro quando o telefone foi marcado como de BALCAO e, por isso, esta
-   * linha e um nome dentro dele — e nao o numero inteiro.
-   *
-   * A tela precisa saber: para abrir este cliente, nao basta o telefone, tem
-   * de mandar o nome junto. Sem isso o relatorio individual traria as
-   * reservas das quatro pessoas do mesmo numero.
-   */
-  separadoPorNome: boolean;
 };
 
 /** Uma reserva na lista do cliente escolhido. */
@@ -114,7 +107,9 @@ export type ReservaDoCliente = {
 
 export type DetalheDoCliente = {
   periodo: Periodo;
-  telefone: string;
+  clienteId: string;
+  /** Todos os telefones que ele usou no periodo. Pode ser mais de um. */
+  telefones: string[];
   nome: string;
   /**
    * A area de atuacao mais usada por ele. A profissao fica na RESERVA, e nao
@@ -226,10 +221,10 @@ type ReservaContada = {
   profissao: { nome: string } | null;
   nomeCliente: string;
   telefone: string;
-  /** O cadastro do cliente (Fase 14). Ver "chaveDoCliente". */
-  clienteId: string | null;
+  /** O cadastro do cliente. Obrigatorio no banco desde 10/11/2026. */
+  clienteId: string;
   /** O nome OFICIAL do cadastro, que e o mostrado no relatorio. */
-  cliente: { nome: string } | null;
+  cliente: { nome: string };
   /** A empresa respondida nesta reserva. Nula na maioria. */
   empresaId: string | null;
   empresa: { nome: string } | null;
@@ -281,11 +276,11 @@ type ReservaDoClienteContada = ReservaContada & { valor: Prisma.Decimal };
  */
 async function reservasDoClienteNoPeriodo(
   periodo: Periodo,
-  telefone: string,
+  clienteId: string,
 ): Promise<ReservaDoClienteContada[]> {
   return prisma.reserva.findMany({
     where: {
-      telefone,
+      clienteId,
       inicio: {
         gte: instanteDe(periodo.de, "00:00"),
         lt: instanteDe(somarDias(periodo.ate, 1), "00:00"),
@@ -497,13 +492,10 @@ function umaCasa(horas: number): number {
  * faz a Toca aparecer com as 22,5 horas dela e o Rafael com 1,5, em vez de um
  * bloco de 28. Ver "telefones-balcao.ts".
  */
-function somarHorasPorCliente(
-  reservas: ReservaContada[],
-  balcao: Set<string>,
-): HorasDoCliente[] {
+function somarHorasPorCliente(reservas: ReservaContada[]): HorasDoCliente[] {
   const mapa = new Map<
     string,
-    { telefone: string; nome: string; horas: number; reservas: number }
+    { clienteId: string; telefone: string; nome: string; horas: number; reservas: number }
   >();
 
   for (const reserva of reservas) {
@@ -511,16 +503,20 @@ function somarHorasPorCliente(
       continue;
     }
 
-    const chave = chaveDoCliente(reserva, balcao);
+    const chave = chaveDoCliente(reserva);
     const atual = mapa.get(chave);
 
     mapa.set(chave, {
-      telefone: reserva.telefone,
+      clienteId: reserva.clienteId,
+      // Um cadastro pode ter mais de um telefone. Aqui fica o da primeira
+      // reserva do periodo, so para a tela mostrar algo reconhecivel; quem
+      // identifica o cliente e o cadastro.
+      telefone: atual?.telefone ?? reserva.telefone,
       // O NOME OFICIAL DO CADASTRO manda (Fase 14): ele nao depende do
       // periodo escolhido na tela, entao o mesmo cliente nao troca de rotulo
       // quando a equipe muda o filtro. Sem cadastro, cai na regra antiga —
       // o nome da primeira reserva deste cliente no periodo.
-      nome: reserva.cliente?.nome ?? atual?.nome ?? reserva.nomeCliente,
+      nome: reserva.cliente.nome,
       horas: (atual?.horas ?? 0) + horasDe(reserva),
       reservas: (atual?.reservas ?? 0) + 1,
     });
@@ -528,11 +524,11 @@ function somarHorasPorCliente(
 
   return [...mapa.values()]
     .map((dados) => ({
+      clienteId: dados.clienteId,
       telefone: dados.telefone,
       nome: dados.nome,
       horas: umaCasa(dados.horas),
       reservas: dados.reservas,
-      separadoPorNome: balcao.has(dados.telefone),
     }))
     .sort(
       (a, b) => b.horas - a.horas || a.nome.localeCompare(b.nome, "pt-BR"),
@@ -540,29 +536,18 @@ function somarHorasPorCliente(
 }
 
 /**
- * O que identifica um cliente dentro do relatorio.
+ * O que identifica um cliente dentro do relatorio: o CADASTRO.
  *
- * DESDE A FASE 14 e o CADASTRO: `clienteId`. E ele que junta o mesmo Rafael
- * de dois telefones, coisa que nenhuma regra sobre telefone ou nome conseguia
- * fazer sozinha.
+ * Ate a Fase 14 era o telefone, com uma excecao escrita a mao para o telefone
+ * de balcao (que juntava pessoas diferentes). As duas coisas sumiram: o
+ * cadastro e quem diz quem e quem, e o telefone de balcao ja nasceu dividido
+ * em uma pessoa por nome na migracao. Menos regra, mesmo resultado.
  *
- * O "?? " nao e um caminho alternativo permanente: e a transicao. A migracao
- * preencheu todas as reservas que existiam e as tres portas preenchem as
- * novas, entao na pratica ele nao pega. Ele existe para que uma reserva sem
- * cadastro — se um dia escapar — continue aparecendo no relatorio agrupada do
- * jeito antigo, em vez de SUMIR da tela sem ninguem ver. Quando a coluna
- * virar obrigatoria no banco, este trecho morre junto.
+ * E e o cadastro que junta o mesmo Rafael de DOIS telefones — coisa que
+ * nenhuma regra sobre telefone ou nome conseguia fazer sozinha.
  */
-function chaveDoCliente(reserva: ReservaContada, balcao: Set<string>): string {
-  if (reserva.clienteId) {
-    return reserva.clienteId;
-  }
-
-  if (!balcao.has(reserva.telefone)) {
-    return reserva.telefone;
-  }
-  // O separador e um caractere que nao aparece em telefone nem em nome.
-  return `${reserva.telefone}\u0000${semAcento(reserva.nomeCliente)}`;
+function chaveDoCliente(reserva: ReservaContada): string {
+  return reserva.clienteId;
 }
 
 /** A area de atuacao mais usada pelo cliente, e se houve mais de uma. */
@@ -608,16 +593,12 @@ export async function procurarClientes(
     return [];
   }
 
-  const [reservas, balcao] = await Promise.all([
-    reservasDoPeriodo(periodo),
-    telefonesDeBalcao(),
-  ]);
+  const reservas = await reservasDoPeriodo(periodo);
   const telefone = normalizarTelefone(procurado);
 
   if (telefone) {
     return somarHorasPorCliente(
       reservas.filter((reserva) => reserva.telefone === telefone),
-      balcao,
     );
   }
 
@@ -625,58 +606,44 @@ export async function procurarClientes(
   // digita "Joao" e "João" do mesmo jeito duas vezes seguidas.
   const alvo = semAcento(procurado);
 
-  // O NOME SO SERVE PARA ACHAR O TELEFONE. Dai em diante vale o telefone.
+  // O NOME SO SERVE PARA ACHAR O CADASTRO. Dai em diante vale o cadastro.
   //
   // Este era um defeito de verdade, corrigido em 29/10/2026: a busca somava
   // apenas as reservas cujo NOME batia, e nao as do cliente. Quem escreveu o
   // proprio nome de dois jeitos aparecia aqui com uma fracao das horas, e o
-  // grafico logo abaixo — que sempre agrupou pelo telefone — mostrava o total
-  // certo. Os dois numeros discordavam na mesma tela, e o dono perdeu a
-  // confianca no painel inteiro por causa disso. O caso real: um cliente com
-  // duas reservas escritas "Rafael Dos Passos" e "Rafael Passos".
-  // NO TELEFONE DE BALCAO o nome volta a mandar, de proposito: ali ele nao e
-  // uma grafia da mesma pessoa, e uma pessoa diferente. Procurar "rafael"
-  // num numero de balcao tem de achar o Rafael, e nao os quatro.
+  // grafico logo abaixo mostrava o total certo. Os dois numeros discordavam
+  // na mesma tela, e o dono perdeu a confianca no painel inteiro por causa
+  // disso.
   const achadas = reservas.filter((reserva) =>
     // Procura no nome escrito na reserva E no nome oficial do cadastro: a
     // equipe pode estar lembrando de qualquer um dos dois.
     semAcento(reserva.nomeCliente).includes(alvo) ||
-      semAcento(reserva.cliente?.nome ?? "").includes(alvo),
+      semAcento(reserva.cliente.nome).includes(alvo),
   );
-  const chavesAchadas = new Set(
-    achadas.map((reserva) => chaveDoCliente(reserva, balcao)),
-  );
+  const chavesAchadas = new Set(achadas.map(chaveDoCliente));
 
   const doCliente = reservas.filter((reserva) =>
-    chavesAchadas.has(chaveDoCliente(reserva, balcao)),
+    chavesAchadas.has(chaveDoCliente(reserva)),
   );
 
   // O ranking soma so o que contou como uso; um cliente que aparece no periodo
   // apenas com reserva cancelada sumiria da busca. Por isso ele e reposto aqui
   // com zero horas — a equipe precisa conseguir achar essa pessoa.
-  const comHoras = somarHorasPorCliente(doCliente, balcao);
-  const jaListados = new Set(
-    comHoras.map((cliente) =>
-      cliente.separadoPorNome
-        ? `${cliente.telefone}\u0000${semAcento(cliente.nome)}`
-        : cliente.telefone,
-    ),
-  );
+  const comHoras = somarHorasPorCliente(doCliente);
+  const jaListados = new Set(comHoras.map((cliente) => cliente.clienteId));
 
   // A lista vem ordenada por inicio, e o laco guarda o PRIMEIRO nome de cada
   // cliente — o mesmo que o grafico mostra.
   for (const reserva of doCliente) {
-    const chave = chaveDoCliente(reserva, balcao);
-
-    if (!jaListados.has(chave)) {
+    if (!jaListados.has(reserva.clienteId)) {
       comHoras.push({
+        clienteId: reserva.clienteId,
         telefone: reserva.telefone,
-        nome: reserva.nomeCliente,
+        nome: reserva.cliente.nome ?? reserva.nomeCliente,
         horas: 0,
         reservas: 0,
-        separadoPorNome: balcao.has(reserva.telefone),
       });
-      jaListados.add(chave);
+      jaListados.add(reserva.clienteId);
     }
   }
 
@@ -700,36 +667,16 @@ function semAcento(texto: string): string {
  */
 export async function montarDetalheDoCliente(
   periodo: Periodo,
-  telefoneBruto: string,
-  /**
-   * So num TELEFONE DE BALCAO: qual das pessoas daquele numero abrir.
-   *
-   * Sem isto, abrir "Rafael Passos" no numero do atendimento comercial
-   * traria as reservas das quatro pessoas que usam aquele telefone, com o
-   * faturamento das quatro somado. O nome e ignorado nos numeros normais,
-   * onde ele e so uma grafia da mesma pessoa.
-   */
-  nomeBruto?: string,
+  clienteId: string,
 ): Promise<DetalheDoCliente | null> {
-  const telefone = normalizarTelefone(telefoneBruto);
-
-  if (!telefone) {
-    return null;
-  }
-
-  const [doTelefone, balcao] = await Promise.all([
-    reservasDoClienteNoPeriodo(periodo, telefone),
-    telefonesDeBalcao(),
-  ]);
-
-  const nome = nomeBruto?.trim();
-
-  const todas =
-    balcao.has(telefone) && nome
-      ? doTelefone.filter(
-          (reserva) => semAcento(reserva.nomeCliente) === semAcento(nome),
-        )
-      : doTelefone;
+  // ABRE PELO CADASTRO, e nao pelo telefone.
+  //
+  // Isto foi um defeito de verdade entre 10/11/2026 e o fechamento da fase:
+  // o grafico ja agrupava pelo cadastro, mas o detalhe ainda filtrava por
+  // telefone. Num cliente com DOIS numeros — o Rafael, depois de juntado —
+  // o grafico dizia 5 h e o detalhe mostrava 2 h. Dois numeros discordando
+  // na mesma tela e exatamente a doenca que esta fase veio curar.
+  const todas = await reservasDoClienteNoPeriodo(periodo, clienteId);
 
   if (todas.length === 0) {
     return null;
@@ -740,10 +687,11 @@ export async function montarDetalheDoCliente(
 
   return {
     periodo,
-    telefone,
-    // A PRIMEIRA reserva do periodo: a lista vem ordenada por inicio. Mesma
-    // regra do grafico, para os dois nunca discordarem na mesma tela.
-    nome: todas[0]!.cliente?.nome ?? todas[0]!.nomeCliente,
+    clienteId,
+    // TODOS os telefones que o cliente usou no periodo. Um cadastro pode ter
+    // mais de um — e justamente o caso que a fase veio resolver.
+    telefones: [...new Set(todas.map((reserva) => reserva.telefone))],
+    nome: todas[0]!.cliente.nome,
     profissao: profissao.rotulo,
     profissaoDivergente: profissao.divergente,
     horas: umaCasa(usadas.reduce((soma, reserva) => soma + horasDe(reserva), 0)),
@@ -964,7 +912,7 @@ export async function montarDetalheDaEmpresa(
     porPessoa.set(reserva.telefone, {
       // A lista vem ordenada por inicio: fica o nome da PRIMEIRA reserva,
       // mesma regra do grafico de horas por cliente.
-      nome: reserva.cliente?.nome ?? atual?.nome ?? reserva.nomeCliente,
+      nome: reserva.cliente.nome,
       horas: (atual?.horas ?? 0) + (contouComoUso(reserva) ? horasDe(reserva) : 0),
       reservas: (atual?.reservas ?? 0) + 1,
     });
@@ -998,11 +946,10 @@ export async function montarDetalheDaEmpresa(
 // -----------------------------------------------------------------------------
 
 export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
-  const [reservas, vinculos, ordem, balcao] = await Promise.all([
+  const [reservas, vinculos, ordem] = await Promise.all([
     reservasDoPeriodo(periodo),
     vinculosDeTelefone(),
     ordemDasProfissoes(),
-    telefonesDeBalcao(),
   ]);
 
   return {
@@ -1014,10 +961,10 @@ export async function montarRelatorio(periodo: Periodo): Promise<Relatorio> {
     porDiaDaSemana: contarPorDiaDaSemana(reservas),
     porHora: contarPorHora(reservas),
     porProfissao: contarPorProfissao(reservas, ordem),
-    // O telefone de balcao e separado por NOME aqui, e so aqui: o relatorio
-    // por EMPRESA nao precisa disso, porque a empresa vem gravada na reserva
-    // e nao depende de quem e o dono do telefone.
-    horasPorCliente: somarHorasPorCliente(reservas, balcao),
+    // Agrupado pelo CADASTRO. O telefone de balcao ja nasce dividido em uma
+    // pessoa por nome — na migracao, para o que existia, e na marcacao, daqui
+    // em diante —, entao o relatorio nao precisa saber que ele existe.
+    horasPorCliente: somarHorasPorCliente(reservas),
     horasPorEmpresa: somarHorasPorEmpresa(reservas, vinculos),
   };
 }

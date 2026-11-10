@@ -26,7 +26,7 @@ import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { instanteDe } from "@/lib/tempo";
 import { aguardarEnviosPendentes } from "@/lib/whatsapp";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 import { pedidoGet, pedidoPost } from "./apoio/requisicao";
 
 /** Segunda-feira, 09:00 em Sao Paulo. */
@@ -130,6 +130,7 @@ async function reservaNoBanco(entrada: {
       salaId: entrada.salaId ?? salaCI,
       nomeCliente: "Cliente de Teste",
       telefone: CLIENTE,
+      clienteId: await idDoCliente(CLIENTE, "Cliente de Teste"),
       inicio,
       fim,
       duracaoMinutos: Math.round((fim.getTime() - inicio.getTime()) / 60_000),

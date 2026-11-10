@@ -283,7 +283,7 @@ async function clienteDoBalcao(
   tx: Prisma.TransactionClient,
 ): Promise<string> {
   const doNumero = await tx.reserva.findMany({
-    where: { telefone: entrada.telefone, clienteId: { not: null } },
+    where: { telefone: entrada.telefone },
     select: { nomeCliente: true, clienteId: true },
     orderBy: { inicio: "asc" },
   });

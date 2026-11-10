@@ -37,7 +37,7 @@ import {
   marcarTelefoneDeBalcao,
 } from "@/lib/telefones-balcao";
 
-import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
+import { aquecerConexao, bancoDeTeste, idDaProfissao, idDoCliente } from "./apoio/banco";
 
 /** O numero da recepcao, em miniatura. */
 const BALCAO = "+5511900000901";
@@ -111,6 +111,7 @@ async function reservaDe(telefone: string, nome: string, horas: number, valor = 
       salaId: sala,
       nomeCliente: nome,
       telefone,
+      clienteId: await idDoCliente(telefone, nome),
       profissaoId: await idDaProfissao("OUTROS"),
       inicio: instanteDe(DIA, `${String(inicio).padStart(2, "0")}:00`),
       fim: instanteDe(DIA, `${String(inicio + horas).padStart(2, "0")}:00`),
@@ -153,7 +154,6 @@ describe("sem marcação, nada muda", () => {
 
     expect(doNumero).toHaveLength(1);
     expect(doNumero[0]?.horas).toBe(6);
-    expect(doNumero[0]?.separadoPorNome).toBe(false);
   });
 });
 
@@ -178,9 +178,9 @@ describe("marcado, cada nome vira um cliente", () => {
     expect([...porNome.values()].reduce((soma, horas) => soma + horas, 0)).toBe(6);
   });
 
-  it("avisa a tela que esta linha é um nome, e não o número inteiro", async () => {
-    // Sem este aviso a tela abriria o cliente so pelo telefone, e traria as
-    // reservas das tres pessoas somadas.
+  it("cada linha vira um CADASTRO próprio, e não só um rótulo", async () => {
+    // Desde a Fase 14 marcar é ação sobre os dados: quem diz quem é quem é o
+    // cadastro, e um número de balcão não pode ter um cadastro só.
     await oNumeroDaRecepcao();
     await marcar();
 
@@ -189,7 +189,15 @@ describe("marcado, cada nome vira um cliente", () => {
       (cliente) => cliente.telefone === BALCAO,
     );
 
-    expect(doNumero.every((cliente) => cliente.separadoPorNome)).toBe(true);
+    const cadastros = new Set(doNumero.map((cliente) => cliente.clienteId));
+    expect(cadastros.size).toBe(3);
+
+    // E o telefone não é mais de ninguém: deixá-lo ligado faria a próxima
+    // reserva de outra pessoa cair no cadastro de quem estava lá antes.
+    const vinculo = await bancoDeTeste.telefoneDoCliente.findUnique({
+      where: { telefone: BALCAO },
+    });
+    expect(vinculo).toBeNull();
   });
 
   it("junta as grafias do MESMO nome dentro do número", async () => {
@@ -235,13 +243,28 @@ describe("a busca acha a pessoa certa dentro do número", () => {
 });
 
 describe("abrir um cliente do número de balcão", () => {
+  /** O cadastro de uma das pessoas do número, pelo nome dela. */
+  async function cadastroChamado(nome: string): Promise<string> {
+    const relatorio = await montarRelatorio(PERIODO);
+    const achado = relatorio.horasPorCliente.find(
+      (cliente) => cliente.telefone === BALCAO && cliente.nome === nome,
+    );
+    if (!achado) {
+      throw new Error(`Não achei o cadastro de ${nome} no relatório.`);
+    }
+    return achado.clienteId;
+  }
+
   it("traz as reservas e o faturamento DELE, não do número", async () => {
     proxima = 0;
     await reservaDe(BALCAO, "Toca", 3, "150.00");
     await reservaDe(BALCAO, "Rafael Passos", 1, "40.00");
     await marcar();
 
-    const detalhe = await montarDetalheDoCliente(PERIODO, BALCAO, "Rafael Passos");
+    const detalhe = await montarDetalheDoCliente(
+      PERIODO,
+      await cadastroChamado("Rafael Passos"),
+    );
 
     expect(detalhe?.nome).toBe("Rafael Passos");
     expect(detalhe?.horas).toBe(1);
@@ -249,29 +272,37 @@ describe("abrir um cliente do número de balcão", () => {
     expect(detalhe?.faturamentoCentavos).toBe(4000);
   });
 
-  it("sem o nome, ainda traz o número inteiro", async () => {
-    // A tela manda o nome quando a linha veio separada. Nao mandar nao pode
-    // quebrar nada: continua valendo o comportamento antigo.
+  it("o gráfico e o detalhe contam a MESMA coisa", async () => {
+    // Dois números discordando na mesma tela é a doença que esta fase veio
+    // curar. O detalhe abre pelo cadastro, igual ao gráfico agrupa.
     await oNumeroDaRecepcao();
     await marcar();
 
-    const detalhe = await montarDetalheDoCliente(PERIODO, BALCAO);
+    const relatorio = await montarRelatorio(PERIODO);
+    const doNumero = relatorio.horasPorCliente.filter(
+      (cliente) => cliente.telefone === BALCAO,
+    );
 
-    expect(detalhe?.totalDeReservas).toBe(3);
+    for (const noGrafico of doNumero) {
+      const detalhe = await montarDetalheDoCliente(PERIODO, noGrafico.clienteId);
+      expect(detalhe?.horas, `no gráfico: ${noGrafico.nome}`).toBe(noGrafico.horas);
+      expect(detalhe?.nome).toBe(noGrafico.nome);
+    }
   });
 
-  it("num telefone NORMAL o nome é ignorado", async () => {
-    // Ali o nome e so uma grafia da mesma pessoa: filtrar por ele traria de
-    // volta o defeito que a busca tinha, de somar so o que batia com o nome.
+  it("num telefone NORMAL as grafias continuam juntas", async () => {
+    // Ali o nome é só uma grafia da mesma pessoa: separar traria de volta o
+    // problema dos "44 nomes para 25 telefones".
     proxima = 0;
     await reservaDe(DA_GIOVANA, "Giovana Lenharo", 2);
     await reservaDe(DA_GIOVANA, "Giovanna Lenharo", 3);
 
-    const detalhe = await montarDetalheDoCliente(
-      PERIODO,
-      DA_GIOVANA,
-      "Giovana Lenharo",
+    const relatorio = await montarRelatorio(PERIODO);
+    const dela = relatorio.horasPorCliente.find(
+      (cliente) => cliente.telefone === DA_GIOVANA,
     );
+
+    const detalhe = await montarDetalheDoCliente(PERIODO, dela!.clienteId);
 
     expect(detalhe?.horas).toBe(5);
     expect(detalhe?.totalDeReservas).toBe(2);
@@ -292,28 +323,37 @@ describe("os outros telefones não são afetados", () => {
 
     expect(dela).toHaveLength(1);
     expect(dela[0]?.horas).toBe(5);
-    expect(dela[0]?.separadoPorNome).toBe(false);
   });
 });
 
-describe("marcar e desmarcar não tocam em reserva nenhuma", () => {
-  it("a linha da reserva fica intacta, antes e depois", async () => {
+describe("o que marcar MUDA e o que não muda", () => {
+  it("troca o CADASTRO da reserva, e NADA MAIS nela", async () => {
+    // Desde a Fase 14 marcar é ação sobre os dados, e não uma lente na hora
+    // de montar o relatório. O que ela mexe é o dono da reserva; horário,
+    // sala, valor, nome e telefone ficam exatamente como estavam.
     const criada = await reservaDe(BALCAO, "Toca", 2);
     const antes = await bancoDeTeste.reserva.findUniqueOrThrow({
       where: { id: criada.id },
     });
 
     await marcar();
-    await desmarcarTelefoneDeBalcao(BALCAO);
 
     const depois = await bancoDeTeste.reserva.findUniqueOrThrow({
       where: { id: criada.id },
     });
 
-    expect(depois).toEqual(antes);
+    expect(depois.clienteId).not.toBe(antes.clienteId);
+    expect({ ...depois, clienteId: null, atualizadoEm: null }).toEqual({
+      ...antes,
+      clienteId: null,
+      atualizadoEm: null,
+    });
   });
 
-  it("desmarcar devolve o agrupamento como era", async () => {
+  it("desmarcar NÃO junta de volta — e isso é de propósito", async () => {
+    // O sistema não tem como saber que a Toca e a Prestare eram para ser a
+    // mesma pessoa, e não eram. Se a marcação foi engano, a equipe junta os
+    // cadastros em Configurações → Clientes, escolhendo quais.
     await oNumeroDaRecepcao();
     await marcar();
 
@@ -325,12 +365,13 @@ describe("marcar e desmarcar não tocam em reserva nenhuma", () => {
 
     await desmarcarTelefoneDeBalcao(BALCAO);
 
-    const voltou = (await montarRelatorio(PERIODO)).horasPorCliente.filter(
+    const depois = (await montarRelatorio(PERIODO)).horasPorCliente.filter(
       (cliente) => cliente.telefone === BALCAO,
     );
 
-    expect(voltou).toHaveLength(1);
-    expect(voltou[0]?.horas).toBe(6);
+    expect(depois).toHaveLength(3);
+    // Nenhuma hora se perdeu no caminho.
+    expect(depois.reduce((soma, cliente) => soma + cliente.horas, 0)).toBe(6);
   });
 });
 

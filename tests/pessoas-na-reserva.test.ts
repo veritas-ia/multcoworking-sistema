@@ -16,7 +16,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { criarReservaNaRecepcao, reagendarComoAdmin } from "@/lib/agenda-admin";
 import { instanteDe } from "@/lib/tempo";
 
-import { idDaProfissao, aquecerConexao, bancoDeTeste } from "./apoio/banco";
+import { idDaProfissao, aquecerConexao, bancoDeTeste, idDoCliente } from "./apoio/banco";
 
 /** Uma terca-feira distante, para nao esbarrar em nada. */
 const DIA = "2027-03-09";
@@ -181,6 +181,7 @@ describe("o banco recusa numero impossivel", () => {
           salaId: salaReuniao,
           nomeCliente: "Teste",
           telefone: TELEFONE,
+          clienteId: await idDoCliente(TELEFONE, "Teste"),
           pessoas: 0,
           inicio: instanteDe("2027-04-06", "09:00"),
           fim: instanteDe("2027-04-06", "10:00"),
