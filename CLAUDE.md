@@ -1070,3 +1070,40 @@ neste projeto (ver `12dcd9e`).
 - **No fim:** `cliente_id` vira **obrigatório** no banco, e o `?? telefone` do relatório
   sai junto. Hoje ela aceita nulo porque 20 arquivos de teste criam reserva direto no
   banco; apertar isso agora misturaria a mudança de regra com churn de teste.
+
+### Fase 14, Parte B — o painel de clientes (10/11/2026)
+- **O que a migração não conseguia sozinha:** ela acerta os nomes escritos de vários
+  jeitos no MESMO telefone. Não tem como saber que o "Rafael dos Passos" de um número é
+  o "Rafael Passos" de **outro** número. Ninguém tem — só a equipe. Esta tela é isso.
+- **Configurações → Clientes**, com quatro ações:
+  - **renomear:** troca o rótulo no relatório. **Não toca em reserva nenhuma** — há
+    teste comparando a linha inteira antes e depois;
+  - **juntar:** as reservas e os telefones passam para o cadastro escolhido, e o
+    absorvido deixa de existir;
+  - **separar:** tira um telefone do cadastro e devolve a ele um cadastro próprio, com
+    as reservas daquele número;
+  - **desligar/religar:** decisão sobre o futuro; o histórico fica e o cliente continua
+    no relatório.
+- **APAGAR O CADASTRO ABSORVIDO NÃO FERE A REGRA DE "NUNCA EXCLUIR".** Depois da junção
+  ele não guarda histórico nenhum: reserva e telefone já mudaram de dono. O que a regra
+  protege é o histórico, e ele continua inteiro — embaixo do outro cadastro.
+- **JUNTAR ERRADO TEM VOLTA, e é por isso que dá para usar a tela sem medo.** A reserva
+  continua guardando o **telefone** dela, então `separarTelefone` devolve o número e as
+  reservas dele a um cadastro próprio. Há teste que junta, separa e confere que os dois
+  voltaram com as horas certas. Mesmo assim a tela mostra o que vai mudar **antes** de
+  confirmar: desfazer dá trabalho.
+- **Separar só aparece com dois ou mais números.** Tirar o único telefone de um cadastro
+  criaria uma cópia dele sem resolver nada.
+- **As sugestões nunca juntam sozinhas** — mesma regra das empresas. Um palpite errado
+  viraria faturamento somado na pessoa errada, e ninguém reclamaria, porque o número
+  continuaria parecendo certo. Há teste provando que gerar sugestões não muda o
+  relatório.
+- As sugestões olham **o nome oficial E os nomes escritos nas reservas**: é assim que
+  "Rafael dos Passos" encontra "Rafael Passos", que pode não estar no rótulo de nenhum
+  dos dois. Palavras genéricas (de/da/cliente/teste/sala…) ficam de fora — juntariam
+  gente que não tem nada a ver. Há teste.
+- **Juntar N cadastros é feito um a um pela tela**, e não num pedido só: assim uma falha
+  no meio não deixa metade do grupo pendurada sem ninguém saber quais entraram.
+- A lista do painel usa a **mesma regra de horas do relatório** (cancelada não conta),
+  porque dois números que discordam na mesma tela derrubam a confiança no painel
+  inteiro. A contagem de reservas conta todas.

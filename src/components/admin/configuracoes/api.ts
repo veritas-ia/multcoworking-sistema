@@ -530,3 +530,74 @@ export function desmarcarTelefoneDeBalcao(
     method: "DELETE",
   });
 }
+
+// -----------------------------------------------------------------------------
+// Cadastro de clientes (Fase 14, parte B)
+// -----------------------------------------------------------------------------
+
+export type ClienteDoPainel = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  telefones: string[];
+  nomesNasReservas: string[];
+  reservas: number;
+  horas: number;
+  ultimaReserva: string | null;
+};
+
+export type SugestaoDeJuncao = {
+  palavra: string;
+  clientes: { id: string; nome: string; reservas: number }[];
+};
+
+export function buscarCadastroDeClientes(sinal?: AbortSignal): Promise<{
+  clientes: ClienteDoPainel[];
+  sugestoes: SugestaoDeJuncao[];
+}> {
+  return pedir("/api/admin/cadastro-clientes", { signal: sinal });
+}
+
+export function renomearCliente(id: string, nome: string): Promise<{ mensagem: string }> {
+  return pedir("/api/admin/cadastro-clientes", {
+    method: "POST",
+    body: JSON.stringify({ acao: "renomear", id, nome }),
+  });
+}
+
+export function ligarOuDesligarCliente(
+  id: string,
+  ativo: boolean,
+): Promise<{ mensagem: string }> {
+  return pedir("/api/admin/cadastro-clientes", {
+    method: "POST",
+    body: JSON.stringify({ acao: "ligar", id, ativo }),
+  });
+}
+
+export function juntarClientes(
+  principalId: string,
+  absorvidoId: string,
+): Promise<{
+  juncao: {
+    reservas: number;
+    telefones: string[];
+    nomePrincipal: string;
+    nomeAbsorvido: string;
+  };
+}> {
+  return pedir("/api/admin/cadastro-clientes", {
+    method: "POST",
+    body: JSON.stringify({ acao: "juntar", principalId, absorvidoId }),
+  });
+}
+
+export function separarTelefone(
+  telefone: string,
+  nome: string,
+): Promise<{ separacao: { clienteId: string; reservas: number } }> {
+  return pedir("/api/admin/cadastro-clientes", {
+    method: "POST",
+    body: JSON.stringify({ acao: "separar", telefone, nome }),
+  });
+}

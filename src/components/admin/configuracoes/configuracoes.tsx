@@ -9,6 +9,7 @@ import { AbaDeMensagens } from "./aba-mensagens";
 import { AbaDeParametros } from "./aba-parametros";
 import { AbaDePoliticas } from "./aba-politicas";
 import { AbaDeHorarios } from "./aba-horarios";
+import { AbaDeClientes } from "./aba-clientes";
 import { AbaDeEmpresas } from "./aba-empresas";
 import { AbaDeProfissoes } from "./aba-profissoes";
 import { AbaDeSalas } from "./aba-salas";
@@ -34,6 +35,7 @@ const ABAS: readonly Aba[] = [
   { id: "parametros", rotulo: "Parâmetros", conteudo: () => <AbaDeParametros /> },
   { id: "politicas", rotulo: "Políticas", conteudo: () => <AbaDePoliticas /> },
   { id: "mensagens", rotulo: "Mensagens", conteudo: () => <AbaDeMensagens /> },
+  { id: "clientes", rotulo: "Clientes", conteudo: () => <AbaDeClientes /> },
   { id: "empresas", rotulo: "Empresas", conteudo: () => <AbaDeEmpresas /> },
   {
     id: "profissoes",
