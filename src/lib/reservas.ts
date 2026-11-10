@@ -9,6 +9,7 @@
  *     sobreposicao de horario.
  */
 import { StatusReserva } from "@/generated/prisma/enums";
+import { garantirCliente } from "@/lib/clientes";
 import { calcularValor, validarReserva } from "@/lib/disponibilidade";
 import {
   empresaEscolhidaEhValida,
@@ -181,9 +182,19 @@ export async function criarReservaPublica(entrada: {
         }
       }
 
+      // O CADASTRO DO CLIENTE, dentro da transacao: cliente criado para uma
+      // reserva que nao chegou a nascer viraria cadastro fantasma. O trava de
+      // telefone logo acima ja serializa dois pedidos do mesmo numero, entao
+      // nao ha como nascerem dois cadastros para a mesma pessoa.
+      const clienteId = await garantirCliente(
+        { telefone: entrada.telefone, nome: entrada.nomeCliente },
+        tx,
+      );
+
       const reserva = await tx.reserva.create({
         data: {
           salaId: entrada.salaId,
+          clienteId,
           nomeCliente: entrada.nomeCliente,
           telefone: entrada.telefone,
           pessoas: entrada.pessoas ?? null,

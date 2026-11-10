@@ -19,6 +19,7 @@
  * de fora, com o motivo.
  */
 import { FrequenciaRecorrencia, OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
+import { garantirCliente } from "@/lib/clientes";
 import {
   datasDaSerie,
   type Frequencia,
@@ -164,6 +165,15 @@ export async function criarSerie(entrada: {
   const puladas: OcorrenciaPulada[] = [];
   const agora = new Date();
 
+  // O CLIENTE E RESOLVIDO UMA VEZ, antes do laco, e todas as ocorrencias
+  // nascem com ele — igual a profissao e a empresa. Dentro do laco, cada
+  // ocorrencia procuraria o cadastro de novo, e numa serie de 17 datas isso
+  // seriam 17 consultas para chegar sempre na mesma resposta.
+  const clienteId = await garantirCliente({
+    telefone: entrada.telefone,
+    nome: entrada.nomeCliente,
+  });
+
   for (const data of datas) {
     if (!abertos.has(diaDaSemanaDe(data))) {
       puladas.push({ data, tipo: "DIA_FECHADO", motivo: "o coworking não abre neste dia" });
@@ -197,6 +207,7 @@ export async function criarSerie(entrada: {
       const reserva = await prisma.reserva.create({
         data: {
           salaId: entrada.salaId,
+          clienteId,
           nomeCliente: entrada.nomeCliente,
           telefone: entrada.telefone,
           profissaoId: entrada.profissaoId,

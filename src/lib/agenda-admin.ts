@@ -18,6 +18,7 @@
  */
 import { Prisma } from "@/generated/prisma/client";
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
+import { garantirCliente } from "@/lib/clientes";
 import {
   calcularValor,
   validarReserva,
@@ -252,9 +253,15 @@ export async function criarReservaNaRecepcao(entrada: {
 
   try {
     // Sem trava por telefone: a recepcao nao tem limite de 3 reservas.
+    const clienteId = await garantirCliente({
+      telefone: entrada.telefone,
+      nome: entrada.nomeCliente,
+    });
+
     const criada = await prisma.reserva.create({
       data: {
         salaId: entrada.salaId,
+        clienteId,
         nomeCliente: entrada.nomeCliente,
         telefone: entrada.telefone,
         pessoas: entrada.pessoas ?? null,

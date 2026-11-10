@@ -25,6 +25,8 @@
  * com identificador proprio e com o Rafael dos dois numeros virando um so,
  * e a fase seguinte.
  */
+import type { Prisma } from "@/generated/prisma/client";
+
 import { prisma } from "./prisma";
 import { apenasDigitos, normalizarTelefone } from "./telefone";
 import { telefonesDeBalcao } from "./telefones-balcao";
@@ -204,4 +206,94 @@ export async function procurarClientesConhecidos(
   ];
 
   return { clientes: lista, soNoTelefoneDeBalcao };
+}
+
+// -----------------------------------------------------------------------------
+// O cadastro de cliente (Fase 14, parte A)
+// -----------------------------------------------------------------------------
+
+/**
+ * Acha ou cria o cliente de uma reserva, e devolve o identificador dele.
+ *
+ * Chamada pelas TRES portas que criam reserva. Do lado de fora nada muda: o
+ * cliente continua so digitando nome e telefone, e o cadastro aparece sozinho.
+ *
+ * A REGRA E A MESMA DA MIGRACAO, de proposito — se as duas divergissem, o
+ * sistema agruparia o passado de um jeito e o futuro de outro, e ninguem
+ * desconfiaria porque cada metade continuaria parecendo certa:
+ *
+ *  - telefone NORMAL: o numero manda. Ja tem dono, e esse dono; nao tem,
+ *    nasce um cliente com o nome desta reserva e o numero fica ligado a ele.
+ *    Nome escrito diferente no mesmo numero NAO cria cliente novo.
+ *  - telefone de BALCAO: o numero nao e de ninguem, entao quem manda e o
+ *    NOME. O telefone nunca e ligado a cliente nenhum.
+ *
+ * Roda DENTRO da transacao da reserva quando ela existe: cliente criado para
+ * uma reserva que nao chegou a nascer viraria cadastro fantasma.
+ */
+export async function garantirCliente(
+  entrada: { telefone: string; nome: string },
+  tx: Prisma.TransactionClient = prisma,
+): Promise<string> {
+  const ehDeBalcao = (await telefonesDeBalcao()).has(entrada.telefone);
+
+  if (ehDeBalcao) {
+    return clienteDoBalcao(entrada, tx);
+  }
+
+  const vinculo = await tx.telefoneDoCliente.findUnique({
+    where: { telefone: entrada.telefone },
+    select: { clienteId: true },
+  });
+
+  if (vinculo) {
+    return vinculo.clienteId;
+  }
+
+  const cliente = await tx.cliente.create({
+    data: { nome: entrada.nome },
+    select: { id: true },
+  });
+
+  await tx.telefoneDoCliente.create({
+    data: { telefone: entrada.telefone, clienteId: cliente.id },
+  });
+
+  return cliente.id;
+}
+
+/**
+ * O cliente de uma reserva lancada num telefone de balcao.
+ *
+ * Aqui o numero nao identifica ninguem, entao o nome e tudo o que existe.
+ * Procura entre as pessoas que ja apareceram NESTE numero — e nao na base
+ * inteira: dois "Miguel" de telefones diferentes sao duas pessoas ate que a
+ * equipe diga o contrario, na tela de juntar cadastros.
+ *
+ * O telefone NAO e ligado ao cliente criado: ele e da casa, e liga-lo faria
+ * a proxima reserva de outra pessoa cair nesse mesmo cadastro.
+ */
+async function clienteDoBalcao(
+  entrada: { telefone: string; nome: string },
+  tx: Prisma.TransactionClient,
+): Promise<string> {
+  const doNumero = await tx.reserva.findMany({
+    where: { telefone: entrada.telefone, clienteId: { not: null } },
+    select: { nomeCliente: true, clienteId: true },
+    orderBy: { inicio: "asc" },
+  });
+
+  const alvo = semAcento(entrada.nome);
+  const mesma = doNumero.find((reserva) => semAcento(reserva.nomeCliente) === alvo);
+
+  if (mesma?.clienteId) {
+    return mesma.clienteId;
+  }
+
+  const cliente = await tx.cliente.create({
+    data: { nome: entrada.nome },
+    select: { id: true },
+  });
+
+  return cliente.id;
 }

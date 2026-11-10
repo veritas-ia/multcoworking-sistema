@@ -293,6 +293,54 @@ model TelefoneDaEmpresa {
   @@map("telefones_empresa")
 }
 
+/// O CLIENTE, como cadastro de verdade (Fase 14).
+///
+/// Ate aqui "quem e o cliente" era adivinhado de dois campos soltos que a
+/// recepcao digitava em cada reserva: o nome e o telefone. Dai vinham os 44
+/// nomes para 25 telefones, o mesmo Rafael em dois numeros e o telefone da
+/// casa virando "cliente" com 28 horas.
+///
+/// O nome daqui e o OFICIAL, mostrado no relatorio. O nome escrito em cada
+/// reserva continua la, intocado: ele e a verdade daquele dia e e o que a
+/// agenda mostra.
+model Cliente {
+  id   String  @id @default(uuid(7))
+  nome String
+  /// Desligado some das telas de escolha; o historico fica inteiro, mesma
+  /// regra das salas, das empresas e das areas de atuacao. Excluir nao existe.
+  ativo Boolean @default(true)
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  telefones TelefoneDoCliente[]
+  reservas  Reserva[]
+
+  @@index([nome])
+  @@map("clientes")
+}
+
+/// Qual telefone pertence a qual cliente.
+///
+/// O TELEFONE E A CHAVE, e nao um id proprio — mesmo desenho de
+/// "telefones_empresa". E o banco impedindo sozinho que um numero pertenca a
+/// duas pessoas e o faturamento apareca dobrado, sem ninguem desconfiar.
+///
+/// Um cliente pode ter VARIOS telefones: e assim que o Rafael dos dois
+/// numeros vira uma pessoa so.
+///
+/// Telefone de BALCAO nunca entra aqui: ele nao e de ninguem.
+model TelefoneDoCliente {
+  telefone  String  @id
+  clienteId String  @map("cliente_id")
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([clienteId])
+  @@map("telefones_cliente")
+}
+
 /// Telefones que NAO sao de um cliente: o do balcao, o do atendimento
 /// comercial, um celular de teste.
 ///
@@ -382,6 +430,17 @@ model Reserva {
   empresaId String?  @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
+  /// QUEM e o cliente desta reserva (Fase 14).
+  ///
+  /// Nulo e um estado DE TRANSICAO, nao um estado normal: a migracao preenche
+  /// todas as reservas que ja existem, e as tres portas que criam reserva
+  /// preenchem as novas. A coluna so continua aceitando nulo enquanto a fase
+  /// nao fecha — ver "Fase 14" no CLAUDE.md. O agrupamento do relatorio usa
+  /// "clienteId ?? telefone", entao nenhuma reserva some do relatorio se um
+  /// nulo escapar; ela so fica agrupada do jeito antigo.
+  clienteId String?  @map("cliente_id")
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
   recorrenciaId String?      @map("recorrencia_id")
   recorrencia   Recorrencia? @relation(fields: [recorrenciaId], references: [id], onDelete: SetNull)
 
@@ -422,6 +481,7 @@ model Reserva {
   @@index([telefone, status])
   @@index([recorrenciaId])
   @@index([confirmacaoEnviadaEm])
+  @@index([clienteId])
   @@map("reservas")
 }
 

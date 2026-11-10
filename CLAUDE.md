@@ -1017,3 +1017,56 @@ nome"*)
 
 **EXCLUIR NÃO EXISTE**, mesma regra de salas, empresas e áreas de atuação: desliga-se.
 Apagar tiraria o histórico do relatório em silêncio.
+
+### Fase 14, Parte A — construída em 10/11/2026
+- **Invisível de propósito:** na tela nada mudou. A base ficou correta embaixo.
+- **O que entrou:** tabelas `clientes` e `telefones_cliente`, coluna `cliente_id` na
+  reserva, as três portas gravando o cadastro e o relatório agrupando por ele.
+- **`chaveDoCliente` agora é o `clienteId`.** É ele que junta o mesmo Rafael de dois
+  telefones — coisa que nenhuma regra sobre telefone ou nome conseguia fazer sozinha.
+- **O `?? telefone` que sobrou ali é TRANSIÇÃO, não caminho alternativo.** A migração
+  preencheu todas as reservas e as três portas preenchem as novas, então na prática ele
+  não pega. Existe para que uma reserva sem cadastro, se escapar, continue aparecendo
+  no relatório agrupada do jeito antigo em vez de **sumir da tela sem ninguém ver**.
+  Morre quando a coluna virar obrigatória no banco, no fim da fase.
+- **`garantirCliente` roda DENTRO da transação da reserva** no site: cliente criado para
+  uma reserva que não chegou a nascer viraria cadastro fantasma. A trava por telefone
+  que já existia ali serializa dois pedidos do mesmo número, então não há como nascerem
+  dois cadastros para a mesma pessoa.
+- **A série resolve o cliente UMA vez**, antes do laço, igual à profissão e à empresa.
+  Dentro do laço seriam 17 consultas para chegar sempre na mesma resposta.
+- **O nome mostrado no relatório é o OFICIAL do cadastro.** Ele não depende do período
+  escolhido na tela, que era o problema do rótulo até aqui. A busca procura nos dois: no
+  nome oficial e no escrito na reserva.
+
+#### O ENSAIO DA MIGRAÇÃO, com os dados reais de produção
+Antes do deploy, a cópia de produção (192 reservas) foi restaurada num banco de ensaio e
+a migração rodou nela. **Faça isto sempre que uma migração religar linhas existentes** —
+o custo é de minutos e o erro apareceria em produção, no meio do deploy:
+
+| Conferência | Resultado |
+|---|---|
+| reservas sem cliente | **0** |
+| cadastros criados | 36 = 31 telefones normais + 5 nomes do balcão |
+| telefones ligados | 31 (de 32 distintos; o do balcão fica de fora) |
+| telefone do balcão ligado a alguém | **0** |
+| Giovana: 3 grafias | **1 cadastro**, 62 reservas |
+| Prestare: 4 grafias | **1 cadastro**, 11 reservas |
+| Rafael: 2 grafias no mesmo número | **1 cadastro**, 4 reservas |
+
+O número do balcão virou cinco cadastros — Toca (12), Prestare (3), Matheus Toca, Miguel
+e Rafael Passos —, exatamente o que o relatório já mostrava na tela desde 29/10.
+
+#### Teste com data: nunca fixa no futuro
+`tests/cadastro-de-clientes.test.ts` calcula **a próxima segunda-feira a partir de hoje**.
+Uma data fixa passa a ficar no passado com o tempo, e a reserva do site — que tem
+antecedência mínima — começa a ser recusada sozinha, sem nada ter quebrado. Já aconteceu
+neste projeto (ver `12dcd9e`).
+
+#### O que falta da Fase 14
+- **Parte B:** Configurações → Clientes — renomear, **juntar dois cadastros** (o Rafael
+  dos dois números) e ligar telefone, com sugestões que nunca juntam sozinhas.
+- **Parte C:** o balcão escolhe um cliente **cadastrado** em vez de digitar.
+- **No fim:** `cliente_id` vira **obrigatório** no banco, e o `?? telefone` do relatório
+  sai junto. Hoje ela aceita nulo porque 20 arquivos de teste criam reserva direto no
+  banco; apertar isso agora misturaria a mudança de regra com churn de teste.
