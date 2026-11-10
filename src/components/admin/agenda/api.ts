@@ -152,7 +152,7 @@ export type ClienteConhecido = {
 export function procurarClientes(
   termo: string,
   sinal?: AbortSignal,
-): Promise<{ clientes: ClienteConhecido[] }> {
+): Promise<{ clientes: ClienteConhecido[]; soNoTelefoneDeBalcao: string[] }> {
   return pedir(`/api/admin/clientes?q=${encodeURIComponent(termo)}`, { signal: sinal });
 }
 

@@ -88,6 +88,8 @@ export function NovaReserva({
   /** O que a recepcao digitou no "procurar cliente". */
   const [procurado, setProcurado] = useState("");
   const [achados, setAchados] = useState<ClienteConhecido[]>([]);
+  /** Nomes achados só dentro de um telefone do balcão: viram aviso. */
+  const [soNoBalcao, setSoNoBalcao] = useState<string[]>([]);
   /** As areas de atuacao, na ordem do painel. */
   const [profissoes, setProfissoes] = useState<
     { id: string; nome: string; bloqueada: boolean; avisoBloqueio: string }[]
@@ -186,6 +188,7 @@ export function NovaReserva({
   useEffect(() => {
     if (procurado.trim().length < 2) {
       setAchados([]);
+      setSoNoBalcao([]);
       return;
     }
 
@@ -196,6 +199,7 @@ export function NovaReserva({
         .then((resposta) => {
           if (!controle.signal.aborted) {
             setAchados(resposta.clientes);
+            setSoNoBalcao(resposta.soNoTelefoneDeBalcao);
           }
         })
         .catch(() => {
@@ -203,6 +207,7 @@ export function NovaReserva({
           // nome e o telefone na mao, como sempre fez.
           if (!controle.signal.aborted) {
             setAchados([]);
+            setSoNoBalcao([]);
           }
         });
     }, 300);
@@ -226,6 +231,7 @@ export function NovaReserva({
     setTelefone(telefoneVisivel(cliente.telefone));
     setProcurado("");
     setAchados([]);
+    setSoNoBalcao([]);
   }
 
   // --- repeticao ---
@@ -396,7 +402,26 @@ export function NovaReserva({
             </ul>
           ) : null}
 
-          {procurado.trim().length >= 2 && achados.length === 0 ? (
+          {/* ACHADO SÓ DENTRO DE UM TELEFONE DO BALCÃO.
+              Aquele número não é de um cliente, então não entra na lista de
+              escolha — escolhê-lo faria a reserva nova nascer no telefone da
+              recepção outra vez. Mas sumir calado faria a recepção achar que
+              o sistema perdeu o cliente. */}
+          {soNoBalcao.length > 0 ? (
+            <p
+              role="status"
+              className="rounded-lg border border-border bg-bg-primary p-3 text-sm leading-relaxed text-text-primary"
+            >
+              <strong>{soNoBalcao.join(", ")}</strong>{" "}
+              {soNoBalcao.length === 1 ? "aparece" : "aparecem"} só num telefone
+              do balcão, que não é de nenhum cliente. Peça o telefone do cliente
+              e preencha abaixo.
+            </p>
+          ) : null}
+
+          {procurado.trim().length >= 2 &&
+          achados.length === 0 &&
+          soNoBalcao.length === 0 ? (
             <p className="text-sm text-text-secondary">
               Ninguém encontrado. Cliente novo: preencha o nome e o telefone
               abaixo.

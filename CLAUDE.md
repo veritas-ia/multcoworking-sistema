@@ -926,3 +926,33 @@ Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada f
   painel. Nenhuma reserva aponta para ela, então nada quebra por ela faltar.
 - **Isto arruma o passado. O futuro quem arruma é a busca de cliente no balcão** — ver
   "A recepção procura o cliente em vez de digitar".
+
+### O telefone do balcão sai da busca, e vira lista de trabalho (10/11/2026)
+- **O defeito, visto pelo dono na tela:** procurando "presta" na nova reserva, o primeiro
+  resultado era *"Toca — (14) 99604-0233 — também: Matheus Toca · Prestare · Rafael
+  Passos · Miguel"*. O número já estava marcado como de balcão, e **a busca não sabia
+  disso** — eu liguei a marcação ao relatório e esqueci de ligar à busca.
+- Se a recepcionista clicasse ali, a reserva nova nasceria **no telefone da recepção
+  outra vez** — exatamente o que a tela veio impedir.
+- **Telefone marcado não entra mais na lista de escolha.** A equipe marcou justamente
+  porque ele não é de um cliente.
+- **Mas não some calado.** Quando o nome procurado só existe dentro de um número de
+  balcão — o caso do "Miguel", que tem uma reserva lá e nenhum telefone próprio — a tela
+  avisa: *"Miguel aparece só num telefone do balcão, que não é de nenhum cliente. Peça o
+  telefone do cliente."* Sem isso a recepção acharia que o sistema perdeu o cliente.
+- **O aviso só vale para quem NÃO tem telefone próprio.** "Prestare" tem reserva no
+  balcão e num número dele: ali a recepção já tem o que escolher, e avisar seria ruído.
+  Há teste para os dois casos.
+- **Em Configurações → Telefones do balcão, cada número abre QUEM está preso nele**, com
+  nome, horas, quantas reservas e a data da última. Pedido do dono: *"tinha que ter
+  também uma listagem que mostra clientes que foram preenchidos ali de reservas por esse
+  número do balcão"*. Não é estatística, é **lista de trabalho**: de quem ainda falta
+  pegar o telefone de verdade.
+- **As horas não contam cancelada** (mesma regra do relatório, para os dois números nunca
+  discordarem); **a contagem de reservas conta todas**, porque elas estão naquele número
+  e a pessoa precisa aparecer na lista. A tela diz isso em uma linha, para ninguém
+  comparar com o relatório e achar defeito.
+- Dentro do número, "Toca" e "toca" continuam sendo a mesma pessoa — mesma regra do
+  relatório.
+- **Como medir se está funcionando:** a lista para de crescer. Entre 29/10 e 03/11 o
+  número da recepção foi de 4 para 5 nomes (o "Miguel" entrou) e de 14 para 16 reservas.

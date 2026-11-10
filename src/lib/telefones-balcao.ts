@@ -24,18 +24,40 @@
  * desmarcar. E uma lente na hora de montar o relatorio, e desmarcar devolve
  * tudo exatamente como era.
  */
+import { StatusReserva } from "@/generated/prisma/enums";
+
 import { prisma } from "./prisma";
 import { normalizarTelefone } from "./telefone";
+
+/**
+ * Uma pessoa presa dentro de um telefone de balcao.
+ *
+ * E a LISTA DE TRABALHO da recepcao: cada linha e alguem cuja reserva saiu
+ * do numero da casa e que ainda nao tem telefone proprio no sistema. A equipe
+ * olha, pede o numero na proxima vez e a lista para de crescer.
+ */
+export type PessoaNoBalcao = {
+  nome: string;
+  /** TODAS as reservas, inclusive canceladas: elas estao nesse numero. */
+  reservas: number;
+  /**
+   * Horas que contaram como uso. Cancelada NAO entra — mesma regra do
+   * relatorio, para os dois numeros nunca discordarem.
+   */
+  horas: number;
+  /** "AAAA-MM-DD" da reserva mais recente desta pessoa neste numero. */
+  ultima: string;
+};
 
 export type TelefoneDeBalcao = {
   telefone: string;
   motivo: string;
   /** Nome de quem marcou, ou null quando o usuario foi desligado depois. */
   marcadoPor: string | null;
-  /** Quantas reservas esse numero carrega hoje. */
+  /** Quantas reservas esse numero carrega hoje, somando todas as pessoas. */
   reservas: number;
-  /** Os nomes diferentes que ele ja usou — a cara de um telefone de balcao. */
-  nomes: string[];
+  /** Quem esta preso neste numero, do que mais usou para o que menos usou. */
+  pessoas: PessoaNoBalcao[];
 };
 
 export type Falha = { motivo: string; codigo: string };
@@ -70,21 +92,66 @@ export async function listarTelefonesDeBalcao(): Promise<TelefoneDeBalcao[]> {
     return [];
   }
 
-  const pares = await prisma.reserva.groupBy({
-    by: ["telefone", "nomeCliente"],
+  // Uma consulta so, com as reservas desses numeros. O volume e pequeno —
+  // sao um ou dois telefones — e assim as horas saem do mesmo lugar que o
+  // relatorio usa, sem segunda fonte de verdade.
+  const reservas = await prisma.reserva.findMany({
     where: { telefone: { in: marcados.map((marcado) => marcado.telefone) } },
-    _count: { _all: true },
+    select: {
+      telefone: true,
+      nomeCliente: true,
+      duracaoMinutos: true,
+      status: true,
+      inicio: true,
+    },
+    orderBy: { inicio: "asc" },
   });
 
   return marcados.map((marcado) => {
-    const doNumero = pares.filter((par) => par.telefone === marcado.telefone);
+    const doNumero = reservas.filter(
+      (reserva) => reserva.telefone === marcado.telefone,
+    );
+
+    const porPessoa = new Map<string, PessoaNoBalcao>();
+
+    for (const reserva of doNumero) {
+      // Agrupa pelo nome sem acento e sem maiuscula: "Toca" e "toca" sao a
+      // mesma pessoa escrita de dois jeitos, igual ao relatorio faz dentro
+      // de um numero marcado.
+      const chave = reserva.nomeCliente
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase();
+
+      const atual = porPessoa.get(chave);
+
+      porPessoa.set(chave, {
+        // Fica o primeiro nome visto, e a lista vem ordenada por inicio.
+        nome: atual?.nome ?? reserva.nomeCliente,
+        reservas: (atual?.reservas ?? 0) + 1,
+        horas:
+          (atual?.horas ?? 0) +
+          (reserva.status === StatusReserva.CANCELADA
+            ? 0
+            : reserva.duracaoMinutos / 60),
+        ultima: reserva.inicio.toISOString().slice(0, 10),
+      });
+    }
+
+    const pessoas = [...porPessoa.values()]
+      .map((pessoa) => ({
+        ...pessoa,
+        // Uma casa, para 1.5000000000000002 nao chegar na tela.
+        horas: Math.round(pessoa.horas * 10) / 10,
+      }))
+      .sort((a, b) => b.horas - a.horas || b.reservas - a.reservas);
 
     return {
       telefone: marcado.telefone,
       motivo: marcado.motivo,
       marcadoPor: marcado.criadoPor?.nome ?? null,
-      reservas: doNumero.reduce((soma, par) => soma + par._count._all, 0),
-      nomes: doNumero.map((par) => par.nomeCliente),
+      reservas: doNumero.length,
+      pessoas,
     };
   });
 }

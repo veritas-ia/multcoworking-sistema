@@ -12,6 +12,7 @@ import {
   buscarTelefonesDeBalcao,
   desmarcarTelefoneDeBalcao,
   marcarTelefoneDeBalcao,
+  type PessoaNoBalcao,
   type TelefoneDeBalcao,
 } from "./api";
 import { CaixaInformativa, Secao } from "./pecas";
@@ -97,47 +98,46 @@ export function AbaDeTelefonesDeBalcao() {
             Nenhum número marcado. Enquanto for assim, nada muda no relatório.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-3">
             {telefones.map((item) => (
               <li
                 key={item.telefone}
-                className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 rounded-lg border border-border bg-bg-primary p-3"
+                className="flex flex-col gap-3 rounded-lg border border-border bg-bg-primary p-3"
               >
-                <div className="flex min-w-56 flex-1 flex-col gap-0.5">
-                  <span className="font-bold tabular-nums text-text-primary">
-                    {telefoneVisivel(item.telefone)}
-                  </span>
-                  <span className="text-sm text-text-secondary">{item.motivo}</span>
-                  {/* Os nomes sao a PROVA de que o numero e de balcao: sao
-                      pessoas diferentes, e e isso que a equipe precisa ver
-                      para ter certeza de que marcou o numero certo. */}
-                  {item.nomes.length > 0 ? (
-                    <span className="text-sm text-text-secondary">
-                      {item.reservas}{" "}
-                      {item.reservas === 1 ? "reserva" : "reservas"}, em nome de:{" "}
-                      {item.nomes.join(" · ")}
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="flex min-w-56 flex-1 flex-col gap-0.5">
+                    <span className="font-bold tabular-nums text-text-primary">
+                      {telefoneVisivel(item.telefone)}
                     </span>
-                  ) : null}
-                  {item.marcadoPor ? (
+                    <span className="text-sm text-text-secondary">{item.motivo}</span>
                     <span className="text-sm text-text-secondary">
-                      marcado por {item.marcadoPor}
+                      {item.reservas} {item.reservas === 1 ? "reserva" : "reservas"}
+                      {item.marcadoPor ? ` · marcado por ${item.marcadoPor}` : ""}
                     </span>
-                  ) : null}
+                  </div>
+
+                  <Botao
+                    largura="conteudo"
+                    aparencia="secundario"
+                    disabled={salvando}
+                    onClick={() =>
+                      void comAviso(
+                        () => desmarcarTelefoneDeBalcao(item.telefone),
+                        "Não foi possível desmarcar.",
+                      )
+                    }
+                  >
+                    Desmarcar
+                  </Botao>
                 </div>
 
-                <Botao
-                  largura="conteudo"
-                  aparencia="secundario"
-                  disabled={salvando}
-                  onClick={() =>
-                    void comAviso(
-                      () => desmarcarTelefoneDeBalcao(item.telefone),
-                      "Não foi possível desmarcar.",
-                    )
-                  }
-                >
-                  Desmarcar
-                </Botao>
+                {/* QUEM ESTÁ PRESO NESTE NÚMERO.
+                    É a lista de trabalho da recepção: cada linha é alguém
+                    cuja reserva saiu do número da casa e que ainda não tem
+                    telefone próprio no sistema. */}
+                {item.pessoas.length > 0 ? (
+                  <PessoasDoNumero pessoas={item.pessoas} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -221,4 +221,59 @@ export function AbaDeTelefonesDeBalcao() {
       </CaixaInformativa>
     </div>
   );
+}
+
+/**
+ * Quem está preso dentro de um telefone do balcão.
+ *
+ * Não é estatística: é lista de trabalho. Cada linha é alguém cuja reserva
+ * saiu do número da casa e que ainda não tem telefone próprio no sistema. A
+ * equipe olha, pede o número na próxima vez, e a lista para de crescer.
+ */
+function PessoasDoNumero({ pessoas }: { pessoas: PessoaNoBalcao[] }) {
+  return (
+    <div className="rounded-lg border border-border bg-bg-secondary p-3">
+      <h3 className="text-sm font-bold text-text-primary">
+        Clientes com reserva neste número
+      </h3>
+      <p className="mt-1 text-sm leading-relaxed text-text-secondary">
+        Falta o telefone de cada um. Peça na próxima vez que atender.
+      </p>
+
+      <ul className="mt-3 flex flex-col gap-1.5">
+        {pessoas.map((pessoa) => (
+          <li
+            key={pessoa.nome}
+            className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-border pb-1.5 last:border-b-0 last:pb-0"
+          >
+            <span className="font-semibold text-text-primary">{pessoa.nome}</span>
+            <span className="text-sm tabular-nums text-text-secondary">
+              {horasPorExtenso(pessoa.horas)} · {pessoa.reservas}{" "}
+              {pessoa.reservas === 1 ? "reserva" : "reservas"} · última em{" "}
+              {emDiaEMes(pessoa.ultima)}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+        As horas não contam reservas canceladas, igual ao relatório. A contagem
+        de reservas conta todas.
+      </p>
+    </div>
+  );
+}
+
+/** "3,5 h" — com vírgula, e sem o ",0" quando é hora cheia. */
+function horasPorExtenso(horas: number): string {
+  const texto = Number.isInteger(horas)
+    ? String(horas)
+    : horas.toFixed(1).replace(".", ",");
+  return `${texto} h`;
+}
+
+/** "2026-10-26" -> "26/10". */
+function emDiaEMes(data: string): string {
+  const [, mes, dia] = data.split("-");
+  return `${dia}/${mes}`;
 }

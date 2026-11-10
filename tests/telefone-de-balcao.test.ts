@@ -370,7 +370,52 @@ describe("a marcação em si", () => {
 
     expect(esse?.marcadoPor).toBe("Admin de Teste");
     expect(esse?.reservas).toBe(3);
-    expect(esse?.nomes).toContain("Prestare");
+    expect(esse?.pessoas.map((pessoa) => pessoa.nome)).toContain("Prestare");
+  });
+
+  it("lista QUEM está preso no número, com as horas de cada um", async () => {
+    // E a lista de trabalho da recepcao: de quem ainda falta pegar o
+    // telefone de verdade. Sem ela, marcar o numero esconderia o problema
+    // em vez de mostra-lo.
+    await oNumeroDaRecepcao();
+    await marcar();
+
+    const lista = await listarTelefonesDeBalcao();
+    const esse = lista.find((item) => item.telefone === BALCAO);
+    const porNome = new Map(
+      (esse?.pessoas ?? []).map((pessoa) => [pessoa.nome, pessoa]),
+    );
+
+    expect(porNome.get("Toca")?.horas).toBe(3);
+    expect(porNome.get("Prestare")?.horas).toBe(2);
+    expect(porNome.get("Rafael Passos")?.horas).toBe(1);
+    expect(porNome.get("Toca")?.reservas).toBe(1);
+    // Do que mais usou para o que menos usou.
+    expect(esse?.pessoas[0]?.nome).toBe("Toca");
+  });
+
+  it("a hora CANCELADA não entra, mas a reserva é contada", async () => {
+    // Mesma regra do relatorio para as horas — hora desmarcada nao e hora
+    // usada. A reserva conta porque ela esta nesse numero, e a tela precisa
+    // mostrar a pessoa para a equipe ir atras do telefone dela.
+    proxima = 0;
+    await reservaDe(BALCAO, "Toca", 2);
+    const cancelada = await reservaDe(BALCAO, "Toca", 3);
+    await bancoDeTeste.reserva.update({
+      where: { id: cancelada.id },
+      // A data do cancelamento vai junto: o banco tem uma trava exigindo as
+      // duas coisas, para nunca existir reserva cancelada sem saber quando.
+      data: { status: "CANCELADA", canceladoEm: new Date() },
+    });
+    await marcar();
+
+    const lista = await listarTelefonesDeBalcao();
+    const toca = lista
+      .find((item) => item.telefone === BALCAO)
+      ?.pessoas.find((pessoa) => pessoa.nome === "Toca");
+
+    expect(toca?.horas).toBe(2);
+    expect(toca?.reservas).toBe(2);
   });
 
   it("avisa quando o número não estava marcado", async () => {

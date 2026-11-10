@@ -40,9 +40,7 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
   const procurado = requisicao.nextUrl.searchParams.get("q");
 
   if (procurado !== null) {
-    return NextResponse.json({
-      clientes: await procurarClientesConhecidos(procurado),
-    });
+    return NextResponse.json(await procurarClientesConhecidos(procurado));
   }
 
   const telefone = normalizarTelefone(

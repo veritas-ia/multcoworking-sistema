@@ -27,6 +27,7 @@
  */
 import { prisma } from "./prisma";
 import { apenasDigitos, normalizarTelefone } from "./telefone";
+import { telefonesDeBalcao } from "./telefones-balcao";
 
 /** Quantos clientes a busca devolve. A tela e uma lista para escolher, nao um
  *  relatorio: passando disso a recepcao para de conseguir ler. */
@@ -59,6 +60,21 @@ function semAcento(texto: string): string {
     .toLowerCase();
 }
 
+export type ResultadoDaBusca = {
+  clientes: ClienteConhecido[];
+  /**
+   * Nomes que só existem dentro de um TELEFONE DE BALCAO.
+   *
+   * Aparecem como aviso na tela, e nunca como opcao de escolha. O caso real: o
+   * "Miguel" tem uma reserva lancada no numero do atendimento comercial e
+   * nenhum telefone proprio no sistema. Oferecer aquele numero faria a reserva
+   * nova nascer no telefone da recepcao outra vez — exatamente o que esta tela
+   * veio impedir. Sumir calado seria pior: a recepcao acharia que o sistema
+   * perdeu o cliente, em vez de entender que precisa pedir o numero dele.
+   */
+  soNoTelefoneDeBalcao: string[];
+};
+
 /**
  * Procura entre quem ja reservou alguma vez.
  *
@@ -66,26 +82,33 @@ function semAcento(texto: string): string {
  * telefone ("99604", "(14) 99604-0233"). Numero e nome sao procurados ao
  * mesmo tempo: a recepcao digita o que tem na mao e nao escolhe o modo.
  *
+ * TELEFONE DE BALCAO NUNCA ENTRA NA LISTA. A equipe marcou aquele numero
+ * justamente porque ele nao e de um cliente; oferece-lo para escolher
+ * devolveria o problema pela mesma porta.
+ *
  * Termo curto demais devolve lista vazia — com uma letra so, viria metade da
  * base e a tela nao ajudaria ninguem.
  */
 export async function procurarClientesConhecidos(
   termo: string,
-): Promise<ClienteConhecido[]> {
+): Promise<ResultadoDaBusca> {
   const limpo = termo.trim();
 
   if (limpo.length < 2) {
-    return [];
+    return { clientes: [], soNoTelefoneDeBalcao: [] };
   }
 
   // A busca e sobre os PARES telefone+nome, e nao sobre as reservas uma a
   // uma: o banco ja devolve agrupado, com a contagem e as datas.
-  const pares = await prisma.reserva.groupBy({
-    by: ["telefone", "nomeCliente"],
-    _count: { _all: true },
-    _min: { inicio: true },
-    _max: { inicio: true },
-  });
+  const [pares, balcao] = await Promise.all([
+    prisma.reserva.groupBy({
+      by: ["telefone", "nomeCliente"],
+      _count: { _all: true },
+      _min: { inicio: true },
+      _max: { inicio: true },
+    }),
+    telefonesDeBalcao(),
+  ]);
 
   const alvo = semAcento(limpo);
   const digitos = apenasDigitos(limpo);
@@ -106,7 +129,12 @@ export async function procurarClientesConhecidos(
   // O NOME SO SERVE PARA ACHAR O TELEFONE, mesma regra da busca do relatorio:
   // achado o telefone, o cliente vem inteiro, com TODOS os nomes e TODAS as
   // reservas dele — e nao so as que bateram com o que foi digitado.
-  const telefones = new Set(achados.map((par) => par.telefone));
+  //
+  // Os telefones de BALCAO ficam de fora da lista de escolha, e o que foi
+  // achado dentro deles vira aviso.
+  const telefones = new Set(
+    achados.filter((par) => !balcao.has(par.telefone)).map((par) => par.telefone),
+  );
 
   const porTelefone = new Map<string, typeof pares>();
 
@@ -146,7 +174,34 @@ export async function procurarClientesConhecidos(
 
   // Quem reservou mais recentemente primeiro: e quem a recepcao tem mais
   // chance de estar atendendo agora.
-  return clientes
+  const lista = clientes
     .sort((a, b) => b.ultimaReserva.localeCompare(a.ultimaReserva))
     .slice(0, MAXIMO);
+
+  // O AVISO e so para quem NAO tem telefone proprio no sistema.
+  //
+  // "Prestare" tem reserva no numero do balcao E num numero proprio: ali a
+  // recepcao ja tem o que escolher, e avisar seria ruido. O "Miguel" so
+  // existe dentro do balcao — esse precisa do aviso, senao a tela nao
+  // explica por que nao achou ninguem.
+  const jaNaLista = new Set(
+    lista.flatMap((cliente) =>
+      [cliente.nome, ...cliente.outrosNomes].map(semAcento),
+    ),
+  );
+
+  const soNoTelefoneDeBalcao = [
+    ...new Set(
+      achados
+        .filter(
+          (par) =>
+            balcao.has(par.telefone) &&
+            semAcento(par.nomeCliente).includes(alvo) &&
+            !jaNaLista.has(semAcento(par.nomeCliente)),
+        )
+        .map((par) => par.nomeCliente),
+    ),
+  ];
+
+  return { clientes: lista, soNoTelefoneDeBalcao };
 }

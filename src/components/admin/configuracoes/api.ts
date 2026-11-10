@@ -492,12 +492,19 @@ export function moverProfissao(
 // Telefones do balcao
 // -----------------------------------------------------------------------------
 
+export type PessoaNoBalcao = {
+  nome: string;
+  reservas: number;
+  horas: number;
+  ultima: string;
+};
+
 export type TelefoneDeBalcao = {
   telefone: string;
   motivo: string;
   marcadoPor: string | null;
   reservas: number;
-  nomes: string[];
+  pessoas: PessoaNoBalcao[];
 };
 
 export function buscarTelefonesDeBalcao(

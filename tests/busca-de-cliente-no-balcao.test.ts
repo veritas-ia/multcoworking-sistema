@@ -30,6 +30,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { GET as getClientes } from "@/app/api/admin/clientes/route";
 import { procurarClientesConhecidos } from "@/lib/clientes";
+import {
+  desmarcarTelefoneDeBalcao,
+  marcarTelefoneDeBalcao,
+} from "@/lib/telefones-balcao";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 import { normalizarTelefone, telefoneVisivel } from "@/lib/telefone";
 import { instanteDe } from "@/lib/tempo";
@@ -68,6 +72,9 @@ beforeAll(async () => {
 
 async function limpar(): Promise<void> {
   await bancoDeTeste.reserva.deleteMany({ where: { telefone: { in: TELEFONES } } });
+  await bancoDeTeste.telefoneDeBalcao.deleteMany({
+    where: { telefone: { in: TELEFONES } },
+  });
   horaDoDia.clear();
 }
 
@@ -109,6 +116,11 @@ async function reserva(telefone: string, nome: string, dia = DIA) {
   });
 }
 
+/** A lista de escolha da busca, que e o que quase todo teste daqui olha. */
+async function achadosDa(termo: string) {
+  return (await procurarClientesConhecidos(termo)).clientes;
+}
+
 /** O caso de producao, em miniatura: quatro clientes num numero so. */
 async function telefoneDeBalcao(): Promise<void> {
   await reserva(BALCAO, "Toca", "2026-11-10");
@@ -123,7 +135,7 @@ describe("achar o cliente pelo nome", () => {
   it("acha por um pedaço do nome", async () => {
     await reserva(DO_RAFAEL, "Rafael dos Passos");
 
-    const achados = await procurarClientesConhecidos("passos");
+    const achados = await achadosDa("passos");
 
     expect(achados.map((cliente) => cliente.telefone)).toContain(DO_RAFAEL);
   });
@@ -132,7 +144,7 @@ describe("achar o cliente pelo nome", () => {
     await reserva(DA_CARLA, "Carla Ornélas");
 
     for (const digitado of ["ORNELAS", "ornélas", "Ornelas", "oRnElAs"]) {
-      const achados = await procurarClientesConhecidos(digitado);
+      const achados = await achadosDa(digitado);
       expect(
         achados.map((cliente) => cliente.telefone),
         `procurando "${digitado}"`,
@@ -143,9 +155,9 @@ describe("achar o cliente pelo nome", () => {
   it("não devolve a base inteira quando a recepção digitou uma letra só", async () => {
     await reserva(DA_CARLA, "Carla Ornelas");
 
-    expect(await procurarClientesConhecidos("c")).toEqual([]);
-    expect(await procurarClientesConhecidos(" ")).toEqual([]);
-    expect(await procurarClientesConhecidos("")).toEqual([]);
+    expect(await achadosDa("c")).toEqual([]);
+    expect(await achadosDa(" ")).toEqual([]);
+    expect(await achadosDa("")).toEqual([]);
   });
 });
 
@@ -153,7 +165,7 @@ describe("achar o cliente pelo telefone", () => {
   it("acha pelo número formatado, como a recepção digita", async () => {
     await reserva(DO_RAFAEL, "Rafael dos Passos");
 
-    const achados = await procurarClientesConhecidos("(11) 90000-0802");
+    const achados = await achadosDa("(11) 90000-0802");
 
     expect(achados.map((cliente) => cliente.telefone)).toContain(DO_RAFAEL);
   });
@@ -161,7 +173,7 @@ describe("achar o cliente pelo telefone", () => {
   it("acha por um pedaço do número", async () => {
     await reserva(DO_RAFAEL, "Rafael dos Passos");
 
-    const achados = await procurarClientesConhecidos("0000802");
+    const achados = await achadosDa("0000802");
 
     expect(achados.map((cliente) => cliente.telefone)).toContain(DO_RAFAEL);
   });
@@ -176,7 +188,7 @@ describe("o nome só serve para achar o telefone", () => {
     await reserva(DO_RAFAEL, "Rafael Passos");
     await reserva(DO_RAFAEL, "rafael");
 
-    const achados = await procurarClientesConhecidos("dos passos");
+    const achados = await achadosDa("dos passos");
     const dele = achados.find((cliente) => cliente.telefone === DO_RAFAEL);
 
     expect(dele?.reservas).toBe(3);
@@ -186,7 +198,7 @@ describe("o nome só serve para achar o telefone", () => {
     await reserva(DO_RAFAEL, "Rafael dos Passos", "2026-11-10");
     await reserva(DO_RAFAEL, "Rafael Passos", "2026-11-11");
 
-    const achados = await procurarClientesConhecidos("rafael");
+    const achados = await achadosDa("rafael");
     const dele = achados.find((cliente) => cliente.telefone === DO_RAFAEL);
 
     expect(dele?.nome).toBe("Rafael dos Passos");
@@ -200,7 +212,7 @@ describe("o telefone de balcão aparece com a cara dele", () => {
     // varias pessoas, e a reserva nova iria para o telefone errado de novo.
     await telefoneDeBalcao();
 
-    const achados = await procurarClientesConhecidos("toca");
+    const achados = await achadosDa("toca");
     const balcao = achados.find((cliente) => cliente.telefone === BALCAO);
 
     expect(balcao?.nome).toBe("Toca");
@@ -215,7 +227,7 @@ describe("o telefone de balcão aparece com a cara dele", () => {
     await telefoneDeBalcao();
     await reserva(DO_RAFAEL, "Rafael dos Passos");
 
-    const achados = await procurarClientesConhecidos("rafael");
+    const achados = await achadosDa("rafael");
     const telefones = achados.map((cliente) => cliente.telefone);
 
     expect(telefones).toContain(DO_RAFAEL);
@@ -232,7 +244,7 @@ describe("o telefone do cliente escolhido chega inteiro no formulário", () => {
     // errado e ninguem repararia, porque o campo pareceria preenchido.
     await reserva(DO_RAFAEL, "Rafael dos Passos");
 
-    const achados = await procurarClientesConhecidos("passos");
+    const achados = await achadosDa("passos");
     const dele = achados.find((cliente) => cliente.telefone === DO_RAFAEL);
 
     const noCampo = telefoneVisivel(dele!.telefone);
@@ -247,10 +259,81 @@ describe("o telefone do cliente escolhido chega inteiro no formulário", () => {
   it("o do balcão também, para a equipe reconhecer o número na lista", async () => {
     await telefoneDeBalcao();
 
-    const achados = await procurarClientesConhecidos("prestare");
+    const achados = await achadosDa("prestare");
     const balcao = achados.find((cliente) => cliente.telefone === BALCAO);
 
     expect(telefoneVisivel(balcao!.telefone)).toBe("(11) 90000-0801");
+  });
+});
+
+describe("telefone MARCADO como balcão sai da lista de escolha", () => {
+  async function marcarOBalcao(): Promise<void> {
+    const feito = await marcarTelefoneDeBalcao(
+      BALCAO,
+      "Atendimento comercial do coworking",
+      null,
+    );
+    expect(feito.ok).toBe(true);
+  }
+
+  it("não oferece o número do balcão para escolher", async () => {
+    // Escolher aquele numero faria a reserva nova nascer no telefone da
+    // recepcao OUTRA VEZ — o erro que esta tela veio impedir.
+    await telefoneDeBalcao();
+    await marcarOBalcao();
+
+    const achados = await achadosDa("toca");
+
+    expect(achados.map((cliente) => cliente.telefone)).not.toContain(BALCAO);
+  });
+
+  it("avisa quando o nome só existe dentro do número do balcão", async () => {
+    // O caso do "Miguel" em producao: uma reserva lancada no numero da casa
+    // e nenhum telefone proprio. Sumir calado faria a recepcao achar que o
+    // sistema perdeu o cliente.
+    await telefoneDeBalcao();
+    await marcarOBalcao();
+
+    const resultado = await procurarClientesConhecidos("prestare");
+
+    expect(resultado.clientes).toHaveLength(0);
+    expect(resultado.soNoTelefoneDeBalcao).toContain("Prestare");
+  });
+
+  it("NÃO avisa quando a pessoa também tem telefone próprio", async () => {
+    // Aqui a recepcao ja tem o que escolher: o aviso seria ruido.
+    await telefoneDeBalcao();
+    await reserva(DO_RAFAEL, "Rafael Passos");
+    await marcarOBalcao();
+
+    const resultado = await procurarClientesConhecidos("rafael");
+
+    expect(resultado.clientes.map((cliente) => cliente.telefone)).toEqual([
+      DO_RAFAEL,
+    ]);
+    expect(resultado.soNoTelefoneDeBalcao).toHaveLength(0);
+  });
+
+  it("os outros telefones continuam aparecendo normalmente", async () => {
+    await telefoneDeBalcao();
+    await reserva(DA_CARLA, "Carla Ornelas");
+    await marcarOBalcao();
+
+    const achados = await achadosDa("carla");
+
+    expect(achados.map((cliente) => cliente.telefone)).toContain(DA_CARLA);
+  });
+
+  it("desmarcar devolve o número à lista", async () => {
+    await telefoneDeBalcao();
+    await marcarOBalcao();
+    expect(await achadosDa("toca")).toHaveLength(0);
+
+    await desmarcarTelefoneDeBalcao(BALCAO);
+
+    expect((await achadosDa("toca")).map((cliente) => cliente.telefone)).toContain(
+      BALCAO,
+    );
   });
 });
 
@@ -259,7 +342,7 @@ describe("não junta demais", () => {
     await reserva(DO_RAFAEL, "Rafael Passos");
     await reserva(DA_CARLA, "Carla Passos");
 
-    const achados = await procurarClientesConhecidos("passos");
+    const achados = await achadosDa("passos");
     const dosDois = achados.filter((cliente) =>
       [DO_RAFAEL, DA_CARLA].includes(cliente.telefone),
     );
