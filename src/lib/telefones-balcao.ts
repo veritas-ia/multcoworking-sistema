@@ -38,7 +38,11 @@ import { normalizarTelefone } from "./telefone";
  * olha, pede o numero na proxima vez e a lista para de crescer.
  */
 export type PessoaNoBalcao = {
+  /** O cadastro dela, para a tela poder vincular a uma empresa daqui mesmo. */
+  clienteId: string;
   nome: string;
+  /** A empresa em que ela trabalha, quando ja foi dito. */
+  empresa: { id: string; nome: string } | null;
   /** TODAS as reservas, inclusive canceladas: elas estao nesse numero. */
   reservas: number;
   /**
@@ -104,6 +108,8 @@ export async function listarTelefonesDeBalcao(): Promise<TelefoneDeBalcao[]> {
       duracaoMinutos: true,
       status: true,
       inicio: true,
+      clienteId: true,
+      cliente: { select: { empresa: { select: { id: true, nome: true } } } },
     },
     orderBy: { inicio: "asc" },
   });
@@ -127,6 +133,8 @@ export async function listarTelefonesDeBalcao(): Promise<TelefoneDeBalcao[]> {
       const atual = porPessoa.get(chave);
 
       porPessoa.set(chave, {
+        clienteId: reserva.clienteId,
+        empresa: reserva.cliente.empresa,
         // Fica o primeiro nome visto, e a lista vem ordenada por inicio.
         nome: atual?.nome ?? reserva.nomeCliente,
         reservas: (atual?.reservas ?? 0) + 1,

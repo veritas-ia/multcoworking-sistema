@@ -1298,3 +1298,19 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
   — ele não é de ninguém — e deve ser removido no painel.
 - **O cancelamento dentro de 24h com 50% + link do Pix**: pedido do dono, ainda não
   planejado.
+
+### O vínculo com a empresa fica onde a equipe está olhando (11/11/2026)
+- **Pergunta do dono, olhando a tela dos telefones do balcão:** *"como que eu incluo o
+  Miguel na empresa tal, o Matheus Toca na empresa Toca?"* O seletor existia só na busca
+  do controle de horas — outra tela.
+- **O seletor foi para as duas listas.** É olhando os cinco nomes presos no número do
+  balcão que a equipe percebe que o Miguel e o Matheus são da Toca; mandá-la trocar de
+  tela para arrumar seria pedir que desistisse.
+- **Dúvida que vale ficar registrada:** *"eles reservaram sem ter colocado o telefone?"*
+  **Não.** O telefone é obrigatório e as 18 reservas têm um — todas com o
+  **(14) 99604-0233**, o da recepção. Ninguém reserva sem telefone; o que houve foi a
+  recepção digitar o número da casa por não ter o do cliente.
+- **DESMARCAR não apaga nada** — nem reserva, nem cadastro, nem hora. Mas também **não
+  junta de volta**, e tem um efeito ruim: o número volta a aceitar vínculo, e a próxima
+  reserva lançada nele cria mais um cadastro e prende o número a ele. Para um número que
+  é da casa mesmo, **a marcação deve ficar**.

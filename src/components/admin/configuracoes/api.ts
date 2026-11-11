@@ -493,6 +493,8 @@ export function moverProfissao(
 // -----------------------------------------------------------------------------
 
 export type PessoaNoBalcao = {
+  clienteId: string;
+  empresa: { id: string; nome: string } | null;
   nome: string;
   reservas: number;
   horas: number;
@@ -599,5 +601,22 @@ export function separarTelefone(
   return pedir("/api/admin/cadastro-clientes", {
     method: "POST",
     body: JSON.stringify({ acao: "separar", telefone, nome }),
+  });
+}
+
+/**
+ * Diz a que empresa esta pessoa pertence.
+ *
+ * O cadastro de cliente é de PESSOA: o Matheus e o Vinícius são dois, e
+ * juntá-los apagaria quem reservou o quê. Quem junta gente da mesma empresa
+ * é isto — e é o que faz a fatura da Toca cobrir os quatro.
+ */
+export function vincularClienteAEmpresa(
+  id: string,
+  empresaId: string | null,
+): Promise<{ mensagem: string }> {
+  return pedir("/api/admin/cadastro-clientes", {
+    method: "POST",
+    body: JSON.stringify({ acao: "empresa", id, empresaId }),
   });
 }

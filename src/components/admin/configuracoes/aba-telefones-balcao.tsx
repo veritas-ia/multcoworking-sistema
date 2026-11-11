@@ -9,9 +9,12 @@ import { Campo } from "@/components/ui/campo";
 import { formatarEnquantoDigita, telefoneVisivel } from "@/lib/telefone";
 
 import {
+  buscarEmpresas,
   buscarTelefonesDeBalcao,
   desmarcarTelefoneDeBalcao,
   marcarTelefoneDeBalcao,
+  vincularClienteAEmpresa,
+  type EmpresaDoPainel,
   type PessoaNoBalcao,
   type TelefoneDeBalcao,
 } from "./api";
@@ -42,6 +45,8 @@ export function AbaDeTelefonesDeBalcao() {
   const [novoTelefone, setNovoTelefone] = useState("");
   const [novoMotivo, setNovoMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
+  /** As empresas mensalistas, para vincular cada pessoa daqui mesmo. */
+  const [empresas, setEmpresas] = useState<EmpresaDoPainel[]>([]);
 
   const carregar = useCallback(async (sinal?: AbortSignal) => {
     setErroAoCarregar(null);
@@ -62,6 +67,22 @@ export function AbaDeTelefonesDeBalcao() {
     void carregar(controle.signal);
     return () => controle.abort();
   }, [carregar]);
+
+  useEffect(() => {
+    const controle = new AbortController();
+
+    buscarEmpresas(controle.signal)
+      .then((resposta) => {
+        if (!controle.signal.aborted) {
+          setEmpresas(resposta.empresas.filter((empresa) => empresa.ativa));
+        }
+      })
+      .catch(() => {
+        // Sem a lista, a tela continua mostrando quem está preso no número.
+      });
+
+    return () => controle.abort();
+  }, []);
 
   async function comAviso(acao: () => Promise<unknown>, padrao: string): Promise<void> {
     setSalvando(true);
@@ -136,7 +157,12 @@ export function AbaDeTelefonesDeBalcao() {
                     cuja reserva saiu do número da casa e que ainda não tem
                     telefone próprio no sistema. */}
                 {item.pessoas.length > 0 ? (
-                  <PessoasDoNumero pessoas={item.pessoas} />
+                  <PessoasDoNumero
+                    pessoas={item.pessoas}
+                    empresas={empresas}
+                    salvando={salvando}
+                    comAviso={comAviso}
+                  />
                 ) : null}
               </li>
             ))}
@@ -230,14 +256,26 @@ export function AbaDeTelefonesDeBalcao() {
  * saiu do número da casa e que ainda não tem telefone próprio no sistema. A
  * equipe olha, pede o número na próxima vez, e a lista para de crescer.
  */
-function PessoasDoNumero({ pessoas }: { pessoas: PessoaNoBalcao[] }) {
+function PessoasDoNumero({
+  pessoas,
+  empresas,
+  salvando,
+  comAviso,
+}: {
+  pessoas: PessoaNoBalcao[];
+  empresas: EmpresaDoPainel[];
+  salvando: boolean;
+  comAviso: (acao: () => Promise<unknown>, padrao: string) => Promise<void>;
+}) {
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-3">
       <h3 className="text-sm font-bold text-text-primary">
         Clientes com reserva neste número
       </h3>
       <p className="mt-1 text-sm leading-relaxed text-text-secondary">
-        Falta o telefone de cada um. Peça na próxima vez que atender.
+        Falta o telefone de cada um. Peça na próxima vez que atender — e, se
+        a pessoa for de uma empresa mensalista, diga qual aqui: as horas dela
+        passam a entrar na fatura da empresa.
       </p>
 
       <ul className="mt-3 flex flex-col gap-1.5">
@@ -247,10 +285,43 @@ function PessoasDoNumero({ pessoas }: { pessoas: PessoaNoBalcao[] }) {
             className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-border pb-1.5 last:border-b-0 last:pb-0"
           >
             <span className="font-semibold text-text-primary">{pessoa.nome}</span>
-            <span className="text-sm tabular-nums text-text-secondary">
-              {horasPorExtenso(pessoa.horas)} · {pessoa.reservas}{" "}
-              {pessoa.reservas === 1 ? "reserva" : "reservas"} · última em{" "}
-              {emDiaEMes(pessoa.ultima)}
+
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-sm tabular-nums text-text-secondary">
+                {horasPorExtenso(pessoa.horas)} · {pessoa.reservas}{" "}
+                {pessoa.reservas === 1 ? "reserva" : "reservas"} · última em{" "}
+                {emDiaEMes(pessoa.ultima)}
+              </span>
+
+              {/* VINCULAR À EMPRESA AQUI MESMO.
+                  É olhando esta lista que a equipe percebe que o Miguel e o
+                  Matheus são da Toca. Mandá-la trocar de tela para arrumar
+                  seria pedir que desistisse. */}
+              {empresas.length > 0 ? (
+                <select
+                  value={pessoa.empresa?.id ?? ""}
+                  disabled={salvando}
+                  aria-label={`Empresa de ${pessoa.nome}`}
+                  onChange={(evento) =>
+                    void comAviso(
+                      () =>
+                        vincularClienteAEmpresa(
+                          pessoa.clienteId,
+                          evento.target.value || null,
+                        ),
+                      "Não foi possível vincular à empresa.",
+                    )
+                  }
+                  className="min-h-9 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+                >
+                  <option value="">Sem empresa</option>
+                  {empresas.map((empresa) => (
+                    <option key={empresa.id} value={empresa.id}>
+                      {empresa.nome}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
             </span>
           </li>
         ))}
