@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { FaixaDePrevia } from "@/components/ui/faixa-de-previa";
 import { DESCRICAO_DO_SITE, metadadosPublicos } from "@/lib/metadados";
 
 import "./globals.css";
@@ -43,7 +44,13 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
-      <body className="antialiased">{children}</body>
+      {/* A faixa da previa fica ANTES de tudo, no layout raiz, para valer
+          tambem no painel: e la que o acidente de lancar reserva no sistema
+          errado aconteceria. Em producao ela nao desenha nada. */}
+      <body className="antialiased">
+        <FaixaDePrevia />
+        {children}
+      </body>
     </html>
   );
 }

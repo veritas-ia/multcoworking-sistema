@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+import { ehPrevia } from "@/lib/ambiente";
 import { enderecoDoSite } from "@/lib/marca";
 
 /**
@@ -22,6 +23,15 @@ import { enderecoDoSite } from "@/lib/marca";
 export const dynamic = "force-dynamic";
 
 export default function robots(): MetadataRoute.Robots {
+  // A PREVIA INTEIRA fica de fora, e nao so o painel: sao duas copias do
+  // mesmo site, e no Google o cliente abriria a que nao vale.
+  if (ehPrevia()) {
+    return {
+      rules: { userAgent: "*", disallow: "/" },
+      host: enderecoDoSite(),
+    };
+  }
+
   return {
     rules: {
       userAgent: "*",

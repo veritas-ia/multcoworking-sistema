@@ -11,7 +11,20 @@
  */
 import type { Metadata } from "next";
 
+import { ehPrevia } from "@/lib/ambiente";
 import { NOME_DA_MARCA, urlDoSite } from "@/lib/marca";
+
+/**
+ * O titulo que aparece na ABA do navegador.
+ *
+ * Na previa ele vem com "PRÉVIA ·" na frente, e isso nao e enfeite: o
+ * acidente que se quer evitar e a pessoa com as duas abas abertas lancando
+ * reserva na errada, e a aba e justamente onde a faixa da tela nao aparece.
+ */
+function tituloDaPagina(titulo: string): string {
+  const completo = `${titulo} | ${NOME_DA_MARCA}`;
+  return ehPrevia() ? `PRÉVIA · ${completo}` : completo;
+}
 
 export const DESCRICAO_DO_SITE =
   "Reserve a Sala CI, a Sala de Reunião ou a Sala Container em poucos toques.";
@@ -31,14 +44,19 @@ export function metadadosPublicos(entrada: {
   /** Falso na area pessoal do cliente: nao ha por que ela estar no Google. */
   indexar: boolean;
 }): Metadata {
-  const titulo = `${entrada.titulo} | ${NOME_DA_MARCA}`;
+  const titulo = tituloDaPagina(entrada.titulo);
+
+  // A PREVIA NUNCA E INDEXADA, nem nas paginas publicas. Duas versoes do
+  // mesmo site no Google confundiriam o cliente, que acabaria reservando no
+  // sistema que nao vale.
+  const indexar = entrada.indexar && !ehPrevia();
 
   return {
     metadataBase: urlDoSite(),
     title: titulo,
     description: entrada.descricao,
     applicationName: NOME_DA_MARCA,
-    ...(entrada.indexar ? {} : { robots: { index: false, follow: false } }),
+    ...(indexar ? {} : { robots: { index: false, follow: false } }),
     openGraph: {
       type: "website",
       locale: "pt_BR",
@@ -59,7 +77,7 @@ export function metadadosPublicos(entrada: {
 export function metadadosDoPainel(titulo: string): Metadata {
   return {
     metadataBase: urlDoSite(),
-    title: `${titulo} | ${NOME_DA_MARCA}`,
+    title: tituloDaPagina(titulo),
     robots: { index: false, follow: false },
   };
 }

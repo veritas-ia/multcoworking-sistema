@@ -608,6 +608,33 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Há teste que **desbloqueia e confirma que a reserva passa na hora** — é o dia em que o
   contrato acabar.
 
+### Versão 2.0 construída numa PRÉVIA (11/11/2026)
+- **Decisão do dono:** o financeiro e o empório nascem numa **cópia do sistema**, que
+  ele olha e aprova antes de qualquer coisa ir para o original. *"A gente posta no
+  original quando ele aprovar."*
+- **Branch `previa`** no mesmo repositório, e um segundo app no EasyPanel apontando
+  para ela. Aprovado, a branch entra na `main` e vai pelo deploy de sempre.
+- **O PERIGO é a prévia ser IDÊNTICA.** Com as duas abas abertas, alguém lança a
+  reserva de um cliente na prévia, ela nunca chega na agenda de verdade, e o cliente
+  aparece no dia sem sala. Três avisos impedem isso, todos ligados por `AMBIENTE="previa"`:
+  faixa preta em toda página (pública e do painel), **"PRÉVIA ·"** na frente do título
+  da aba — a barra de abas é onde a faixa não aparece — e o site inteiro fora do Google.
+- **Esquecer a variável NÃO DÁ ERRO:** a prévia sobe funcionando, só que
+  indistinguível do sistema real. Por isso há teste para os três avisos, e para o valor
+  errado cair no lado seguro (qualquer coisa que não seja "previa" é produção).
+- **Cinco travas, cada uma por um motivo diferente** (ver `docs/previa.md`):
+  - **banco próprio**, cópia de produção, em serviço separado — nenhum caminho leva a
+    prévia a escrever na agenda real;
+  - **`CRON_ATIVO="false"`**: os telefones na cópia são os **reais**, e as rotinas
+    mandariam lembrete e convite de avaliação para os clientes de verdade;
+  - **`EVOLUTION_*` vazias**: segunda camada da mesma proteção, pelo modo simulado;
+  - **`CLOUDINARY_*` vazias** — a que quase passou batido: com a mesma credencial,
+    apagar uma foto na prévia **apagaria o arquivo de verdade** e ela sumiria do site
+    real. Vazias, as fotos existentes continuam aparecendo;
+  - **`ADMIN_SESSAO_SEGREDO` diferente**: o login de um não vale no outro.
+- **A cópia dos dados é de produção**, e não inventada (decisão do dono): o dono
+  reconhece os próprios clientes e a demonstração convence. Fica atrás de login.
+
 ### Ao acrescentar tabela de cadastro nova
 - `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
   tabelas** (salas, horários, configurações, templates e profissões). Tabela de cadastro
