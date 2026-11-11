@@ -24,6 +24,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  definirEmpresaDoCliente,
   juntarClientes,
   ligarOuDesligarCliente,
   listarClientes,
@@ -124,6 +125,7 @@ async function limpar(): Promise<void> {
   await bancoDeTeste.cliente.deleteMany({
     where: { reservas: { none: {} }, telefones: { none: {} } },
   });
+  await bancoDeTeste.empresa.deleteMany({ where: { nome: { startsWith: PREFIXO } } });
   proxima = 8;
 }
 
@@ -410,5 +412,111 @@ describe("o banco é quem garante", () => {
     });
 
     expect(quantos).toBe(2);
+  });
+});
+
+describe("vincular o cliente a uma EMPRESA", () => {
+  /**
+   * O caso real: o dono procurou "Toca" no painel e achou QUATRO cadastros —
+   * Matheus Vitullo, Toca, Vinicius e Matheus Toca — e perguntou por que não
+   * estavam juntos. Não estavam porque **não são a mesma pessoa**. Juntar
+   * como cliente apagaria quem reservou o quê. Quem junta gente da mesma
+   * empresa é a EMPRESA.
+   */
+  async function empresaDeTeste(nome = `${PREFIXO}Toca Imobiliária`) {
+    return bancoDeTeste.empresa.create({ data: { nome }, select: { id: true } });
+  }
+
+  it("ligar à empresa traz as reservas PASSADAS junto", async () => {
+    // O vínculo é lido na hora de montar o documento, então não é preciso
+    // reescrever reserva nenhuma.
+    await reservaDe(UM, `${PREFIXO}Matheus`, salaId, 2);
+    const empresa = await empresaDeTeste();
+    const cadastro = await cadastroDe(UM);
+
+    const feito = await definirEmpresaDoCliente(cadastro!.clienteId, empresa.id);
+    expect(feito.ok).toBe(true);
+
+    const quantas = await bancoDeTeste.reserva.count({
+      where: { cliente: { empresaId: empresa.id } },
+    });
+    expect(quantas).toBe(1);
+  });
+
+  it("junta PESSOAS DIFERENTES sob a mesma empresa", async () => {
+    // É o que o dono queria: Matheus e Vinícius continuam dois clientes, mas
+    // a fatura é uma só.
+    await reservaDe(UM, `${PREFIXO}Matheus`, salaId, 2);
+    await reservaDe(OUTRO, `${PREFIXO}Vinicius`, salaContainer, 3);
+
+    const empresa = await empresaDeTeste();
+    for (const telefone of [UM, OUTRO]) {
+      const cadastro = await cadastroDe(telefone);
+      await definirEmpresaDoCliente(cadastro!.clienteId, empresa.id);
+    }
+
+    // Continuam DOIS cadastros — ninguém foi fundido.
+    const clientes = await bancoDeTeste.cliente.count({
+      where: { empresaId: empresa.id },
+    });
+    expect(clientes).toBe(2);
+
+    // Mas as reservas das duas pessoas entram na mesma empresa.
+    const reservas = await bancoDeTeste.reserva.count({
+      where: { cliente: { empresaId: empresa.id } },
+    });
+    expect(reservas).toBe(2);
+  });
+
+  it("desligar da empresa NÃO apaga nada", async () => {
+    const reservaId = await reservaDe(UM, `${PREFIXO}Matheus`, salaId, 2);
+    const empresa = await empresaDeTeste();
+    const cadastro = await cadastroDe(UM);
+
+    await definirEmpresaDoCliente(cadastro!.clienteId, empresa.id);
+    const antes = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: reservaId },
+    });
+
+    await definirEmpresaDoCliente(cadastro!.clienteId, null);
+
+    const depois = await bancoDeTeste.reserva.findUniqueOrThrow({
+      where: { id: reservaId },
+    });
+
+    // A linha da reserva fica intacta: o vínculo é do cliente, não dela.
+    expect(depois).toEqual(antes);
+    expect(
+      await bancoDeTeste.reserva.count({
+        where: { cliente: { empresaId: empresa.id } },
+      }),
+    ).toBe(0);
+  });
+
+  it("recusa empresa desligada", async () => {
+    // Vincular alguém a uma empresa que saiu do coworking poria as horas
+    // dele numa fatura que ninguém vai emitir.
+    await reservaDe(UM, `${PREFIXO}Matheus`);
+    const empresa = await empresaDeTeste();
+    await bancoDeTeste.empresa.update({
+      where: { id: empresa.id },
+      data: { ativa: false },
+    });
+
+    const cadastro = await cadastroDe(UM);
+    const feito = await definirEmpresaDoCliente(cadastro!.clienteId, empresa.id);
+
+    expect(feito.ok).toBe(false);
+    expect(feito.ok === false && feito.falha.codigo).toBe("EMPRESA_DESLIGADA");
+  });
+
+  it("recusa empresa que não existe", async () => {
+    await reservaDe(UM, `${PREFIXO}Matheus`);
+    const cadastro = await cadastroDe(UM);
+
+    const feito = await definirEmpresaDoCliente(cadastro!.clienteId, "nao-existe");
+
+    expect(feito.ok).toBe(false);
+    expect(feito.ok === false && feito.falha.codigo).toBe("EMPRESA_NAO_ENCONTRADA");
   });
 });

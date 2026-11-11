@@ -271,8 +271,10 @@ model Empresa {
   criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
-  telefones TelefoneDaEmpresa[]
-  reservas  Reserva[]
+  telefones      TelefoneDaEmpresa[]
+  reservas       Reserva[]
+  clientes       Cliente[]
+  demonstrativos Demonstrativo[]
 
   @@map("empresas")
 }
@@ -316,6 +318,21 @@ model Cliente {
   criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
+  /// A EMPRESA em que esta pessoa trabalha.
+  ///
+  /// O cadastro de cliente e de PESSOA: o Matheus e o Vinicius sao dois, e
+  /// juntar os dois seria dizer que sao a mesma pessoa. Quem junta gente da
+  /// mesma empresa e este campo.
+  ///
+  /// Fica no CLIENTE, e nao no telefone (como era ate 11/11/2026), por dois
+  /// motivos: o vinculo por telefone nao alcanca quem nasceu do telefone do
+  /// balcao e nao tem numero proprio, e a equipe pensa em "o Matheus e da
+  /// Toca", nao em "este numero e da Toca".
+  ///
+  /// Nulo e normal: e quem nao e de empresa nenhuma.
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
   /// Preco por hora COMBINADO com este cliente, quando ha um.
   ///
   /// A Toca paga R$ 30 na sala que custa R$ 40 na tabela. O valor congelado
@@ -329,6 +346,7 @@ model Cliente {
   demonstrativos Demonstrativo[]
 
   @@index([nome])
+  @@index([empresaId])
   @@map("clientes")
 }
 
@@ -396,9 +414,15 @@ model TelefoneDeBalcao {
 /// documento que o cliente recebeu continua batendo com o que foi enviado.
 /// Mesma regra do valor congelado na reserva.
 model Demonstrativo {
-  id        String  @id @default(uuid(7))
-  clienteId String  @map("cliente_id")
-  cliente   Cliente @relation(fields: [clienteId], references: [id])
+  id String @id @default(uuid(7))
+
+  /// UM DOS DOIS. O documento e de uma PESSOA ou de uma EMPRESA inteira — o
+  /// da Toca cobre o Matheus, o Vinicius e todo mundo que reservou no nome
+  /// dela. Um documento por pessoa obrigaria a gestao a somar quatro a mao.
+  clienteId String?  @map("cliente_id")
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   /// O periodo coberto. NAO e mes fechado: o ciclo da Toca vai de 10/09 a
   /// 10/10, e o anterior ia de 12/08 a 10/09.
@@ -410,8 +434,11 @@ model Demonstrativo {
   /// Total de horas do periodo, somado pelo sistema.
   horas     Decimal @db.Decimal(10, 2)
 
-  /// A tabela de horas, como estava na emissao:
-  /// [{ "dia": "2026-09-11", "sala": "Sala Privativa", "horas": 2.5 }]
+  /// A tabela de horas, como estava na emissao. Guarda tambem QUEM reservou,
+  /// porque num documento de empresa o cliente quer saber de quem foram as
+  /// horas que estao sendo cobradas dele:
+  /// [{ "dia": "2026-09-11", "sala": "Sala Privativa", "horas": 2.5,
+  ///    "pessoa": "Matheus Vitullo" }]
   itens Json
 
   /// As linhas que a gestao acrescenta a mao — posicoes, emporio, impressoes:
@@ -430,6 +457,7 @@ model Demonstrativo {
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
   @@index([clienteId, de])
+  @@index([empresaId, de])
   @@map("demonstrativos")
 }
 

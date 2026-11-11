@@ -4,6 +4,7 @@ import { pedir } from "@/components/admin/configuracoes/api";
 export type ItemDoDemonstrativo = {
   dia: string;
   sala: string;
+  pessoa: string;
   inicio: string;
   fim: string;
   horas: number;
@@ -13,8 +14,10 @@ export type LinhaExtra = { descricao: string; valor: string };
 
 export type Demonstrativo = {
   id: string | null;
-  clienteId: string;
+  clienteId: string | null;
+  empresaId: string | null;
   clienteNome: string;
+  porPessoa: { nome: string; horas: number }[];
   de: string;
   ate: string;
   valorHora: string;
@@ -45,14 +48,23 @@ export type DemonstrativoNaLista = {
  * mexe no período e no preço à vontade antes de salvar.
  */
 export function previsualizar(
-  entrada: { clienteId: string; de: string; ate: string; valorHora?: string },
+  entrada: {
+    clienteId?: string | null;
+    empresaId?: string | null;
+    de: string;
+    ate: string;
+    valorHora?: string;
+  },
   sinal?: AbortSignal,
 ): Promise<{ demonstrativo: Demonstrativo }> {
-  const busca = new URLSearchParams({
-    clienteId: entrada.clienteId,
-    de: entrada.de,
-    ate: entrada.ate,
-  });
+  const busca = new URLSearchParams({ de: entrada.de, ate: entrada.ate });
+
+  if (entrada.clienteId) {
+    busca.set("clienteId", entrada.clienteId);
+  }
+  if (entrada.empresaId) {
+    busca.set("empresaId", entrada.empresaId);
+  }
 
   if (entrada.valorHora) {
     busca.set("valorHora", entrada.valorHora);
@@ -62,16 +74,25 @@ export function previsualizar(
 }
 
 export function listarEmitidos(
-  clienteId?: string,
+  dono?: { clienteId?: string | null; empresaId?: string | null },
   sinal?: AbortSignal,
 ): Promise<{ emitidos: DemonstrativoNaLista[] }> {
-  const busca = new URLSearchParams(clienteId ? { clienteId } : {});
+  const busca = new URLSearchParams();
+
+  if (dono?.clienteId) {
+    busca.set("clienteId", dono.clienteId);
+  }
+  if (dono?.empresaId) {
+    busca.set("empresaId", dono.empresaId);
+  }
+
   return pedir(`/api/admin/demonstrativos?${busca}`, { signal: sinal });
 }
 
 export function salvarDemonstrativo(entrada: {
   id?: string | null;
-  clienteId: string;
+  clienteId?: string | null;
+  empresaId?: string | null;
   de: string;
   ate: string;
   valorHora: string;

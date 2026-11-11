@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { procurarClientes, type ClienteConhecido } from "@/components/admin/agenda/api";
 import {
+  buscarEmpresas,
   buscarTemplates,
   salvarTemplate,
+  type EmpresaDoPainel,
   type TemplateNaTela,
 } from "@/components/admin/configuracoes/api";
 import { ErroDaApi } from "@/components/reserva/api";
@@ -14,6 +16,7 @@ import { Botao } from "@/components/ui/botao";
 import { Campo } from "@/components/ui/campo";
 import { telefoneVisivel } from "@/lib/telefone";
 
+import { definirEmpresaDoCliente } from "./acoes";
 import {
   enderecoDoPdf,
   enviarPeloWhatsapp,
@@ -65,6 +68,16 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
   const [procurado, setProcurado] = useState("");
   const [achados, setAchados] = useState<ClienteConhecido[]>([]);
   const [cliente, setCliente] = useState<ClienteConhecido | null>(null);
+  /** As empresas mensalistas, para o documento da empresa inteira. */
+  const [empresas, setEmpresas] = useState<EmpresaDoPainel[]>([]);
+  const [empresa, setEmpresa] = useState<EmpresaDoPainel | null>(null);
+
+  /** De quem é o documento: uma pessoa ou a empresa inteira. */
+  const dono = empresa
+    ? { empresaId: empresa.id, nome: empresa.nome }
+    : cliente
+      ? { clienteId: cliente.id, nome: cliente.nome }
+      : null;
 
   const [de, setDe] = useState("");
   const [ate, setAte] = useState(hoje);
@@ -83,6 +96,22 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [recado, setRecado] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+
+  useEffect(() => {
+    const controle = new AbortController();
+
+    buscarEmpresas(controle.signal)
+      .then((resposta) => {
+        if (!controle.signal.aborted) {
+          setEmpresas(resposta.empresas.filter((e) => e.ativa));
+        }
+      })
+      .catch(() => {
+        // Sem a lista, a tela ainda serve para o documento de uma pessoa.
+      });
+
+    return () => controle.abort();
+  }, []);
 
   // --- o texto do WhatsApp, que e o mesmo de Configuracoes -> Mensagens ------
   useEffect(() => {
@@ -132,9 +161,12 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
     };
   }, [procurado]);
 
-  const carregarEmitidos = useCallback(async (clienteId?: string) => {
+  const carregarEmitidos = useCallback(async (de?: {
+    clienteId?: string;
+    empresaId?: string;
+  }) => {
     try {
-      const resposta = await listarEmitidos(clienteId);
+      const resposta = await listarEmitidos(de);
       setEmitidos(resposta.emitidos);
     } catch {
       // Lista vazia não impede emitir um novo.
@@ -147,7 +179,12 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
 
   /** Refaz a pré-visualização sempre que período ou preço mudam. */
   const atualizarPrevia = useCallback(
-    async (quem: ClienteConhecido, inicio: string, fim: string, preco: string) => {
+    async (
+      quem: { clienteId?: string; empresaId?: string },
+      inicio: string,
+      fim: string,
+      preco: string,
+    ) => {
       if (!inicio || !fim) {
         return;
       }
@@ -156,7 +193,8 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
 
       try {
         const resposta = await previsualizar({
-          clienteId: quem.id,
+          clienteId: quem.clienteId,
+          empresaId: quem.empresaId,
           de: inicio,
           ate: fim,
           valorHora: preco || undefined,
@@ -175,21 +213,38 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
   );
 
   useEffect(() => {
-    if (cliente && de && ate) {
-      void atualizarPrevia(cliente, de, ate, valorHora);
+    if (dono && de && ate) {
+      void atualizarPrevia(dono, de, ate, valorHora);
     }
-  }, [cliente, de, ate, valorHora, atualizarPrevia]);
+    // "dono" é derivado de cliente e empresa; depender deles evita refazer a
+    // consulta a cada renderização.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cliente, empresa, de, ate, valorHora, atualizarPrevia]);
 
-  function escolher(quem: ClienteConhecido): void {
-    setCliente(quem);
-    setProcurado("");
-    setAchados([]);
+  function limparEscolha(): void {
     setSalvo(null);
     setPrevia(null);
     setValorHora("");
     setLinhas([]);
     setTotalAjustado("");
-    void carregarEmitidos(quem.id);
+  }
+
+  function escolherEmpresa(qual: EmpresaDoPainel | null): void {
+    setEmpresa(qual);
+    setCliente(null);
+    setProcurado("");
+    setAchados([]);
+    limparEscolha();
+    void carregarEmitidos(qual ? { empresaId: qual.id } : undefined);
+  }
+
+  function escolher(quem: ClienteConhecido): void {
+    setCliente(quem);
+    setEmpresa(null);
+    setProcurado("");
+    setAchados([]);
+    limparEscolha();
+    void carregarEmitidos({ clienteId: quem.id });
   }
 
   async function comAviso(acao: () => Promise<string | void>, padrao: string) {
@@ -222,7 +277,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
     ? Math.round(Number(totalAjustado.replace(",", ".")) * 100)
     : totalCalculado;
 
-  const podeSalvar = Boolean(cliente && de && ate && valorHora && !ocupado);
+  const podeSalvar = Boolean(dono && de && ate && valorHora && !ocupado);
 
   return (
     <div className="flex flex-col gap-4">
@@ -238,51 +293,134 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
       ) : null}
 
       {/* --- 1. o cliente --------------------------------------------------- */}
-      <Secao titulo="Cliente" apoio="Procure por nome ou telefone.">
-        {cliente ? (
+      {/* DE QUEM É O DOCUMENTO.
+          A empresa vem primeiro de propósito: o demonstrativo do mensalista
+          é da EMPRESA — o da Toca cobre o Matheus, o Vinicius e todo mundo
+          que reservou no nome dela. Fazer um por pessoa obrigaria a gestão a
+          somar quatro à mão, que é o trabalho que esta tela veio tirar. */}
+      <Secao
+        titulo="De quem é o documento"
+        apoio="Uma empresa mensalista, ou uma pessoa específica."
+      >
+        {dono ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-col">
               <span className="text-base font-bold text-text-primary">
-                {cliente.nome}
+                {dono.nome}
               </span>
               <span className="text-sm text-text-secondary">
-                {cliente.telefones.length > 0
-                  ? cliente.telefones.map(telefoneVisivel).join(" · ")
-                  : "sem telefone no cadastro"}
+                {empresa
+                  ? "empresa — entram as horas de todos os funcionários"
+                  : cliente && cliente.telefones.length > 0
+                    ? cliente.telefones.map(telefoneVisivel).join(" · ")
+                    : "pessoa, sem telefone no cadastro"}
               </span>
             </div>
-            <Botao largura="conteudo" aparencia="secundario" onClick={() => setCliente(null)}>
+            <Botao
+              largura="conteudo"
+              aparencia="secundario"
+              onClick={() => {
+                setCliente(null);
+                setEmpresa(null);
+                limparEscolha();
+                void carregarEmitidos();
+              }}
+            >
               Trocar
             </Botao>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            <Campo
-              etiqueta="Procurar"
-              type="search"
-              value={procurado}
-              placeholder="Toca, Prestare…"
-              autoComplete="off"
-              onChange={(evento) => setProcurado(evento.target.value)}
-            />
-            {achados.map((quem) => (
-              <button
-                key={quem.id}
-                type="button"
-                onClick={() => escolher(quem)}
-                className="flex flex-col items-start rounded-lg border border-border bg-bg-primary p-2.5 text-left hover:border-black focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
-              >
-                <span className="text-sm font-bold text-text-primary">{quem.nome}</span>
-                <span className="text-sm text-text-secondary">
-                  {quem.reservas} {quem.reservas === 1 ? "reserva" : "reservas"}
+          <div className="flex flex-col gap-4">
+            {empresas.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-semibold text-text-primary">
+                  Empresa mensalista
                 </span>
-              </button>
-            ))}
+                <div className="flex flex-wrap gap-2">
+                  {empresas.map((qual) => (
+                    <Botao
+                      key={qual.id}
+                      largura="conteudo"
+                      aparencia="secundario"
+                      onClick={() => escolherEmpresa(qual)}
+                    >
+                      {qual.nome}
+                    </Botao>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-2">
+              <Campo
+                etiqueta="Ou procure uma pessoa"
+                type="search"
+                value={procurado}
+                placeholder="Nome ou telefone"
+                autoComplete="off"
+                onChange={(evento) => setProcurado(evento.target.value)}
+              />
+              {achados.map((quem) => (
+                <div
+                  key={quem.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg-primary p-2.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => escolher(quem)}
+                    className="flex flex-1 flex-col items-start text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+                  >
+                    <span className="text-sm font-bold text-text-primary">
+                      {quem.nome}
+                    </span>
+                    <span className="text-sm text-text-secondary">
+                      {quem.reservas} {quem.reservas === 1 ? "reserva" : "reservas"}
+                      {quem.empresa ? ` · ${quem.empresa.nome}` : ""}
+                    </span>
+                  </button>
+
+                  {/* INCLUIR NA EMPRESA, aqui mesmo.
+                      É o que junta os quatro cadastros da Toca: eles não são
+                      a mesma pessoa, então não se juntam como cliente — o que
+                      os reúne é a empresa. Dito isso uma vez, as reservas
+                      PASSADAS dele já entram na fatura dela. */}
+                  {empresas.length > 0 ? (
+                    <label className="flex items-center gap-1.5 text-sm text-text-secondary">
+                      <span className="sr-only">Empresa de {quem.nome}</span>
+                      <select
+                        value={quem.empresa?.id ?? ""}
+                        disabled={ocupado}
+                        onChange={(evento) =>
+                          void comAviso(async () => {
+                            await definirEmpresaDoCliente(
+                              quem.id,
+                              evento.target.value || null,
+                            );
+                            // Refaz a busca, para a lista mostrar o vínculo novo.
+                            const resposta = await procurarClientes(procurado);
+                            setAchados(resposta.clientes);
+                            return "Empresa do cliente atualizada.";
+                          }, "Não foi possível vincular à empresa.")
+                        }
+                        className="min-h-9 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-black"
+                      >
+                        <option value="">Sem empresa</option>
+                        {empresas.map((qual) => (
+                          <option key={qual.id} value={qual.id}>
+                            {qual.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </Secao>
 
-      {cliente ? (
+      {dono ? (
         <>
           {/* --- 2. periodo e preco ----------------------------------------- */}
           <Secao
@@ -499,7 +637,8 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                   void comAviso(async () => {
                     const resposta = await salvarDemonstrativo({
                       id: salvo?.id ?? null,
-                      clienteId: cliente.id,
+                      clienteId: cliente?.id ?? null,
+                      empresaId: empresa?.id ?? null,
                       de,
                       ate,
                       valorHora: valorHora.replace(",", "."),
@@ -515,7 +654,9 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                       lembrarPreco: true,
                     });
                     setSalvo(resposta.demonstrativo);
-                    await carregarEmitidos(cliente.id);
+                    await carregarEmitidos(
+                      empresa ? { empresaId: empresa.id } : { clienteId: cliente!.id },
+                    );
                     return "Demonstrativo salvo. Agora dá para baixar e enviar.";
                   }, "Não foi possível salvar.")
                 }
@@ -543,7 +684,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
               </p>
             ) : null}
 
-            {salvo && cliente.telefones.length > 0 ? (
+            {salvo && cliente && cliente.telefones.length > 0 ? (
               <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
                 <p className="text-sm font-semibold text-text-primary">
                   Enviar pelo WhatsApp
@@ -558,7 +699,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                       onClick={() =>
                         void comAviso(async () => {
                           const resposta = await enviarPeloWhatsapp(salvo.id!, telefone);
-                          await carregarEmitidos(cliente.id);
+                          await carregarEmitidos({ clienteId: cliente.id });
                           return resposta.mensagem;
                         }, "Não foi possível enviar pelo WhatsApp.")
                       }
@@ -570,10 +711,11 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
               </div>
             ) : null}
 
-            {salvo && cliente.telefones.length === 0 ? (
+            {salvo && (!cliente || cliente.telefones.length === 0) ? (
               <p className="mt-4 border-t border-border pt-4 text-sm text-text-secondary">
-                Este cliente não tem telefone no cadastro, então o envio pelo
-                WhatsApp não aparece. Baixe o PDF e envie por e-mail.
+                {empresa
+                  ? "Documento de empresa: baixe o PDF e envie para o e-mail do financeiro dela."
+                  : "Este cliente não tem telefone no cadastro, então o envio pelo WhatsApp não aparece. Baixe o PDF e envie por e-mail."}
               </p>
             ) : null}
           </Secao>
@@ -628,7 +770,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
               <div className="flex flex-col gap-3">
                 <pre className="whitespace-pre-wrap rounded-lg border border-border bg-bg-secondary p-3 font-sans text-sm leading-relaxed text-text-primary">
                   {previaDaMensagem(modelo?.texto ?? "", {
-                    nome: cliente.nome,
+                    nome: dono.nome,
                     periodo: de && ate ? `${emDiaMesAno(de)} a ${emDiaMesAno(ate)}` : "…",
                     horas: previa ? horasPorExtenso(previa.horas) : "…",
                     valor: comoDinheiro(totalQueVale),

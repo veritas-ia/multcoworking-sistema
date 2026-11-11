@@ -30,6 +30,8 @@ export type ItemDoDemonstrativo = {
   /** "AAAA-MM-DD", no relogio de Sao Paulo. */
   dia: string;
   sala: string;
+  /** Quem reservou. Num documento de empresa, e de quem sao aquelas horas. */
+  pessoa: string;
   inicio: string;
   fim: string;
   horas: number;
@@ -44,8 +46,14 @@ export type LinhaExtra = {
 
 export type Demonstrativo = {
   id: string | null;
-  clienteId: string;
+  /** Preenchido quando o documento e de UMA PESSOA. */
+  clienteId: string | null;
+  /** Preenchido quando o documento e de uma EMPRESA inteira. */
+  empresaId: string | null;
+  /** O nome que vai no "Para" do documento. */
   clienteNome: string;
+  /** Quem reservou, quando o documento e de uma empresa. */
+  porPessoa: { nome: string; horas: number }[];
   de: DataLocal;
   ate: DataLocal;
   valorHora: string;
@@ -113,7 +121,9 @@ const UMA_CASA = (n: number): number => Math.round(n * 100) / 100;
  * varios numeros, e o demonstrativo e um so.
  */
 export async function montarDoPeriodo(entrada: {
-  clienteId: string;
+  /** UM dos dois: o documento e de uma pessoa ou de uma empresa inteira. */
+  clienteId?: string | null;
+  empresaId?: string | null;
   de: DataLocal;
   ate: DataLocal;
   /** Sobrepoe o preco combinado, quando a gestao digita outro. */
@@ -131,21 +141,24 @@ export async function montarDoPeriodo(entrada: {
     };
   }
 
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: entrada.clienteId },
-    select: { id: true, nome: true, precoHoraAcordado: true },
-  });
+  // DE QUEM E O DOCUMENTO: de uma pessoa, ou de uma EMPRESA inteira.
+  //
+  // A empresa e o caso do mensalista: o demonstrativo da Toca cobre o
+  // Matheus, o Vinicius e todo mundo que reservou no nome dela. Fazer um
+  // documento por pessoa obrigaria a gestao a somar quatro a mao — que e
+  // exatamente o trabalho que esta tela veio tirar.
+  const alvo = await alvoDoDemonstrativo(entrada);
 
-  if (!cliente) {
+  if (!alvo) {
     return {
       ok: false,
-      falha: { motivo: "Cliente não encontrado.", codigo: "NAO_ENCONTRADO" },
+      falha: { motivo: "Cliente ou empresa não encontrado.", codigo: "NAO_ENCONTRADO" },
     };
   }
 
   const reservas = await prisma.reserva.findMany({
     where: {
-      clienteId: cliente.id,
+      ...alvo.filtro,
       status: { not: StatusReserva.CANCELADA },
       inicio: {
         gte: instanteDe(entrada.de, "00:00"),
@@ -157,6 +170,7 @@ export async function montarDoPeriodo(entrada: {
       fim: true,
       duracaoMinutos: true,
       sala: { select: { nome: true } },
+      cliente: { select: { nome: true } },
     },
     orderBy: { inicio: "asc" },
   });
@@ -164,20 +178,21 @@ export async function montarDoPeriodo(entrada: {
   const itens: ItemDoDemonstrativo[] = reservas.map((reserva) => ({
     dia: dataLocalDe(reserva.inicio),
     sala: reserva.sala.nome,
+    pessoa: reserva.cliente.nome,
     inicio: horaLocalDe(reserva.inicio),
     fim: horaLocalDe(reserva.fim),
     horas: UMA_CASA(reserva.duracaoMinutos / 60),
   }));
 
-  const valorHora =
-    entrada.valorHora ?? cliente.precoHoraAcordado?.toFixed(2) ?? "0.00";
+  const valorHora = entrada.valorHora ?? alvo.precoAcordado ?? "0.00";
 
   return {
     ok: true,
     dados: montar({
       id: null,
-      clienteId: cliente.id,
-      clienteNome: cliente.nome,
+      clienteId: alvo.clienteId,
+      empresaId: alvo.empresaId,
+      clienteNome: alvo.nome,
       de: entrada.de,
       ate: entrada.ate,
       valorHora,
@@ -190,6 +205,73 @@ export async function montarDoPeriodo(entrada: {
 }
 
 /**
+ * De quem e o documento: de uma PESSOA ou de uma EMPRESA inteira.
+ *
+ * Na empresa, entram as reservas de TODOS os clientes ligados a ela — e nao
+ * so as que foram marcadas com a empresa na hora de reservar. Em producao
+ * apenas 4 de 199 reservas tinham a empresa respondida; contar so essas
+ * deixaria a fatura da Toca com um vinte-avos do que ela usou, e o numero
+ * continuaria parecendo certo.
+ */
+async function alvoDoDemonstrativo(entrada: {
+  clienteId?: string | null;
+  empresaId?: string | null;
+}): Promise<{
+  clienteId: string | null;
+  empresaId: string | null;
+  nome: string;
+  precoAcordado: string | null;
+  filtro: { clienteId: string } | { cliente: { empresaId: string } };
+} | null> {
+  if (entrada.empresaId) {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: entrada.empresaId },
+      select: { id: true, nome: true },
+    });
+
+    if (!empresa) {
+      return null;
+    }
+
+    // O preco combinado da empresa e o do cliente que ja tem um. Se dois
+    // discordarem, vale o primeiro — e a gestao corrige na tela, que e onde
+    // ela esta olhando o documento.
+    const comPreco = await prisma.cliente.findFirst({
+      where: { empresaId: empresa.id, precoHoraAcordado: { not: null } },
+      select: { precoHoraAcordado: true },
+      orderBy: { nome: "asc" },
+    });
+
+    return {
+      clienteId: null,
+      empresaId: empresa.id,
+      nome: empresa.nome,
+      precoAcordado: comPreco?.precoHoraAcordado?.toFixed(2) ?? null,
+      filtro: { cliente: { empresaId: empresa.id } },
+    };
+  }
+
+  if (!entrada.clienteId) {
+    return null;
+  }
+
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: entrada.clienteId },
+    select: { id: true, nome: true, precoHoraAcordado: true },
+  });
+
+  return cliente
+    ? {
+        clienteId: cliente.id,
+        empresaId: null,
+        nome: cliente.nome,
+        precoAcordado: cliente.precoHoraAcordado?.toFixed(2) ?? null,
+        filtro: { clienteId: cliente.id },
+      }
+    : null;
+}
+
+/**
  * Faz TODAS as contas. E aqui que o erro da planilha morre.
  *
  * Nenhum total e digitado em lugar nenhum: as horas saem da soma dos itens, o
@@ -199,7 +281,8 @@ export async function montarDoPeriodo(entrada: {
  */
 function montar(bruto: {
   id: string | null;
-  clienteId: string;
+  clienteId: string | null;
+  empresaId: string | null;
   clienteNome: string;
   de: DataLocal;
   ate: DataLocal;
@@ -222,6 +305,19 @@ function montar(bruto: {
 
   const totalCalculadoCentavos = valorDasHorasCentavos + valorDasLinhasCentavos;
 
+  // QUEM RESERVOU. Sai dos itens congelados, e nao de uma consulta nova:
+  // assim o documento salvo e a pre-visualizacao contam a mesma coisa.
+  const porPessoa = [
+    ...bruto.itens
+      .reduce((mapa, item) => {
+        mapa.set(item.pessoa, UMA_CASA((mapa.get(item.pessoa) ?? 0) + item.horas));
+        return mapa;
+      }, new Map<string, number>())
+      .entries(),
+  ]
+    .map(([nome, horas]) => ({ nome, horas }))
+    .sort((a, b) => b.horas - a.horas);
+
   const porSala = [
     ...bruto.itens
       .reduce((mapa, item) => {
@@ -236,6 +332,7 @@ function montar(bruto: {
   return {
     ...bruto,
     horas,
+    porPessoa,
     porSala,
     valorDasHorasCentavos,
     valorDasLinhasCentavos,
@@ -260,7 +357,8 @@ function montar(bruto: {
  */
 export async function salvar(entrada: {
   id?: string | null;
-  clienteId: string;
+  clienteId?: string | null;
+  empresaId?: string | null;
   de: DataLocal;
   ate: DataLocal;
   valorHora: string;
@@ -280,6 +378,7 @@ export async function salvar(entrada: {
   const gravado = await prisma.$transaction(async (tx) => {
     const comum = {
       clienteId: dados.clienteId,
+      empresaId: dados.empresaId,
       de: new Date(`${dados.de}T00:00:00.000Z`),
       ate: new Date(`${dados.ate}T00:00:00.000Z`),
       valorHora: dados.valorHora,
@@ -293,9 +392,13 @@ export async function salvar(entrada: {
       ? await tx.demonstrativo.update({ where: { id: entrada.id }, data: comum })
       : await tx.demonstrativo.create({ data: comum });
 
+    // Guarda o preco no CLIENTE, ou em todos os clientes da empresa: no mes
+    // seguinte ele ja vem preenchido, venha o documento de quem vier.
     if (entrada.lembrarPreco) {
-      await tx.cliente.update({
-        where: { id: dados.clienteId },
+      await tx.cliente.updateMany({
+        where: dados.clienteId
+          ? { id: dados.clienteId }
+          : { empresaId: dados.empresaId! },
         data: { precoHoraAcordado: dados.valorHora },
       });
     }
@@ -310,7 +413,10 @@ export async function salvar(entrada: {
 export async function buscar(id: string): Promise<Demonstrativo | null> {
   const linha = await prisma.demonstrativo.findUnique({
     where: { id },
-    include: { cliente: { select: { nome: true } } },
+    include: {
+      cliente: { select: { nome: true } },
+      empresa: { select: { nome: true } },
+    },
   });
 
   if (!linha) {
@@ -320,7 +426,8 @@ export async function buscar(id: string): Promise<Demonstrativo | null> {
   return montar({
     id: linha.id,
     clienteId: linha.clienteId,
-    clienteNome: linha.cliente.nome,
+    empresaId: linha.empresaId,
+    clienteNome: linha.cliente?.nome ?? linha.empresa?.nome ?? "(sem dono)",
     de: linha.de.toISOString().slice(0, 10) as DataLocal,
     ate: linha.ate.toISOString().slice(0, 10) as DataLocal,
     valorHora: linha.valorHora.toFixed(2),
@@ -342,10 +449,20 @@ export type DemonstrativoNaLista = {
 };
 
 /** Os demonstrativos ja emitidos, do mais novo para o mais antigo. */
-export async function listar(clienteId?: string): Promise<DemonstrativoNaLista[]> {
+export async function listar(dono?: {
+  clienteId?: string | null;
+  empresaId?: string | null;
+}): Promise<DemonstrativoNaLista[]> {
   const linhas = await prisma.demonstrativo.findMany({
-    where: clienteId ? { clienteId } : {},
-    include: { cliente: { select: { nome: true } } },
+    where: dono?.clienteId
+      ? { clienteId: dono.clienteId }
+      : dono?.empresaId
+        ? { empresaId: dono.empresaId }
+        : {},
+    include: {
+      cliente: { select: { nome: true } },
+      empresa: { select: { nome: true } },
+    },
     orderBy: [{ de: "desc" }, { criadoEm: "desc" }],
     take: 60,
   });
@@ -358,7 +475,7 @@ export async function listar(clienteId?: string): Promise<DemonstrativoNaLista[]
 
     return {
       id: linha.id,
-      clienteNome: linha.cliente.nome,
+      clienteNome: linha.cliente?.nome ?? linha.empresa?.nome ?? "(sem dono)",
       de: linha.de.toISOString().slice(0, 10),
       ate: linha.ate.toISOString().slice(0, 10),
       horas: Number(linha.horas),

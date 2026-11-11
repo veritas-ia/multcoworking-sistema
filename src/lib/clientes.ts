@@ -54,6 +54,8 @@ export type ClienteParaEscolher = {
   reservas: number;
   /** "AAAA-MM-DD" da reserva mais recente, ou null para cadastro sem reserva. */
   ultimaReserva: string | null;
+  /** A empresa em que esta pessoa trabalha, quando ha uma. */
+  empresa: { id: string; nome: string } | null;
 };
 
 function semAcento(texto: string): string {
@@ -100,6 +102,7 @@ export async function procurarClientesCadastrados(
     select: {
       id: true,
       nome: true,
+      empresa: { select: { id: true, nome: true } },
       telefones: { select: { telefone: true }, orderBy: { criadoEm: "asc" } },
       reservas: {
         select: { nomeCliente: true, inicio: true },
@@ -144,6 +147,7 @@ export async function procurarClientesCadastrados(
       return {
         id: cliente.id,
         nome: cliente.nome,
+        empresa: cliente.empresa,
         telefones: cliente.telefones.map((ligado) => ligado.telefone),
         outrosNomes: [...nomes],
         reservas: cliente.reservas.length,

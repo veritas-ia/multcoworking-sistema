@@ -1250,3 +1250,51 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
   específico da equipe financeira da Toca receberia, e não enviar para algum número de
   algum funcionário da Toca por WhatsApp"*. Por enquanto a gestão **baixa o PDF e envia
   por e-mail à mão**. O envio automático por e-mail é o próximo passo.
+
+### O cliente pertence a uma EMPRESA (11/11/2026)
+- **O que o dono viu, depois do deploy:** procurou "Toca" no controle de horas e achou
+  **quatro cadastros** — Matheus Vitullo (30 reservas), Toca (12), Vinicius (2) e Matheus
+  Toca (1). *"Todos eles são da mesma empresa. Por que, caralhos, eles não estão já
+  juntados?"*
+- **NÃO SÃO A MESMA PESSOA.** São quatro gentes, com telefones diferentes. Juntar como
+  **cliente** apagaria quem reservou o quê — e cliente é cadastro de PESSOA.
+  Quem junta gente da mesma empresa é a **EMPRESA**.
+- **O vínculo saiu do TELEFONE e passou para o CLIENTE** (`clientes.empresa_id`). O de
+  telefone continua existindo (ainda sugere a empresa na próxima reserva), mas não
+  bastava por duas razões:
+  1. **não alcança quem não tem número próprio** — a "Toca" com 12 reservas nasceu do
+     telefone do balcão e não tem telefone nenhum;
+  2. a equipe pensa em *"o Matheus é da Toca"*, e não em *"este número é da Toca"*.
+- **O ERRO QUE EU COMETI, e que o dono achou:** eu li a planilha, vi **"Para: Toca
+  Imobiliária"** no cabeçalho — a empresa, não uma pessoa — e mesmo assim construí o
+  controle de horas **por cliente**. Para fechar o mês da Toca a gestão teria de gerar
+  quatro documentos e somar à mão, que é exatamente o trabalho que a tela veio tirar.
+- **O demonstrativo passou a aceitar EMPRESA ou pessoa.** Na empresa entram as reservas
+  de **todos os clientes ligados a ela** — e não só as que tinham a empresa respondida na
+  hora de reservar. Em produção só **4 de 199** reservas tinham empresa: contar apenas
+  essas deixaria a fatura da Toca com um vinte-avos do que ela usou, **e o número
+  continuaria parecendo certo**.
+- **O documento mostra DE QUEM foram as horas** (`porPessoa`), porque o cliente quer
+  conferir. No PDF, a coluna do horário vira "QUEM · HORA" quando há mais de uma pessoa.
+- **O botão fica na busca da própria tela**, não só em Configurações: é olhando a lista
+  dos quatro "Toca" que a equipe percebe que falta vincular, e mandá-la trocar de tela
+  para arrumar seria pedir que desistisse.
+- **Ligar à empresa traz as reservas PASSADAS junto, e desligar as tira** — sem reescrever
+  uma linha. O vínculo é lido na hora de montar o documento. Há teste comparando a linha
+  inteira da reserva antes e depois.
+- **Empresa desligada é recusada:** vincular alguém a uma empresa que saiu do coworking
+  poria as horas dele numa fatura que ninguém vai emitir.
+- **A migração preenche o que dá para saber com segurança:** primeiro a empresa que o
+  próprio cliente **já respondeu** numa reserva (é ele quem disse), depois o vínculo do
+  telefone. **Telefone de balcão fica de fora** — em produção o número do balcão estava
+  vinculado à Prestare por engano, e deixar passar poria as reservas de quatro clientes
+  diferentes na conta de uma empresa só.
+
+#### Ainda em aberto, e o dono precisa decidir
+- **186 de 199 reservas estão sem empresa.** A pergunta existe no site e no balcão, mas é
+  fácil de pular. O vínculo do cliente resolve daqui para frente; o que sobrar do passado
+  é trabalho de uma sentada no painel.
+- **O telefone do balcão está vinculado à Prestare** em `telefones_empresa`. Está errado
+  — ele não é de ninguém — e deve ser removido no painel.
+- **O cancelamento dentro de 24h com 50% + link do Pix**: pedido do dono, ainda não
+  planejado.

@@ -34,23 +34,23 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
 
   const p = requisicao.nextUrl.searchParams;
   const clienteId = p.get("clienteId");
+  const empresaId = p.get("empresaId");
   const de = p.get("de");
   const ate = p.get("ate");
 
-  if (!clienteId || !de || !ate) {
-    return NextResponse.json({ emitidos: await listar(clienteId ?? undefined) });
+  if ((!clienteId && !empresaId) || !de || !ate) {
+    return NextResponse.json({ emitidos: await listar({ clienteId, empresaId }) });
   }
 
-  const entrada = z
-    .object({ clienteId: z.string().min(1), de: DATA, ate: DATA })
-    .safeParse({ clienteId, de, ate });
+  const entrada = z.object({ de: DATA, ate: DATA }).safeParse({ de, ate });
 
   if (!entrada.success) {
     return respostaErro(400, entrada.error.issues[0]?.message ?? "Pedido inválido.");
   }
 
   const feito = await montarDoPeriodo({
-    clienteId: entrada.data.clienteId,
+    clienteId,
+    empresaId,
     de: entrada.data.de,
     ate: entrada.data.ate,
     valorHora: p.get("valorHora") ?? undefined,
@@ -64,7 +64,9 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
 const Corpo = z.object({
   /** Preenchido ao reeditar um demonstrativo ja salvo. */
   id: z.string().min(1).nullish(),
-  clienteId: z.string().min(1, "Escolha o cliente."),
+  /** UM dos dois: o documento é de uma pessoa ou de uma empresa inteira. */
+  clienteId: z.string().min(1).nullish(),
+  empresaId: z.string().min(1).nullish(),
   de: DATA,
   ate: DATA,
   valorHora: VALOR,
@@ -90,9 +92,14 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     return respostaErro(400, corpo.error.issues[0]?.message ?? "Pedido inválido.");
   }
 
+  if (!corpo.data.clienteId && !corpo.data.empresaId) {
+    return respostaErro(400, "Escolha o cliente ou a empresa.");
+  }
+
   const feito = await salvar({
     id: corpo.data.id ?? null,
-    clienteId: corpo.data.clienteId,
+    clienteId: corpo.data.clienteId ?? null,
+    empresaId: corpo.data.empresaId ?? null,
     de: corpo.data.de,
     ate: corpo.data.ate,
     valorHora: corpo.data.valorHora,

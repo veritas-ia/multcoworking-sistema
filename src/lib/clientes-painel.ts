@@ -369,3 +369,65 @@ export async function separarTelefone(
     };
   });
 }
+
+/**
+ * Diz a que EMPRESA esta pessoa pertence.
+ *
+ * O cadastro de cliente e de PESSOA: o Matheus e o Vinicius sao dois, e
+ * juntar os dois como cliente apagaria quem reservou o que. Quem junta gente
+ * da mesma empresa e isto — e e o que faz o demonstrativo da Toca cobrir os
+ * quatro funcionarios num documento so.
+ *
+ * Nulo tira a pessoa da empresa, sem apagar nada: as reservas continuam
+ * dela, so param de entrar na fatura da empresa.
+ */
+export async function definirEmpresaDoCliente(
+  clienteId: string,
+  empresaId: string | null,
+): Promise<Resultado<null>> {
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: clienteId },
+    select: { id: true },
+  });
+
+  if (!cliente) {
+    return {
+      ok: false,
+      falha: { motivo: "Cliente não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  if (empresaId) {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { ativa: true },
+    });
+
+    if (!empresa) {
+      return {
+        ok: false,
+        falha: { motivo: "Empresa não encontrada.", codigo: "EMPRESA_NAO_ENCONTRADA" },
+      };
+    }
+
+    if (!empresa.ativa) {
+      return {
+        ok: false,
+        falha: {
+          motivo: "Esta empresa está desligada. Religue antes de vincular alguém.",
+          codigo: "EMPRESA_DESLIGADA",
+        },
+      };
+    }
+  }
+
+  // NAO TOCA EM RESERVA NENHUMA: o vinculo e lido na hora de montar o
+  // documento, entao ligar a empresa traz as reservas PASSADAS junto, e
+  // desligar as tira — sem reescrever uma linha sequer.
+  await prisma.cliente.update({
+    where: { id: clienteId },
+    data: { empresaId },
+  });
+
+  return { ok: true, dados: null };
+}

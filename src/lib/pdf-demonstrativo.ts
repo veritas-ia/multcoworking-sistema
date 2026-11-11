@@ -201,7 +201,7 @@ export async function gerarPdfDoDemonstrativo(
     });
     escrever(caneta, "DIA", COL_DIA, { tamanho: 8, negrito: true, cor: SECUNDARIO });
     escrever(caneta, "SALA", COL_SALA, { tamanho: 8, negrito: true, cor: SECUNDARIO });
-    escrever(caneta, "HORÁRIO", COL_HORARIO, {
+    escrever(caneta, dados.porPessoa.length > 1 ? "QUEM · HORA" : "HORÁRIO", COL_HORARIO, {
       tamanho: 8,
       negrito: true,
       cor: SECUNDARIO,
@@ -220,9 +220,16 @@ export async function gerarPdfDoDemonstrativo(
     garantirEspaco(caneta, 18, cabecalhoDaTabela);
     escrever(caneta, emDiaMesAno(item.dia), COL_DIA);
     escrever(caneta, item.sala, COL_SALA);
-    escrever(caneta, `${item.inicio} às ${item.fim}`, COL_HORARIO, {
-      cor: SECUNDARIO,
-    });
+    escrever(
+      caneta,
+      // Num documento de empresa, quem reservou importa mais do que o
+      // horario exato: e o que o cliente confere.
+      dados.porPessoa.length > 1
+        ? `${item.pessoa} · ${item.inicio}`
+        : `${item.inicio} às ${item.fim}`,
+      COL_HORARIO,
+      { cor: SECUNDARIO },
+    );
     escreverADireita(caneta, horasPorExtenso(item.horas), COL_HORAS);
     caneta.y -= 16;
     caneta.pagina.drawLine({
@@ -255,6 +262,20 @@ export async function gerarPdfDoDemonstrativo(
       caneta,
       dados.porSala
         .map((s) => `${s.sala}: ${horasPorExtenso(s.horas)}`)
+        .join("   ·   "),
+      COL_DIA,
+      { tamanho: 9, cor: SECUNDARIO },
+    );
+  }
+
+  // QUEM RESERVOU, num documento de empresa. O cliente quer saber de quem
+  // sao as horas que estao sendo cobradas dele.
+  if (dados.porPessoa.length > 1) {
+    caneta.y -= 14;
+    escrever(
+      caneta,
+      dados.porPessoa
+        .map((p) => `${p.nome}: ${horasPorExtenso(p.horas)}`)
         .join("   ·   "),
       COL_DIA,
       { tamanho: 9, cor: SECUNDARIO },

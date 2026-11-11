@@ -146,6 +146,8 @@ export type ClienteConhecido = {
   outrosNomes: string[];
   reservas: number;
   ultimaReserva: string | null;
+  /** A empresa em que esta pessoa trabalha, quando há uma. */
+  empresa: { id: string; nome: string } | null;
 };
 
 /**

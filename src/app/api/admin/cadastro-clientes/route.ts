@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { lerCorpo, respostaErro } from "@/lib/api";
 import {
+  definirEmpresaDoCliente,
   juntarClientes,
   ligarOuDesligarCliente,
   listarClientes,
@@ -57,6 +58,12 @@ const Acao = z.discriminatedUnion("acao", [
     absorvidoId: z.string().min(1),
   }),
   z.object({
+    acao: z.literal("empresa"),
+    id: z.string().min(1),
+    /** Nulo tira a pessoa da empresa. */
+    empresaId: z.string().min(1).nullish(),
+  }),
+  z.object({
     acao: z.literal("separar"),
     telefone: z.string().min(1),
     nome: z.string().min(1, "Informe o nome do cadastro novo."),
@@ -94,6 +101,13 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     const feito = await ligarOuDesligarCliente(pedido.id, pedido.ativo);
     return feito.ok
       ? NextResponse.json({ mensagem: pedido.ativo ? "Cliente ligado." : "Cliente desligado." })
+      : respostaErro(422, feito.falha.motivo, feito.falha.codigo);
+  }
+
+  if (pedido.acao === "empresa") {
+    const feito = await definirEmpresaDoCliente(pedido.id, pedido.empresaId ?? null);
+    return feito.ok
+      ? NextResponse.json({ mensagem: "Empresa do cliente atualizada." })
       : respostaErro(422, feito.falha.motivo, feito.falha.codigo);
   }
 

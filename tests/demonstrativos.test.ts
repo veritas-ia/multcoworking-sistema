@@ -40,7 +40,13 @@ import { instanteDe } from "@/lib/tempo";
 import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
 
 const DA_TOCA = "+5511900003001";
-const TELEFONES = [DA_TOCA];
+const DO_VINICIUS = "+5511900003002";
+const DO_MATHEUS = "+5511900003003";
+const DE_FORA = "+5511900003004";
+const TELEFONES = [DA_TOCA, DO_VINICIUS, DO_MATHEUS, DE_FORA];
+
+/** Prefixo próprio, para a limpeza não encostar em empresa de fora. */
+const PREFIXO_EMPRESA = "ZZ";
 
 /** Um período fixo no passado: aqui a recepção pode lançar para trás. */
 const DE = "2026-09-10";
@@ -79,6 +85,9 @@ beforeAll(async () => {
 
 async function limpar(): Promise<void> {
   await bancoDeTeste.demonstrativo.deleteMany({
+    where: { empresa: { nome: { startsWith: PREFIXO_EMPRESA } } },
+  });
+  await bancoDeTeste.demonstrativo.deleteMany({
     where: { cliente: { telefones: { some: { telefone: { in: TELEFONES } } } } },
   });
   await bancoDeTeste.reserva.deleteMany({ where: { telefone: { in: TELEFONES } } });
@@ -87,6 +96,9 @@ async function limpar(): Promise<void> {
   });
   await bancoDeTeste.cliente.deleteMany({
     where: { reservas: { none: {} }, telefones: { none: {} } },
+  });
+  await bancoDeTeste.empresa.deleteMany({
+    where: { nome: { startsWith: PREFIXO_EMPRESA } },
   });
 }
 
@@ -98,11 +110,18 @@ afterAll(async () => {
   await bancoDeTeste.$disconnect();
 });
 
-async function reserva(dia: string, hora: string, horas: number, sala = salaPrivativa) {
+async function reserva(
+  dia: string,
+  hora: string,
+  horas: number,
+  sala = salaPrivativa,
+  telefone = DA_TOCA,
+  nome = "Toca Imobiliária",
+) {
   const criada = await criarReservaNaRecepcao({
     salaId: sala,
-    telefone: DA_TOCA,
-    nomeCliente: "Toca Imobiliária",
+    telefone,
+    nomeCliente: nome,
     profissaoId: await idDaProfissao("OUTROS"),
     inicio: instanteDe(dia, hora),
     fim: new Date(instanteDe(dia, hora).getTime() + horas * 60 * 60_000),
@@ -526,5 +545,118 @@ describe("o PDF", () => {
     expect(texto.startsWith("%PDF-")).toBe(true);
     // Mais de uma página: o contador de páginas do PDF tem de passar de 1.
     expect(salvo.dados.itens.length).toBeGreaterThan(15);
+  });
+});
+
+
+describe("o demonstrativo de uma EMPRESA inteira", () => {
+  /**
+   * O caso real: o dono procurou "Toca" no painel e achou QUATRO cadastros —
+   * Matheus Vitullo, Toca, Vinicius e Matheus Toca. Não são a mesma pessoa,
+   * são quatro gentes da mesma empresa. A fatura é da EMPRESA.
+   */
+  async function montarAToca() {
+    const empresa = await bancoDeTeste.empresa.create({
+      data: { nome: `${PREFIXO_EMPRESA} Toca Imobiliária` },
+      select: { id: true },
+    });
+
+    // Três pessoas, três telefones, todas da Toca.
+    await reserva("2026-09-11", "09:00", 2, salaPrivativa, DA_TOCA, "Matheus Vitullo");
+    await reserva("2026-09-15", "09:00", 3, salaReuniao, DO_VINICIUS, "Vinicius");
+    await reserva("2026-09-16", "09:00", 1.5, salaPrivativa, DO_MATHEUS, "Matheus Toca");
+
+    for (const telefone of [DA_TOCA, DO_VINICIUS, DO_MATHEUS]) {
+      const ligado = await bancoDeTeste.telefoneDoCliente.findUniqueOrThrow({
+        where: { telefone },
+        select: { clienteId: true },
+      });
+      await bancoDeTeste.cliente.update({
+        where: { id: ligado.clienteId },
+        data: { empresaId: empresa.id },
+      });
+    }
+
+    return empresa.id;
+  }
+
+  it("junta as horas de TODOS os funcionários num documento só", async () => {
+    const empresaId = await montarAToca();
+
+    const feito = await montarDoPeriodo({ empresaId, de: DE, ate: ATE, valorHora: "30.00" });
+
+    if (!feito.ok) throw new Error("deveria montar");
+
+    // 2 + 3 + 1,5 = 6,5 h de três pessoas diferentes.
+    expect(feito.dados.horas).toBe(6.5);
+    expect(feito.dados.itens).toHaveLength(3);
+    expect(feito.dados.clienteNome).toBe(`${PREFIXO_EMPRESA} Toca Imobiliária`);
+  });
+
+  it("mostra DE QUEM foram as horas", async () => {
+    // O cliente quer saber de quem são as horas que estão sendo cobradas.
+    const empresaId = await montarAToca();
+
+    const feito = await montarDoPeriodo({ empresaId, de: DE, ate: ATE, valorHora: "30.00" });
+    if (!feito.ok) throw new Error("deveria montar");
+
+    const porPessoa = new Map(feito.dados.porPessoa.map((p) => [p.nome, p.horas]));
+    expect(porPessoa.get("Matheus Vitullo")).toBe(2);
+    expect(porPessoa.get("Vinicius")).toBe(3);
+    expect(porPessoa.get("Matheus Toca")).toBe(1.5);
+  });
+
+  it("NÃO entra quem não é da empresa", async () => {
+    const empresaId = await montarAToca();
+    // Alguém de fora, no mesmo período.
+    await reserva("2026-09-18", "09:00", 8, salaReuniao, DE_FORA, "Pessoa de Fora");
+
+    const feito = await montarDoPeriodo({ empresaId, de: DE, ate: ATE, valorHora: "30.00" });
+    if (!feito.ok) throw new Error("deveria montar");
+
+    expect(feito.dados.horas).toBe(6.5);
+    expect(feito.dados.porPessoa.map((p) => p.nome)).not.toContain("Pessoa de Fora");
+  });
+
+  it("salvar congela também quem reservou", async () => {
+    const empresaId = await montarAToca();
+
+    const salvo = await salvar({
+      empresaId,
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: true,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+
+    const relido = await buscar(salvo.dados.id!);
+    expect(relido?.horas).toBe(6.5);
+    expect(relido?.porPessoa).toHaveLength(3);
+    expect(relido?.clienteNome).toBe(`${PREFIXO_EMPRESA} Toca Imobiliária`);
+  });
+
+  it("guarda o preço em TODOS os clientes da empresa", async () => {
+    // No mês seguinte o valor já vem preenchido, venha o documento de quem
+    // vier — da empresa ou de uma pessoa dela.
+    const empresaId = await montarAToca();
+
+    await salvar({
+      empresaId,
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: true,
+    });
+
+    const quantos = await bancoDeTeste.cliente.count({
+      where: { empresaId, precoHoraAcordado: "30.00" },
+    });
+    expect(quantos).toBe(3);
   });
 });
