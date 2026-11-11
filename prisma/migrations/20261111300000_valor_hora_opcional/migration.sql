@@ -1,0 +1,14 @@
+-- O PRECO POR HORA DO DEMONSTRATIVO VIROU OPCIONAL.
+--
+-- Ele existia para o cliente que tem preco negociado: a Toca paga R$ 30 numa
+-- sala de R$ 40. Mas era obrigatorio, e sem ele a tela nao salvava — o que
+-- obrigava a gestao a digitar um preco mesmo para quem paga a tabela.
+--
+-- Agora, em branco, o documento soma o VALOR JA CONGELADO em cada reserva. O
+-- valor de cada reserva ja viaja dentro da coluna "itens" desde a emissao,
+-- entao nada precisa ser recalculado depois.
+--
+-- OS DEMONSTRATIVOS JA EMITIDOS NAO MUDAM: todos tem preco por hora gravado,
+-- e com preco gravado a conta continua sendo horas x preco. Tornar a coluna
+-- opcional nao mexe em nenhuma linha.
+ALTER TABLE "demonstrativos" ALTER COLUMN "valor_hora" DROP NOT NULL;

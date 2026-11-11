@@ -429,8 +429,13 @@ model Demonstrativo {
   de  DateTime @db.Date
   ate DateTime @db.Date
 
-  /// Preco por hora usado NESTE documento, congelado na emissao.
-  valorHora Decimal @map("valor_hora") @db.Decimal(10, 2)
+  /// Preco por hora COMBINADO com o cliente, congelado na emissao.
+  ///
+  /// NULO e o caminho normal: sem preco negociado, cada reserva vale o valor
+  /// que ela ja tem gravado, e esse valor viaja dentro de "itens". Preenchido
+  /// so para quem paga um preco diferente da tabela da sala — a Toca paga
+  /// R$ 30 numa sala de R$ 40.
+  valorHora Decimal? @map("valor_hora") @db.Decimal(10, 2)
   /// Total de horas do periodo, somado pelo sistema.
   horas     Decimal @db.Decimal(10, 2)
 

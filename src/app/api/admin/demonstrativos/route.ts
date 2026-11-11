@@ -69,7 +69,11 @@ const Corpo = z.object({
   empresaId: z.string().min(1).nullish(),
   de: DATA,
   ate: DATA,
-  valorHora: VALOR,
+  /**
+   * O preco por hora combinado. OPCIONAL: em branco, o documento soma o
+   * valor que cada reserva ja tem gravado.
+   */
+  valorHora: VALOR.nullish(),
   linhasExtras: z.array(LinhaExtra).max(30),
   /**
    * O total escrito a mao, quando houve renegociacao. Vazio e o normal:
@@ -102,7 +106,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     empresaId: corpo.data.empresaId ?? null,
     de: corpo.data.de,
     ate: corpo.data.ate,
-    valorHora: corpo.data.valorHora,
+    valorHora: corpo.data.valorHora ?? null,
     linhasExtras: corpo.data.linhasExtras,
     totalAjustado: corpo.data.totalAjustado ?? null,
     lembrarPreco: corpo.data.lembrarPreco,

@@ -35,6 +35,14 @@ export type ItemDoDemonstrativo = {
   inicio: string;
   fim: string;
   horas: number;
+  /**
+   * O VALOR JA CONGELADO NA RESERVA, em centavos.
+   *
+   * E o que o cliente foi cobrado no dia, pela tabela da sala que valia
+   * naquele momento — nunca um recalculo. E o que o documento usa quando a
+   * gestao NAO tem preco combinado com este cliente.
+   */
+  valorCentavos: number;
 };
 
 /** Uma linha escrita pela gestao: posicoes, emporio, impressoes. */
@@ -56,13 +64,20 @@ export type Demonstrativo = {
   porPessoa: { nome: string; horas: number }[];
   de: DataLocal;
   ate: DataLocal;
-  valorHora: string;
+  /**
+   * O preco por hora COMBINADO com este cliente. NULO e o normal: sem preco
+   * negociado, cada reserva vale o que ela custou no dia.
+   */
+  valorHora: string | null;
   itens: ItemDoDemonstrativo[];
   /** Quanto cada sala somou no periodo — o cliente pediu para ver separado. */
   porSala: { sala: string; horas: number }[];
   horas: number;
   linhasExtras: LinhaExtra[];
-  /** horas x valorHora, em centavos. */
+  /**
+   * O valor das horas, em centavos. Com preco combinado, e horas x preco;
+   * sem ele, e a SOMA do valor congelado em cada reserva.
+   */
   valorDasHorasCentavos: number;
   /** A soma das linhas extras, em centavos. */
   valorDasLinhasCentavos: number;
@@ -126,7 +141,10 @@ export async function montarDoPeriodo(entrada: {
   empresaId?: string | null;
   de: DataLocal;
   ate: DataLocal;
-  /** Sobrepoe o preco combinado, quando a gestao digita outro. */
+  /**
+   * O preco por hora combinado com o cliente. OPCIONAL: em branco, cada
+   * reserva vale o valor que ela ja tem gravado.
+   */
   valorHora?: string | null;
   linhasExtras?: LinhaExtra[];
   totalAjustado?: string | null;
@@ -169,6 +187,8 @@ export async function montarDoPeriodo(entrada: {
       inicio: true,
       fim: true,
       duracaoMinutos: true,
+      // O valor congelado na reserva: o que o cliente pagou naquele dia.
+      valor: true,
       sala: { select: { nome: true } },
       cliente: { select: { nome: true } },
     },
@@ -182,9 +202,24 @@ export async function montarDoPeriodo(entrada: {
     inicio: horaLocalDe(reserva.inicio),
     fim: horaLocalDe(reserva.fim),
     horas: UMA_CASA(reserva.duracaoMinutos / 60),
+    valorCentavos: emCentavos(reserva.valor.toFixed(2)),
   }));
 
-  const valorHora = entrada.valorHora ?? alvo.precoAcordado ?? "0.00";
+  // O preco combinado e OPCIONAL, e aqui ha TRES situacoes diferentes:
+  //
+  //   nao veio nada (undefined) -> vale o preco cadastrado do cliente, que e
+  //     como ele aparece preenchido na tela na primeira vez;
+  //   veio vazio ou nulo        -> a gestao APAGOU o campo de proposito, e o
+  //     documento passa a somar o valor de cada reserva;
+  //   veio um numero            -> manda ele.
+  //
+  // Juntar os dois primeiros tiraria da equipe a possibilidade de voltar um
+  // cliente para a tabela da sala: o campo se preencheria de novo sozinho a
+  // cada vez que ela o apagasse.
+  const valorHora =
+    entrada.valorHora === undefined
+      ? alvo.precoAcordado
+      : entrada.valorHora?.trim() || null;
 
   return {
     ok: true,
@@ -275,9 +310,10 @@ async function alvoDoDemonstrativo(entrada: {
  * Faz TODAS as contas. E aqui que o erro da planilha morre.
  *
  * Nenhum total e digitado em lugar nenhum: as horas saem da soma dos itens, o
- * valor das horas e horas x preco, e o total e a soma de tudo — tudo em
- * centavos, porque somar reais em ponto flutuante acumula diferenca de um
- * centavo ao longo de muitas linhas.
+ * valor das horas sai do preco combinado OU do valor congelado em cada
+ * reserva, e o total e a soma de tudo — tudo em centavos, porque somar reais
+ * em ponto flutuante acumula diferenca de um centavo ao longo de muitas
+ * linhas.
  */
 function montar(bruto: {
   id: string | null;
@@ -286,7 +322,11 @@ function montar(bruto: {
   clienteNome: string;
   de: DataLocal;
   ate: DataLocal;
-  valorHora: string;
+  /**
+   * O preco por hora COMBINADO com este cliente. NULO e o normal: sem preco
+   * negociado, cada reserva vale o que ela custou no dia.
+   */
+  valorHora: string | null;
   itens: ItemDoDemonstrativo[];
   linhasExtras: LinhaExtra[];
   totalAjustado: string | null;
@@ -294,9 +334,18 @@ function montar(bruto: {
 }): Demonstrativo {
   const horas = UMA_CASA(bruto.itens.reduce((soma, item) => soma + item.horas, 0));
 
-  // O preco por hora em centavos, multiplicado pelas horas. Arredonda uma vez
-  // so, no fim: R$ 30,00 x 2,5 h da 7500 centavos exatos.
-  const valorDasHorasCentavos = Math.round(emCentavos(bruto.valorHora) * horas);
+  // DOIS CAMINHOS, e o normal e o segundo.
+  //
+  // COM preco combinado (a Toca paga R$ 30 numa sala de R$ 40), e o preco em
+  // centavos x as horas, arredondando uma vez so no fim: R$ 30,00 x 2,5 h da
+  // 7500 centavos exatos.
+  //
+  // SEM preco combinado, e a SOMA do valor congelado em cada reserva — o que
+  // o cliente foi cobrado no dia. Nunca um recalculo pela tabela de hoje:
+  // mudar o preco da sala no painel nao pode mexer num mes ja fechado.
+  const valorDasHorasCentavos = bruto.valorHora
+    ? Math.round(emCentavos(bruto.valorHora) * horas)
+    : bruto.itens.reduce((soma, item) => soma + item.valorCentavos, 0);
 
   const valorDasLinhasCentavos = bruto.linhasExtras.reduce(
     (soma, linha) => soma + emCentavos(linha.valor || "0"),
@@ -361,7 +410,8 @@ export async function salvar(entrada: {
   empresaId?: string | null;
   de: DataLocal;
   ate: DataLocal;
-  valorHora: string;
+  /** O preco combinado. Nulo = vale o valor de cada reserva. */
+  valorHora?: string | null;
   linhasExtras: LinhaExtra[];
   totalAjustado: string | null;
   /** Guarda este preco como o padrao do cliente para a proxima vez. */
@@ -394,7 +444,9 @@ export async function salvar(entrada: {
 
     // Guarda o preco no CLIENTE, ou em todos os clientes da empresa: no mes
     // seguinte ele ja vem preenchido, venha o documento de quem vier.
-    if (entrada.lembrarPreco) {
+    // So guarda quando HA preco combinado: gravar nulo aqui apagaria, sem
+    // aviso, o preco negociado que a equipe cadastrou antes.
+    if (entrada.lembrarPreco && dados.valorHora) {
       await tx.cliente.updateMany({
         where: dados.clienteId
           ? { id: dados.clienteId }
@@ -430,8 +482,14 @@ export async function buscar(id: string): Promise<Demonstrativo | null> {
     clienteNome: linha.cliente?.nome ?? linha.empresa?.nome ?? "(sem dono)",
     de: linha.de.toISOString().slice(0, 10) as DataLocal,
     ate: linha.ate.toISOString().slice(0, 10) as DataLocal,
-    valorHora: linha.valorHora.toFixed(2),
-    itens: linha.itens as unknown as ItemDoDemonstrativo[],
+    valorHora: linha.valorHora?.toFixed(2) ?? null,
+    // Os demonstrativos emitidos antes de o valor por hora virar opcional
+    // nao guardam o valor de cada reserva. Eles sempre tem preco combinado,
+    // entao o zero aqui nunca e somado — esta so para o tipo fechar.
+    itens: (linha.itens as unknown as ItemDoDemonstrativo[]).map((item) => ({
+      ...item,
+      valorCentavos: item.valorCentavos ?? 0,
+    })),
     linhasExtras: linha.linhasExtras as unknown as LinhaExtra[],
     totalAjustado: linha.totalAjustado?.toFixed(2) ?? null,
     enviadoEm: linha.enviadoEm,
@@ -469,8 +527,16 @@ export async function listar(dono?: {
 
   return linhas.map((linha) => {
     const extras = linha.linhasExtras as unknown as LinhaExtra[];
+    const itens = linha.itens as unknown as ItemDoDemonstrativo[];
+
+    // Os mesmos dois caminhos do "montar": preco combinado x horas, ou a
+    // soma do valor congelado em cada reserva.
+    const valorDasHoras = linha.valorHora
+      ? Math.round(emCentavos(linha.valorHora.toFixed(2)) * Number(linha.horas))
+      : itens.reduce((soma, item) => soma + (item.valorCentavos ?? 0), 0);
+
     const calculado =
-      Math.round(emCentavos(linha.valorHora.toFixed(2)) * Number(linha.horas)) +
+      valorDasHoras +
       extras.reduce((soma, extra) => soma + emCentavos(extra.valor || "0"), 0);
 
     return {

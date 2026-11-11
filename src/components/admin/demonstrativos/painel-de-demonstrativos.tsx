@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { procurarClientes, type ClienteConhecido } from "@/components/admin/agenda/api";
 import {
@@ -82,6 +82,14 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
   const [de, setDe] = useState("");
   const [ate, setAte] = useState(hoje);
   const [valorHora, setValorHora] = useState("");
+  /**
+   * Se o preço cadastrado do cliente já foi sugerido neste documento.
+   *
+   * Sem isto, apagar o campo seria impossível: a sugestão voltaria a
+   * preenchê-lo a cada consulta, e a equipe nunca conseguiria devolver um
+   * cliente para a tabela da sala.
+   */
+  const precoJaSugerido = useRef(false);
   const [linhas, setLinhas] = useState<LinhaExtra[]>([]);
   const [totalAjustado, setTotalAjustado] = useState("");
 
@@ -183,7 +191,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
       quem: { clienteId?: string; empresaId?: string },
       inicio: string,
       fim: string,
-      preco: string,
+      preco: string | undefined,
     ) => {
       if (!inicio || !fim) {
         return;
@@ -197,11 +205,13 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
           empresaId: quem.empresaId,
           de: inicio,
           ate: fim,
-          valorHora: preco || undefined,
+          valorHora: preco,
         });
         setPrevia(resposta.demonstrativo);
-        // O preço guardado do cliente aparece já preenchido na primeira vez.
-        if (!preco && resposta.demonstrativo.valorHora !== "0.00") {
+        // O preço combinado que já estava cadastrado aparece preenchido na
+        // primeira vez. Quem não tem preço combinado deixa o campo vazio, e
+        // o documento usa o valor de cada reserva.
+        if (preco === undefined && resposta.demonstrativo.valorHora) {
           setValorHora(resposta.demonstrativo.valorHora);
         }
       } catch (falha) {
@@ -214,7 +224,12 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
 
   useEffect(() => {
     if (dono && de && ate) {
-      void atualizarPrevia(dono, de, ate, valorHora);
+      // Na PRIMEIRA consulta deste documento o preço não é enviado, para o
+      // servidor poder sugerir o do cliente. Daí em diante vai o que está no
+      // campo — inclusive vazio, quando a equipe o apagou.
+      const preco = precoJaSugerido.current ? valorHora : undefined;
+      precoJaSugerido.current = true;
+      void atualizarPrevia(dono, de, ate, preco);
     }
     // "dono" é derivado de cliente e empresa; depender deles evita refazer a
     // consulta a cada renderização.
@@ -225,6 +240,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
     setSalvo(null);
     setPrevia(null);
     setValorHora("");
+    precoJaSugerido.current = false;
     setLinhas([]);
     setTotalAjustado("");
   }
@@ -277,7 +293,9 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
     ? Math.round(Number(totalAjustado.replace(",", ".")) * 100)
     : totalCalculado;
 
-  const podeSalvar = Boolean(dono && de && ate && valorHora && !ocupado);
+  // O preço por hora NÃO entra aqui: ele é opcional. Sem ele, o documento
+  // soma o valor que cada reserva já tem gravado, e não falta nada.
+  const podeSalvar = Boolean(dono && de && ate && !ocupado);
 
   return (
     <div className="flex flex-col gap-4">
@@ -441,12 +459,12 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                 onChange={(evento) => setAte(evento.target.value)}
               />
               <Campo
-                etiqueta="Valor por hora"
+                etiqueta="Preço especial por hora (opcional)"
                 inputMode="decimal"
-                placeholder="30,00"
+                placeholder="deixe vazio"
                 value={valorHora}
                 onChange={(evento) => setValorHora(evento.target.value)}
-                dica="Fica guardado para a próxima vez."
+                dica="Só para quem paga um preço combinado, diferente da tabela. Em branco, vale o valor de cada reserva."
               />
             </div>
           </Secao>
@@ -578,7 +596,11 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
             <Secao titulo="Total">
               <dl className="flex flex-col gap-1 text-sm">
                 <Linha
-                  rotulo={`Horas · ${horasPorExtenso(previa.horas)} × ${valorHora || "0"}`}
+                  rotulo={
+                    valorHora.trim()
+                      ? `Horas · ${horasPorExtenso(previa.horas)} × ${valorHora}`
+                      : `Horas · ${horasPorExtenso(previa.horas)} · valor de cada reserva`
+                  }
                   valor={comoDinheiro(previa.valorDasHorasCentavos)}
                 />
                 {linhas
@@ -641,7 +663,9 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                       empresaId: empresa?.id ?? null,
                       de,
                       ate,
-                      valorHora: valorHora.replace(",", "."),
+                      valorHora: valorHora.trim()
+                        ? valorHora.replace(",", ".")
+                        : null,
                       linhasExtras: linhas
                         .filter((l) => l.descricao.trim() && l.valor.trim())
                         .map((l) => ({

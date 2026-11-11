@@ -32,6 +32,7 @@ import {
   buscar,
   comoDinheiro,
   emCentavos,
+  listar,
   montarDoPeriodo,
   salvar,
 } from "@/lib/demonstrativos";
@@ -358,6 +359,170 @@ describe("o preço combinado do cliente", () => {
       where: { id: clienteId },
     });
     expect(cliente.precoHoraAcordado?.toFixed(2)).toBe("30.00");
+  });
+});
+
+describe("o preço por hora é OPCIONAL", () => {
+  /** O valor que cada reserva já tem gravado, somado em centavos. */
+  async function valorGravadoNasReservas(): Promise<number> {
+    const reservas = await bancoDeTeste.reserva.findMany({
+      where: { telefone: DA_TOCA },
+      select: { valor: true },
+    });
+    return reservas.reduce(
+      (soma, r) => soma + Math.round(Number(r.valor) * 100),
+      0,
+    );
+  }
+
+  it("sem preço combinado, soma o valor JÁ GRAVADO em cada reserva", async () => {
+    // O caminho normal: o cliente paga a tabela da sala. A gestão não
+    // precisa digitar preço nenhum, e o total já sai certo — é o mesmo
+    // valor que foi congelado em cada reserva na hora de criar.
+    await reserva("2026-09-11", "09:00", 2);
+    await reserva("2026-09-14", "14:00", 1.5);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(feito.dados.valorHora).toBeNull();
+    expect(feito.dados.horas).toBe(3.5);
+    expect(feito.dados.valorDasHorasCentavos).toBe(await valorGravadoNasReservas());
+    expect(feito.dados.valorDasHorasCentavos).toBeGreaterThan(0);
+  });
+
+  it("o preço combinado, quando existe, manda — e dá outro número", async () => {
+    // As MESMAS reservas pelos dois caminhos. Se os dois dessem o mesmo
+    // valor, o teste de cima não estaria provando nada.
+    await reserva("2026-09-11", "09:00", 2);
+    const clienteId = await cadastroDaToca();
+
+    const semPreco = await montarDoPeriodo({ clienteId, de: DE, ate: ATE });
+    const comPreco = await montarDoPeriodo({
+      clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+
+    if (!semPreco.ok || !comPreco.ok) throw new Error("deveria montar");
+    expect(semPreco.dados.valorDasHorasCentavos).toBe(
+      await valorGravadoNasReservas(),
+    );
+    expect(comPreco.dados.valorDasHorasCentavos).toBe(6_000);
+    expect(semPreco.dados.valorDasHorasCentavos).not.toBe(
+      comPreco.dados.valorDasHorasCentavos,
+    );
+  });
+
+  it("soma com as linhas extras, sem precisar digitar preço nenhum", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      linhasExtras: [{ descricao: "2 posições", valor: "940.00" }],
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(feito.dados.totalCentavos).toBe(
+      (await valorGravadoNasReservas()) + 94_000,
+    );
+  });
+
+  it("salvar SEM preço funciona, e o documento guarda o mesmo total", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+    const esperado = await valorGravadoNasReservas();
+
+    const salvo = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: true,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+    expect(salvo.dados.valorHora).toBeNull();
+    expect(salvo.dados.totalCentavos).toBe(esperado);
+
+    // Relido do banco, o documento conta a mesma coisa: o valor de cada
+    // reserva viaja dentro dos itens congelados.
+    const lido = await buscar(salvo.dados.id!);
+    expect(lido?.valorHora).toBeNull();
+    expect(lido?.totalCentavos).toBe(esperado);
+
+    // E na lista dos emitidos também — ela refaz a conta por fora.
+    const lista = await listar({ clienteId: salvo.dados.clienteId });
+    expect(lista.find((item) => item.id === salvo.dados.id)?.totalCentavos).toBe(
+      esperado,
+    );
+  });
+
+  it("salvar sem preço NÃO apaga o preço combinado já cadastrado", async () => {
+    // Gravar nulo aqui tiraria em silêncio o preço negociado que a equipe
+    // cadastrou antes, e o mês seguinte sairia pela tabela da sala.
+    await reserva("2026-09-11", "09:00", 2);
+    const clienteId = await cadastroDaToca();
+
+    await bancoDeTeste.cliente.update({
+      where: { id: clienteId },
+      data: { precoHoraAcordado: "30.00" },
+    });
+
+    await salvar({
+      clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: null,
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: true,
+    });
+
+    const cliente = await bancoDeTeste.cliente.findUniqueOrThrow({
+      where: { id: clienteId },
+    });
+    expect(cliente.precoHoraAcordado?.toFixed(2)).toBe("30.00");
+  });
+
+  it("mudar o preço da sala depois NÃO mexe no documento", async () => {
+    // O valor é o congelado na reserva, nunca um recálculo. Sem isso, o
+    // documento de um mês já fechado mudaria sozinho quando a equipe
+    // reajustasse o preço da sala no painel.
+    await reserva("2026-09-11", "09:00", 2);
+    const clienteId = await cadastroDaToca();
+    const antes = await montarDoPeriodo({ clienteId, de: DE, ate: ATE });
+
+    const sala = await bancoDeTeste.sala.findUniqueOrThrow({
+      where: { id: salaPrivativa },
+      select: { precoPorHora: true },
+    });
+
+    try {
+      await bancoDeTeste.sala.update({
+        where: { id: salaPrivativa },
+        data: { precoPorHora: Number(sala.precoPorHora) * 2 },
+      });
+
+      const depois = await montarDoPeriodo({ clienteId, de: DE, ate: ATE });
+
+      if (!antes.ok || !depois.ok) throw new Error("deveria montar");
+      expect(depois.dados.valorDasHorasCentavos).toBe(
+        antes.dados.valorDasHorasCentavos,
+      );
+    } finally {
+      await bancoDeTeste.sala.update({
+        where: { id: salaPrivativa },
+        data: { precoPorHora: sala.precoPorHora },
+      });
+    }
   });
 });
 

@@ -13,6 +13,9 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     ignores: [
+      // Scripts de skills instaladas no projeto. Nao sao codigo nosso, e os
+      // erros deles escondem os nossos.
+      ".claude/**",
       "node_modules/**",
       ".next/**",
       "out/**",

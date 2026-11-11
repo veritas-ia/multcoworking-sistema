@@ -292,11 +292,16 @@ export async function gerarPdfDoDemonstrativo(
   });
   caneta.y -= 20;
 
+  // Com preco combinado, a linha mostra a conta ("50 h x R$ 30,00"). Sem
+  // ele, mostra de onde o valor veio — o preco de cada reserva no dia —, para
+  // o cliente nao procurar uma multiplicacao que nao existe.
   escrever(
     caneta,
-    `Horas · ${horasPorExtenso(dados.horas)} × ${comoDinheiro(
-      Math.round(Number(dados.valorHora) * 100),
-    )}`,
+    dados.valorHora
+      ? `Horas · ${horasPorExtenso(dados.horas)} × ${comoDinheiro(
+          Math.round(Number(dados.valorHora) * 100),
+        )}`
+      : `Horas · ${horasPorExtenso(dados.horas)} · valor de cada reserva`,
     COL_DIA,
   );
   escreverADireita(caneta, comoDinheiro(dados.valorDasHorasCentavos), COL_HORAS);

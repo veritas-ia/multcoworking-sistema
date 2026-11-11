@@ -20,7 +20,7 @@ export type Demonstrativo = {
   porPessoa: { nome: string; horas: number }[];
   de: string;
   ate: string;
-  valorHora: string;
+  valorHora: string | null;
   itens: ItemDoDemonstrativo[];
   porSala: { sala: string; horas: number }[];
   horas: number;
@@ -66,7 +66,10 @@ export function previsualizar(
     busca.set("empresaId", entrada.empresaId);
   }
 
-  if (entrada.valorHora) {
+  // VAZIO TAMBEM VAI, e e diferente de nao mandar: nao mandar pede o preco
+  // cadastrado do cliente (para a tela sugerir), e mandar vazio diz que a
+  // gestao apagou o campo de proposito.
+  if (entrada.valorHora !== undefined) {
     busca.set("valorHora", entrada.valorHora);
   }
 
@@ -95,7 +98,7 @@ export function salvarDemonstrativo(entrada: {
   empresaId?: string | null;
   de: string;
   ate: string;
-  valorHora: string;
+  valorHora: string | null;
   linhasExtras: LinhaExtra[];
   totalAjustado: string | null;
   lembrarPreco: boolean;

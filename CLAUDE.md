@@ -1239,6 +1239,32 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
   pessoa, que vê o resultado na tela e tenta de novo se falhar; nas rotinas, marcar
   primeiro evita mandar duas vezes sem ninguém ver.
 
+#### O preço por hora é OPCIONAL (11/11/2026)
+- **Visto pelo dono depois do deploy:** o campo de valor por hora era obrigatório — sem
+  ele a tela não salvava. *"Se eu não alterar esse valor por hora, ele se mantém no valor
+  fixo de cada reserva que foi reservada... Somar no total sem precisar incluir nada
+  nesse campo."*
+- **Dois caminhos, e o normal é o segundo:**
+  - **com** preço combinado: horas × preço. É a Toca, que paga R$ 30 numa sala de R$ 40;
+  - **em branco** (o padrão): o documento soma o **valor já congelado em cada reserva** —
+    o que o cliente foi cobrado no dia. Nenhum número precisa ser digitado.
+- **Nunca um recálculo pela tabela de hoje.** O valor sai da coluna `valor` da reserva,
+  que já viaja dentro de `itens` na emissão. Há teste que **dobra o preço da sala** e
+  confere que o documento não se mexe: um mês já fechado não pode mudar sozinho quando a
+  equipe reajusta preço no painel. Mesma regra do faturamento do relatório.
+- O campo virou **"Preço especial por hora (opcional)"**: o nome antigo ("Valor por
+  hora") parecia o valor que o sistema ia usar, quando na verdade é a **exceção** de quem
+  tem preço negociado.
+- **Salvar com o campo vazio NÃO apaga o preço combinado já cadastrado** no cliente.
+  Gravar nulo ali tiraria em silêncio o preço negociado da equipe, e o mês seguinte
+  sairia pela tabela da sala. Há teste.
+- A coluna `valor_hora` virou **opcional no banco** (migração
+  `20261111300000_valor_hora_opcional`). **Os demonstrativos já emitidos não mudam:**
+  todos têm preço gravado, e com preço gravado a conta continua sendo horas × preço.
+- No PDF a linha discriminada muda de texto nos dois casos: *"Horas · 50 h × R$ 30,00"*
+  ou *"Horas · 50 h · valor de cada reserva"* — para o cliente não procurar uma
+  multiplicação que não existe.
+
 #### O que o sistema NÃO tem, e o dono precisa saber
 - **O histórico anterior a outubro não existe.** No período da planilha (10/09 a 10/10),
   o sistema só tem as reservas da Toca **a partir de 05/10** — e de 05/10 em diante elas
