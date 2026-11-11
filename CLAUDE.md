@@ -1179,3 +1179,74 @@ neste projeto (ver `12dcd9e`).
   conserta juntando os cadastros em Configurações → Clientes, escolhendo quais.
 - Marcar **troca o cadastro da reserva e nada mais nela**: horário, sala, valor, nome e
   telefone ficam intactos. Há teste comparando a linha inteira.
+
+### Controle de horas: o demonstrativo mensal do cliente (11/11/2026)
+- **O PROBLEMA, medido na planilha que o dono mandou** (`DEMONSTRATIVO 12 agos a 10 set`,
+  da Toca Imobiliária): ela **não tinha uma fórmula sequer**. O "52 horas" e o
+  "VALOR TOTAL : R$ 3.033,66" eram **texto digitado**. Somando as linhas da própria
+  planilha: **50 horas** e **R$ 3.023,66**. Foram **R$ 70 cobrados a mais**, num
+  documento já enviado, e ninguém tinha como perceber.
+- Havia ainda um erro de formato escondido: uma célula com formato de hora e o número 4
+  solto, que o Excel lê como **4 dias = 96 horas**. Não aparecia porque ninguém somava.
+- **AQUI NENHUM TOTAL É DIGITADO.** O sistema soma, **em centavos** — somar reais em
+  ponto flutuante acumula diferença. Há teste com três linhas de R$ 33,33 dando R$ 99,99.
+- **O único número que a gestão escreve é o total ajustado**, para o caso de
+  renegociação. O dono pediu essa saída avisando que é rara, então ela fica num
+  "detalhe" fechado, com o valor calculado escrito ao lado — para ninguém usar sem
+  perceber de quanto era.
+
+#### O que o documento tem, e por quê
+- Segue a planilha de propósito — "Para / Período", tabela de dias, "Valor
+  discriminado", "Valor total" — para quem recebe reconhecer o documento de sempre.
+- **O período é livre, NÃO é mês fechado:** o ciclo da Toca vai de 10/09 a 10/10, e o
+  anterior ia de 12/08 a 10/09. Uma tela de "escolha o mês" não serviria.
+- **As horas aparecem por sala E somadas** (pedido do dono: *"pode somar todas as salas,
+  mas também mostra separado, porque o cliente também tem essa visualização"*).
+- **Cancelada não entra:** hora desmarcada não é hora cobrada.
+- **O preço é o COMBINADO COM O CLIENTE** (`clientes.preco_hora_acordado`), e não o da
+  tabela da sala: a Toca paga R$ 30 numa sala de R$ 40, então o valor congelado na
+  reserva **não serve aqui**. Fica guardado no cliente e vem preenchido na próxima vez.
+
+#### SALVAR CONGELA
+Igual ao valor congelado na reserva: a tabela de horas é copiada para o demonstrativo na
+emissão. Remarcar uma reserva depois **não muda** o documento que o cliente recebeu. Há
+teste que emite, muda a reserva de 2 h para 5 h e confere que o documento continua com 2.
+
+#### Uma biblioteca entrou na stack (pdf-lib)
+- Era inevitável: o dono pediu para **mandar o PDF pelo WhatsApp**, e para anexar um
+  arquivo é preciso ter o arquivo. A ideia anterior — abrir a tela no formato de
+  impressão e deixar o navegador salvar — só produziria o PDF na máquina do operador.
+- Escolhida porque **não lê fonte do disco em tempo de execução**. O Dockerfile usa o
+  modo standalone do Next, que copia só o que consegue rastrear: biblioteca que abre
+  arquivo de fonte na hora de rodar funciona no desenvolvimento e quebra em produção.
+  **O `npm run build` foi conferido** antes do commit, por isso.
+- A **logo** sai de `public/logotipo-multcoworking-recorte.png` (estava lá desde a Fase 1
+  e nunca tinha sido usada). Se o arquivo sumir, o PDF sai com o nome escrito no lugar e
+  **não falha** — uma imagem faltando não pode impedir a gestão de cobrar.
+
+#### O envio pelo WhatsApp
+- Rota `sendMedia` da Evolution, com o arquivo em **base64 no próprio pedido**: um
+  demonstrativo tem nome de cliente e valor pago, e não deve ficar num link que qualquer
+  um abra.
+- O texto é o **décimo primeiro modelo editável** (`demonstrativo_mensal`), com
+  `{{nome}}`, `{{periodo}}`, `{{horas}}` e `{{valor}}`. Entrou pela **migração**, não pelo
+  seed. A chave do enum foi numa migração separada, porque o Postgres não deixa usar um
+  valor de enum na mesma transação em que ele é criado.
+- A tela mostra a **prévia da mensagem já com as variáveis trocadas**, e deixa editar o
+  texto ali mesmo — avisando que **vale para todos os demonstrativos**, porque é o mesmo
+  modelo de Configurações → Mensagens.
+- **MARCA DEPOIS DE MANDAR**, ao contrário das rotinas automáticas. Aqui a ação é de uma
+  pessoa, que vê o resultado na tela e tenta de novo se falhar; nas rotinas, marcar
+  primeiro evita mandar duas vezes sem ninguém ver.
+
+#### O que o sistema NÃO tem, e o dono precisa saber
+- **O histórico anterior a outubro não existe.** No período da planilha (10/09 a 10/10),
+  o sistema só tem as reservas da Toca **a partir de 05/10** — e de 05/10 em diante elas
+  batem quase exatamente com a planilha (5 h, 1 h, 4,5 h). Antes disso a equipe não
+  lançava. Demonstrativo de período antigo sai com a tabela incompleta.
+- **As reservas da Toca não estão marcadas com a empresa.** O agrupamento aqui é pelo
+  **cadastro do cliente**, que funciona; mas o relatório por empresa continua sem elas.
+- **O e-mail é o destino certo, e ainda não existe.** Palavra do dono: *"o email
+  específico da equipe financeira da Toca receberia, e não enviar para algum número de
+  algum funcionário da Toca por WhatsApp"*. Por enquanto a gestão **baixa o PDF e envia
+  por e-mail à mão**. O envio automático por e-mail é o próximo passo.

@@ -55,6 +55,11 @@ export default async function PaginaDoPainel() {
             descricao="Quantas reservas, em quais salas, em que dias e horários. Só consulta — não altera nada."
           />
           <Atalho
+            href="/admin/demonstrativos"
+            titulo="Controle de horas"
+            descricao="O demonstrativo mensal do cliente, em PDF: horas das reservas, posições e empório, com o total somado pelo sistema."
+          />
+          <Atalho
             href="/admin/configuracoes"
             titulo="Configurações"
             descricao="Salas e preços, horário de funcionamento, regras de reserva, mensagens do WhatsApp e usuários do painel."
