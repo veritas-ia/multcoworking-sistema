@@ -16,6 +16,9 @@
  * na hora de rodar costuma funcionar no desenvolvimento e quebrar em
  * producao, que e o pior lugar para descobrir.
  */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
 import {
@@ -89,6 +92,22 @@ function escreverADireita(
 }
 
 /**
+ * A logo da marca, lida de "public/".
+ *
+ * Devolve nulo quando o arquivo nao esta la, e o documento sai com o nome
+ * escrito no lugar. Uma imagem que sumiu nao pode impedir a gestao de cobrar
+ * o cliente.
+ */
+async function carregarLogo(pdf: PDFDocument) {
+  try {
+    const caminho = join(process.cwd(), "public", "logotipo-multcoworking-recorte.png");
+    return await pdf.embedPng(await readFile(caminho));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Monta o documento inteiro e devolve os bytes do PDF.
  *
  * O desenho segue a planilha que a gestao usava — cabecalho "De / Para /
@@ -119,9 +138,34 @@ export async function gerarPdfDoDemonstrativo(
     color: AMARELO,
   });
 
-  escrever(caneta, "MULT COWORKING", MARGEM, { tamanho: 16, negrito: true, cor: PRETO });
-  caneta.y -= 18;
-  escrever(caneta, "Demonstrativo de uso", MARGEM, { tamanho: 10, cor: SECUNDARIO });
+  // A LOGO, quando o arquivo estiver no lugar. Falhar aqui nao pode derrubar
+  // o documento: um PDF sem logo ainda e um PDF util, e a cobranca nao pode
+  // parar porque uma imagem sumiu.
+  const logo = await carregarLogo(pdf);
+
+  if (logo) {
+    // A logo ocupa o topo; o subtitulo vem logo abaixo dela, colado, para os
+    // dois lerem como uma coisa so.
+    const alturaDaLogo = 34;
+    const largura = (logo.width / logo.height) * alturaDaLogo;
+    caneta.y -= alturaDaLogo - 6;
+    caneta.pagina.drawImage(logo, {
+      x: MARGEM,
+      y: caneta.y,
+      width: largura,
+      height: alturaDaLogo,
+    });
+    caneta.y -= 14;
+  } else {
+    escrever(caneta, "MULT COWORKING", MARGEM, {
+      tamanho: 16,
+      negrito: true,
+      cor: PRETO,
+    });
+    caneta.y -= 18;
+  }
+
+  escrever(caneta, "Controle de horas", MARGEM, { tamanho: 10, cor: SECUNDARIO });
 
   // --- para quem, e de quando -------------------------------------------------
   caneta.y -= 28;
