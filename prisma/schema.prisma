@@ -65,6 +65,9 @@ enum ChaveTemplate {
   /// so, com a quantidade e o valor somado. Quem faz uma reserva unica
   /// continua recebendo "reserva_confirmada".
   reservas_confirmadas
+  /// O demonstrativo mensal, com o PDF em anexo. Variaveis: {{nome}},
+  /// {{periodo}}, {{horas}} e {{valor}}.
+  demonstrativo_mensal
   /// A equipe esticou o termino porque o cliente ficou mais tempo.
   reserva_estendida
 }
@@ -313,8 +316,17 @@ model Cliente {
   criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
-  telefones TelefoneDoCliente[]
-  reservas  Reserva[]
+  /// Preco por hora COMBINADO com este cliente, quando ha um.
+  ///
+  /// A Toca paga R$ 30 na sala que custa R$ 40 na tabela. O valor congelado
+  /// em cada reserva e o da tabela, entao ele nao serve para o demonstrativo
+  /// do mensalista — este campo e que vale ali. Nulo = usa o que a gestao
+  /// digitar na hora.
+  precoHoraAcordado Decimal? @map("preco_hora_acordado") @db.Decimal(10, 2)
+
+  telefones      TelefoneDoCliente[]
+  reservas       Reserva[]
+  demonstrativos Demonstrativo[]
 
   @@index([nome])
   @@map("clientes")
@@ -370,6 +382,55 @@ model TelefoneDeBalcao {
   criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: SetNull)
 
   @@map("telefones_balcao")
+}
+
+/// O DEMONSTRATIVO MENSAL de um cliente.
+///
+/// A gestao fazia isto numa planilha, a mao. A planilha de setembro da Toca
+/// nao tinha UMA formula: o "52 horas" e o "R$ 3.033,66" eram texto digitado,
+/// e os dois estavam errados — a soma das linhas dava 50 h e R$ 3.023,66.
+/// Foram R$ 70 cobrados a mais, e ninguem tinha como perceber.
+///
+/// TUDO FICA CONGELADO AQUI. A tabela de horas vem das reservas no momento da
+/// emissao e e gravada como estava: se alguem remarcar uma reserva depois, o
+/// documento que o cliente recebeu continua batendo com o que foi enviado.
+/// Mesma regra do valor congelado na reserva.
+model Demonstrativo {
+  id        String  @id @default(uuid(7))
+  clienteId String  @map("cliente_id")
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  /// O periodo coberto. NAO e mes fechado: o ciclo da Toca vai de 10/09 a
+  /// 10/10, e o anterior ia de 12/08 a 10/09.
+  de  DateTime @db.Date
+  ate DateTime @db.Date
+
+  /// Preco por hora usado NESTE documento, congelado na emissao.
+  valorHora Decimal @map("valor_hora") @db.Decimal(10, 2)
+  /// Total de horas do periodo, somado pelo sistema.
+  horas     Decimal @db.Decimal(10, 2)
+
+  /// A tabela de horas, como estava na emissao:
+  /// [{ "dia": "2026-09-11", "sala": "Sala Privativa", "horas": 2.5 }]
+  itens Json
+
+  /// As linhas que a gestao acrescenta a mao — posicoes, emporio, impressoes:
+  /// [{ "descricao": "2 posicoes", "valor": "940.00" }]
+  linhasExtras Json @map("linhas_extras")
+
+  /// Total escrito a mao, quando houve renegociacao. NULO e o normal: vale a
+  /// soma que o sistema faz. Existe porque o dono pediu a saida de emergencia,
+  /// avisando que e raro — e por isso ele aparece destacado na tela.
+  totalAjustado Decimal? @map("total_ajustado") @db.Decimal(10, 2)
+
+  /// Quando foi mandado pelo WhatsApp. Nulo = ainda nao foi.
+  enviadoEm DateTime? @map("enviado_em") @db.Timestamptz(3)
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  @@index([clienteId, de])
+  @@map("demonstrativos")
 }
 
 /// Parametros gerais do sistema, editaveis no painel (Fase 11).

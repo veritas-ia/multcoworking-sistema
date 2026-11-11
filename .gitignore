@@ -46,3 +46,8 @@ next-env.d.ts
 
 # cliente do Prisma gerado automaticamente (recriado por `npm install`)
 /src/generated/prisma
+
+# Arquivos que o dono arrasta para o Claude ler (planilhas, PDFs, referencias).
+# Ficam so na maquina: podem ter dado de cliente e nao tem por que ir ao GitHub.
+/recebidos/*
+!/recebidos/LEIA-ME.txt

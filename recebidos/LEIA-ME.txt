@@ -1,0 +1,6 @@
+Pasta para arrastar arquivos que o Claude precisa ler (planilhas, PDFs,
+imagens de referencia).
+
+NAO vai para o GitHub: esta no .gitignore, menos este aviso.
+
+Arraste o arquivo aqui pelo VS Code e me diga o nome.

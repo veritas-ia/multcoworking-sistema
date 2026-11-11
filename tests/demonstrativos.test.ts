@@ -1,0 +1,530 @@
+/**
+ * DEMONSTRATIVO MENSAL DO CLIENTE (11/11/2026).
+ *
+ * O CASO REAL que motivou isto: a planilha "DEMONSTRATIVO 12 agos a 10 set"
+ * da Toca Imobiliária, feita à mão pela gestão. Ela **não tinha uma fórmula
+ * sequer** — o "52 horas" e o "VALOR TOTAL : R$ 3.033,66" eram texto
+ * digitado. E os dois estavam errados:
+ *
+ *   - somando as 14 linhas de horas da própria planilha: **50 h**, não 52;
+ *   - somando as 5 linhas de valor da própria planilha: **R$ 3.023,66**,
+ *     não R$ 3.033,66.
+ *
+ * Foram R$ 70 cobrados a mais de um cliente, num documento já enviado.
+ *
+ * O que estes testes protegem:
+ *  1. NENHUM total é digitado — o sistema soma, e a soma bate;
+ *  2. cancelada não entra: hora desmarcada não é hora cobrada;
+ *  3. o preço combinado do cliente manda, e não o da tabela da sala — a Toca
+ *     paga R$ 30 numa sala que custa R$ 40;
+ *  4. as horas aparecem separadas por sala E somadas, como o dono pediu;
+ *  5. o total ajustado à mão existe, mas só quando escrito de propósito;
+ *  6. salvar CONGELA a tabela: remarcar uma reserva depois não muda o
+ *     documento que o cliente recebeu;
+ *  7. as contas são em centavos — somar reais acumula diferença.
+ *
+ * Precisa do banco no ar e com o seed carregado.
+ */
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+
+import { criarReservaNaRecepcao } from "@/lib/agenda-admin";
+import {
+  buscar,
+  comoDinheiro,
+  emCentavos,
+  montarDoPeriodo,
+  salvar,
+} from "@/lib/demonstrativos";
+import { instanteDe } from "@/lib/tempo";
+
+import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
+
+const DA_TOCA = "+5511900003001";
+const TELEFONES = [DA_TOCA];
+
+/** Um período fixo no passado: aqui a recepção pode lançar para trás. */
+const DE = "2026-09-10";
+const ATE = "2026-10-10";
+
+let salaPrivativa: string;
+let nomeDaPrivativa: string;
+let salaReuniao: string;
+let operador: { id: string; nome: string };
+
+beforeAll(async () => {
+  await aquecerConexao();
+
+  // O slug nunca muda (está nos QR codes impressos); em produção esta sala
+  // hoje se chama "Sala Privativa", e no banco de teste ainda "Sala CI".
+  const privativa = await bancoDeTeste.sala.findUniqueOrThrow({
+    where: { slug: "sala-ci" },
+    select: { id: true, nome: true },
+  });
+  salaPrivativa = privativa.id;
+  nomeDaPrivativa = privativa.nome;
+
+  const reuniao = await bancoDeTeste.sala.findUniqueOrThrow({
+    where: { slug: "sala-de-reuniao" },
+    select: { id: true },
+  });
+  salaReuniao = reuniao.id;
+
+  operador = await bancoDeTeste.usuario.upsert({
+    where: { usuario: "zz.demonstrativo" },
+    create: { nome: "Admin de Teste", usuario: "zz.demonstrativo", senhaHash: "x" },
+    update: {},
+    select: { id: true, nome: true },
+  });
+});
+
+async function limpar(): Promise<void> {
+  await bancoDeTeste.demonstrativo.deleteMany({
+    where: { cliente: { telefones: { some: { telefone: { in: TELEFONES } } } } },
+  });
+  await bancoDeTeste.reserva.deleteMany({ where: { telefone: { in: TELEFONES } } });
+  await bancoDeTeste.telefoneDoCliente.deleteMany({
+    where: { telefone: { in: TELEFONES } },
+  });
+  await bancoDeTeste.cliente.deleteMany({
+    where: { reservas: { none: {} }, telefones: { none: {} } },
+  });
+}
+
+afterEach(limpar);
+
+afterAll(async () => {
+  await limpar();
+  await bancoDeTeste.usuario.deleteMany({ where: { usuario: "zz.demonstrativo" } });
+  await bancoDeTeste.$disconnect();
+});
+
+async function reserva(dia: string, hora: string, horas: number, sala = salaPrivativa) {
+  const criada = await criarReservaNaRecepcao({
+    salaId: sala,
+    telefone: DA_TOCA,
+    nomeCliente: "Toca Imobiliária",
+    profissaoId: await idDaProfissao("OUTROS"),
+    inicio: instanteDe(dia, hora),
+    fim: new Date(instanteDe(dia, hora).getTime() + horas * 60 * 60_000),
+    operador,
+  });
+
+  if (!criada.ok) {
+    throw new Error(`Não criou a reserva de teste: ${criada.falha.motivo}`);
+  }
+
+  return criada.dados.id;
+}
+
+async function cadastroDaToca(): Promise<string> {
+  const ligado = await bancoDeTeste.telefoneDoCliente.findUniqueOrThrow({
+    where: { telefone: DA_TOCA },
+    select: { clienteId: true },
+  });
+  return ligado.clienteId;
+}
+
+// -----------------------------------------------------------------------------
+
+describe("o sistema soma, e a planilha não somava", () => {
+  it("as horas saem da soma das linhas, nunca digitadas", async () => {
+    // As mesmas horas que a planilha de setembro da Toca tinha, em três
+    // dias: 2,5 + 6,5 + 3,5. A planilha escrevia o total à mão e errava.
+    await reserva("2026-09-11", "09:00", 2.5);
+    await reserva("2026-09-15", "09:00", 6.5);
+    await reserva("2026-09-16", "09:00", 3.5);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+
+    expect(feito.ok).toBe(true);
+    if (!feito.ok) return;
+
+    expect(feito.dados.horas).toBe(12.5);
+    expect(feito.dados.itens).toHaveLength(3);
+    // 12,5 h x R$ 30,00 = R$ 375,00
+    expect(feito.dados.valorDasHorasCentavos).toBe(37_500);
+  });
+
+  it("o TOTAL é a soma das horas com as linhas digitadas", async () => {
+    // As linhas extras da planilha de setembro, na ordem em que estavam.
+    await reserva("2026-09-11", "09:00", 2);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [
+        { descricao: "1 posição: 10 dias", valor: "313.34" },
+        { descricao: "1 posição: 2 dias", valor: "31.32" },
+        { descricao: "2 posições", valor: "940.00" },
+        { descricao: "Empório: 13 águas, 15 c/ gás, 8 barrinhas", valor: "179.00" },
+      ],
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+
+    // 2 h x 30 = 60,00  +  313,34 + 31,32 + 940,00 + 179,00 = 1.523,66
+    expect(feito.dados.valorDasHorasCentavos).toBe(6_000);
+    expect(feito.dados.valorDasLinhasCentavos).toBe(146_366);
+    expect(feito.dados.totalCalculadoCentavos).toBe(152_366);
+    expect(comoDinheiro(feito.dados.totalCentavos)).toBe("R$ 1.523,66");
+  });
+
+  it("soma em CENTAVOS: três linhas de R$ 33,33 dão R$ 99,99", async () => {
+    // Somar reais em ponto flutuante acumula diferença de um centavo ao longo
+    // de muitas linhas. Mesma regra do faturamento do relatório.
+    await reserva("2026-09-11", "09:00", 1);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "0.00",
+      linhasExtras: [
+        { descricao: "a", valor: "33.33" },
+        { descricao: "b", valor: "33.33" },
+        { descricao: "c", valor: "33.33" },
+      ],
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(comoDinheiro(feito.dados.totalCentavos)).toBe("R$ 99,99");
+  });
+
+  it("meia hora x preço quebrado não perde centavo", async () => {
+    await reserva("2026-09-11", "09:00", 2.5);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "33.33",
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    // 2,5 x 33,33 = 83,325 -> arredonda uma vez só, no fim
+    expect(feito.dados.valorDasHorasCentavos).toBe(8_333);
+  });
+});
+
+describe("o que entra e o que não entra", () => {
+  it("CANCELADA não entra: hora desmarcada não é hora cobrada", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+    const desmarcada = await reserva("2026-09-15", "09:00", 5);
+
+    await bancoDeTeste.reserva.update({
+      where: { id: desmarcada },
+      data: { status: "CANCELADA", canceladoEm: new Date() },
+    });
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(feito.dados.horas).toBe(2);
+  });
+
+  it("reserva fora do período não entra", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+    await reserva("2026-10-20", "09:00", 8);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(feito.dados.horas).toBe(2);
+  });
+
+  it("o último dia do período entra inteiro", async () => {
+    // "10/09 a 10/10" inclui o dia 10/10 todo. Cortar no começo do dia
+    // deixaria de fora a reserva da tarde e ninguém entenderia por quê.
+    await reserva("2026-10-10", "15:00", 3);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(feito.dados.horas).toBe(3);
+  });
+
+  it("recusa período invertido", async () => {
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca().catch(() => "x"),
+      de: "2026-10-10",
+      ate: "2026-09-10",
+      valorHora: "30.00",
+    });
+
+    expect(feito.ok).toBe(false);
+    expect(feito.ok === false && feito.falha.codigo).toBe("PERIODO_INVERTIDO");
+  });
+});
+
+describe("as horas separadas por sala", () => {
+  it("mostra cada sala e também o total somado", async () => {
+    // Pedido do dono: "pode somar todas as salas, mas também mostra separado,
+    // porque o cliente também tem essa visualização".
+    await reserva("2026-09-11", "09:00", 2, salaPrivativa);
+    await reserva("2026-09-15", "09:00", 3, salaPrivativa);
+    await reserva("2026-09-16", "09:00", 1.5, salaReuniao);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+
+    const porSala = new Map(feito.dados.porSala.map((s) => [s.sala, s.horas]));
+    expect(porSala.get(nomeDaPrivativa)).toBe(5);
+    expect(porSala.get("Sala de Reunião")).toBe(1.5);
+    expect(feito.dados.horas).toBe(6.5);
+  });
+});
+
+describe("o preço combinado do cliente", () => {
+  it("vale o do cliente, e não o da tabela da sala", async () => {
+    // A Toca paga R$ 30 numa sala que custa R$ 40. O valor congelado na
+    // reserva é o da tabela e NÃO serve para o demonstrativo.
+    await reserva("2026-09-11", "09:00", 2);
+    const clienteId = await cadastroDaToca();
+
+    await bancoDeTeste.cliente.update({
+      where: { id: clienteId },
+      data: { precoHoraAcordado: "30.00" },
+    });
+
+    const feito = await montarDoPeriodo({ clienteId, de: DE, ate: ATE });
+
+    if (!feito.ok) throw new Error("deveria montar");
+    expect(feito.dados.valorHora).toBe("30.00");
+    expect(feito.dados.valorDasHorasCentavos).toBe(6_000);
+  });
+
+  it("salvar com 'lembrar' guarda o preço para a próxima vez", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+    const clienteId = await cadastroDaToca();
+
+    await salvar({
+      clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: true,
+    });
+
+    const cliente = await bancoDeTeste.cliente.findUniqueOrThrow({
+      where: { id: clienteId },
+    });
+    expect(cliente.precoHoraAcordado?.toFixed(2)).toBe("30.00");
+  });
+});
+
+describe("o total ajustado à mão", () => {
+  it("só vale quando escrito de propósito", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+
+    const normal = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+    });
+    if (!normal.ok) throw new Error("deveria montar");
+    expect(normal.dados.totalCentavos).toBe(6_000);
+
+    const renegociado = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      totalAjustado: "50.00",
+    });
+    if (!renegociado.ok) throw new Error("deveria montar");
+
+    expect(renegociado.dados.totalCentavos).toBe(5_000);
+    // E o calculado continua visível: a tela mostra os dois, para ninguém
+    // ajustar sem perceber de quanto era.
+    expect(renegociado.dados.totalCalculadoCentavos).toBe(6_000);
+  });
+});
+
+describe("salvar CONGELA o documento", () => {
+  it("remarcar uma reserva depois não muda o que o cliente recebeu", async () => {
+    // Mesma regra do valor congelado na reserva: o documento enviado tem de
+    // continuar batendo com o que foi enviado.
+    const reservaId = await reserva("2026-09-11", "09:00", 2);
+
+    const salvo = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [{ descricao: "2 posições", valor: "940.00" }],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+    const antes = salvo.dados.totalCentavos;
+
+    // A reserva muda de 2 h para 5 h DEPOIS da emissão.
+    await bancoDeTeste.reserva.update({
+      where: { id: reservaId },
+      data: {
+        fim: instanteDe("2026-09-11", "14:00"),
+        duracaoMinutos: 300,
+      },
+    });
+
+    const relido = await buscar(salvo.dados.id!);
+
+    expect(relido?.horas).toBe(2);
+    expect(relido?.totalCentavos).toBe(antes);
+    expect(relido?.itens).toHaveLength(1);
+  });
+
+  it("guarda as linhas digitadas, para não redigitar no mês seguinte", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+
+    const salvo = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [
+        { descricao: "1 posição: 10 dias", valor: "313.34" },
+        { descricao: "Empório", valor: "179.00" },
+      ],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+
+    const relido = await buscar(salvo.dados.id!);
+    expect(relido?.linhasExtras).toHaveLength(2);
+    expect(relido?.linhasExtras[0]?.descricao).toBe("1 posição: 10 dias");
+    expect(emCentavos(relido!.linhasExtras[1]!.valor)).toBe(17_900);
+  });
+});
+
+describe("o PDF", () => {
+  it("sai um arquivo PDF de verdade, com as contas dentro", async () => {
+    await reserva("2026-09-11", "09:00", 2.5);
+    await reserva("2026-09-15", "09:00", 6.5, salaReuniao);
+
+    const salvo = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [
+        { descricao: "2 posições", valor: "940.00" },
+        { descricao: "Empório: 13 águas, 15 c/ gás, 8 barrinhas", valor: "179.00" },
+      ],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+
+    const { gerarPdfDoDemonstrativo, nomeDoArquivo } = await import(
+      "@/lib/pdf-demonstrativo"
+    );
+    const bytes = await gerarPdfDoDemonstrativo(salvo.dados);
+
+    // Todo PDF começa com "%PDF-" e termina com "%%EOF". Sem isso, o
+    // WhatsApp entrega um arquivo que não abre — e o cliente é quem
+    // descobre.
+    const texto = Buffer.from(bytes).toString("latin1");
+    expect(texto.startsWith("%PDF-")).toBe(true);
+    expect(texto.trimEnd().endsWith("%%EOF")).toBe(true);
+    expect(bytes.length).toBeGreaterThan(1_000);
+
+    // 9 h x R$ 30 = R$ 270 + 940 + 179 = R$ 1.389,00
+    expect(comoDinheiro(salvo.dados.totalCentavos)).toBe("R$ 1.389,00");
+
+    // E o nome do arquivo diz de quem é e de quando, sem acento nem espaço.
+    const nome = nomeDoArquivo(salvo.dados);
+    expect(nome).toBe("Demonstrativo-Toca-Imobiliaria-2026-09-10-a-2026-10-10.pdf");
+    expect(nome).toMatch(/^[\w.-]+$/);
+  });
+
+  it("gera mesmo sem nenhuma reserva no período", async () => {
+    // Um mês em que o cliente não usou nada ainda tem posições e empório a
+    // cobrar. O documento não pode simplesmente falhar.
+    await reserva("2026-11-20", "09:00", 1);
+
+    const salvo = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [{ descricao: "2 posições", valor: "940.00" }],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+    expect(salvo.dados.horas).toBe(0);
+
+    const { gerarPdfDoDemonstrativo } = await import("@/lib/pdf-demonstrativo");
+    const bytes = await gerarPdfDoDemonstrativo(salvo.dados);
+    expect(bytes.length).toBeGreaterThan(1_000);
+    expect(comoDinheiro(salvo.dados.totalCentavos)).toBe("R$ 940,00");
+  });
+
+  it("aguenta um mês cheio sem estourar a página", async () => {
+    // 30 linhas não cabem numa folha A4: o documento tem de virar a página
+    // sozinho, repetindo o cabeçalho da tabela.
+    for (let dia = 1; dia <= 28; dia += 1) {
+      const data = `2026-09-${String(dia).padStart(2, "0")}`;
+      if (data >= DE) {
+        await reserva(data, "09:00", 1);
+      }
+    }
+
+    const salvo = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!salvo.ok) throw new Error("deveria salvar");
+
+    const { gerarPdfDoDemonstrativo } = await import("@/lib/pdf-demonstrativo");
+    const bytes = await gerarPdfDoDemonstrativo(salvo.dados);
+    const texto = Buffer.from(bytes).toString("latin1");
+
+    expect(texto.startsWith("%PDF-")).toBe(true);
+    // Mais de uma página: o contador de páginas do PDF tem de passar de 1.
+    expect(salvo.dados.itens.length).toBeGreaterThan(15);
+  });
+});

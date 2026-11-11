@@ -296,3 +296,93 @@ export async function aguardarEnviosPendentes(): Promise<void> {
     await Promise.allSettled([...enviosEmAndamento]);
   }
 }
+
+// -----------------------------------------------------------------------------
+// Enviar um DOCUMENTO (o PDF do demonstrativo)
+// -----------------------------------------------------------------------------
+
+/**
+ * Manda um arquivo pelo WhatsApp, com um texto junto.
+ *
+ * A Evolution usa outra rota para isso ("sendMedia"), e nao a de texto. O
+ * arquivo vai em base64 no proprio pedido: sao poucas centenas de kilobytes e
+ * assim nao e preciso publicar o PDF num endereco acessivel — um demonstrativo
+ * tem nome de cliente e valor pago, e nao deve ficar num link que qualquer um
+ * abra.
+ *
+ * MODO SIMULADO: com EVOLUTION_URL vazia, nada e enviado de verdade e o
+ * terminal mostra o que teria saido. E o mesmo comportamento do envio de
+ * texto, para o desenvolvimento nunca falar com o cliente de ninguem.
+ */
+export async function enviarDocumento(entrada: {
+  telefone: string;
+  nomeArquivo: string;
+  /** O conteudo do PDF. */
+  arquivo: Uint8Array;
+  legenda: string;
+}): Promise<{ enviado: boolean; erro: string | null }> {
+  if (modoSimulado()) {
+    if (!process.env.VITEST) {
+      process.stdout.write(
+        `\n┌${"─".repeat(64)}┐\n` +
+          `  WHATSAPP — DOCUMENTO (MODO SIMULADO, nada foi enviado)\n` +
+          `  Para: ${entrada.telefone}\n` +
+          `  Arquivo: ${entrada.nomeArquivo} (${entrada.arquivo.length} bytes)\n` +
+          `└${"─".repeat(64)}┘\n${entrada.legenda}\n\n`,
+      );
+    }
+    return { enviado: true, erro: null };
+  }
+
+  const url = process.env.EVOLUTION_URL?.trim();
+  const chave = process.env.EVOLUTION_API_KEY?.trim();
+  const instancia = process.env.EVOLUTION_INSTANCE?.trim();
+
+  if (!url || !chave || !instancia) {
+    return {
+      enviado: false,
+      erro: "Evolution API mal configurada: preencha EVOLUTION_URL, EVOLUTION_API_KEY e EVOLUTION_INSTANCE.",
+    };
+  }
+
+  const controle = new AbortController();
+  const relogio = setTimeout(() => {
+    controle.abort();
+  }, TEMPO_LIMITE_MS);
+
+  try {
+    const resposta = await fetch(
+      `${url.replace(/\/+$/, "")}/message/sendMedia/${encodeURIComponent(instancia)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: chave },
+        body: JSON.stringify({
+          number: apenasDigitos(entrada.telefone),
+          mediatype: "document",
+          mimetype: "application/pdf",
+          media: Buffer.from(entrada.arquivo).toString("base64"),
+          fileName: entrada.nomeArquivo,
+          caption: entrada.legenda,
+        }),
+        signal: controle.signal,
+      },
+    );
+
+    if (!resposta.ok) {
+      const corpo = await resposta.text().catch(() => "");
+      return {
+        enviado: false,
+        erro: `Evolution respondeu ${resposta.status}: ${corpo.slice(0, 200)}`,
+      };
+    }
+
+    return { enviado: true, erro: null };
+  } catch (erro: unknown) {
+    return {
+      enviado: false,
+      erro: erro instanceof Error ? erro.message : "Falha ao falar com o WhatsApp.",
+    };
+  } finally {
+    clearTimeout(relogio);
+  }
+}
