@@ -84,6 +84,25 @@ enum FrequenciaRecorrencia {
 }
 
 /// Usado apenas na tabela tecnica de ocupacao.
+/// POR QUE O ESTOQUE E UMA LISTA DE MOVIMENTOS, e nao um numero na linha do
+/// produto.
+///
+/// Um numero solto responde "o estoque esta em 3" e nada mais. Quando ele
+/// estiver errado — e vai estar, porque a reposicao e lancada a mao —, ninguem
+/// consegue dizer de onde veio o 3. Com uma linha por movimento, o estoque e a
+/// SOMA delas, e a pergunta "por que esta em 3?" tem resposta.
+enum TipoMovimentoEstoque {
+  /// Chegou mercadoria. Quantidade positiva.
+  REPOSICAO
+  /// Saiu porque alguem consumiu. Quantidade negativa.
+  VENDA
+  /// Estragou, venceu, quebrou. Quantidade negativa.
+  PERDA
+  /// A contagem na prateleira nao bateu com o sistema. Pode ir para os dois
+  /// lados, e exige motivo escrito.
+  AJUSTE
+}
+
 enum TipoOcupacao {
   RESERVA
   BLOQUEIO
@@ -197,6 +216,7 @@ model Usuario {
   bloqueiosCriados    Bloqueio[]
   recorrenciasCriadas Recorrencia[]
   telefonesDeBalcao   TelefoneDeBalcao[]
+  movimentosDeEstoque MovimentoDeEstoque[]
 
   @@map("usuarios")
 }
@@ -736,4 +756,70 @@ model OcupacaoSala {
 
   @@index([salaId])
   @@map("ocupacao_salas")
+}
+
+// -----------------------------------------------------------------------------
+// EMPORIO (Fase 15)
+// -----------------------------------------------------------------------------
+
+/// Um item vendido no emporio: barrinha, energetico, cafe.
+///
+/// O emporio JA e cobrado hoje, digitado a mao nas "Outras linhas" do controle
+/// de horas. Este cadastro existe para o valor parar de ser digitado.
+model Produto {
+  id   String @id @default(uuid(7))
+  nome String @unique
+
+  /// Preco de venda, por unidade. NAO retroage: cada consumo congela o preco
+  /// que valia no dia, igual a reserva.
+  preco Decimal @db.Decimal(10, 2)
+
+  /// Desligado sai das telas de lancamento, mas o historico de consumo fica.
+  /// Produto NUNCA se exclui — mesma regra de salas, empresas e areas de
+  /// atuacao: apagar tiraria o historico de vendas em silencio.
+  ativo Boolean @default(true)
+
+  /// A ordem em que aparece para quem lanca. Definida no painel por botoes de
+  /// mover, como nas areas de atuacao.
+  ordem Int
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  movimentos MovimentoDeEstoque[]
+
+  @@index([ativo, ordem])
+  @@map("produtos")
+}
+
+/// Uma linha do estoque: o que entrou ou saiu, quando e por que.
+///
+/// O estoque atual de um produto e a SOMA das quantidades daqui. Nunca um
+/// campo editavel na linha do produto — ver o comentario de
+/// "TipoMovimentoEstoque".
+model MovimentoDeEstoque {
+  id        String  @id @default(uuid(7))
+  produtoId String  @map("produto_id")
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  tipo TipoMovimentoEstoque
+
+  /// COM SINAL: positiva entra, negativa sai. O banco confere que o sinal
+  /// combina com o tipo (ver a trava "movimento_sinal_do_tipo" na migracao) —
+  /// uma REPOSICAO negativa aumentaria o estoque ao ser somada, e o numero
+  /// continuaria parecendo certo.
+  quantidade Int
+
+  /// Obrigatorio no AJUSTE: daqui a seis meses ninguem lembra por que o
+  /// estoque foi corrigido, e sem explicacao a proxima pessoa corrige de novo.
+  motivo String?
+
+  /// Quem lancou. Nulo quando o usuario do painel foi desligado depois.
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([produtoId, criadoEm])
+  @@map("movimentos_estoque")
 }
