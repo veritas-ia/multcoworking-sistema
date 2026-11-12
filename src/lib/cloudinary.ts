@@ -15,6 +15,8 @@
  */
 import { createHash } from "node:crypto";
 
+import { ehPrevia } from "./ambiente";
+
 // Os limites e a montagem do endereco vivem em "fotos.ts", que o NAVEGADOR
 // tambem carrega. Este arquivo usa a criptografia do Node e so roda no
 // servidor; reexportamos para quem ja importava daqui continuar funcionando.
@@ -25,8 +27,19 @@ export {
   enderecoDaFoto,
 } from "@/lib/fotos";
 
-/** A pasta onde as fotos ficam la dentro, para nao se misturarem a outras. */
-const PASTA = "mult-coworking/salas";
+/**
+ * As pastas no Cloudinary, uma por tipo de imagem.
+ *
+ * Separadas de proposito: uma limpeza futura na pasta de produtos nao pode
+ * levar as fotos das salas junto, e olhar a conta do Cloudinary tem de dizer
+ * de onde cada arquivo veio.
+ */
+export const PASTAS = {
+  salas: "mult-coworking/salas",
+  produtos: "mult-coworking/produtos",
+} as const;
+
+export type Pasta = (typeof PASTAS)[keyof typeof PASTAS];
 
 type Credenciais = { cloudName: string; apiKey: string; apiSecret: string };
 
@@ -84,7 +97,10 @@ export type ResultadoDoEnvio =
  * O "timestamp" em segundos faz parte da assinatura e impede que um pedido
  * capturado hoje seja reenviado amanha.
  */
-export async function enviarImagem(arquivo: Blob): Promise<ResultadoDoEnvio> {
+export async function enviarImagem(
+  arquivo: Blob,
+  pasta: Pasta = PASTAS.salas,
+): Promise<ResultadoDoEnvio> {
   const credencial = credenciais();
 
   if (!credencial) {
@@ -92,13 +108,13 @@ export async function enviarImagem(arquivo: Blob): Promise<ResultadoDoEnvio> {
   }
 
   const timestamp = String(Math.floor(Date.now() / 1_000));
-  const assinatura = assinar({ folder: PASTA, timestamp }, credencial.apiSecret);
+  const assinatura = assinar({ folder: pasta, timestamp }, credencial.apiSecret);
 
   const corpo = new FormData();
   corpo.append("file", arquivo);
   corpo.append("api_key", credencial.apiKey);
   corpo.append("timestamp", timestamp);
-  corpo.append("folder", PASTA);
+  corpo.append("folder", pasta);
   corpo.append("signature", assinatura);
 
   let resposta: Response;
@@ -139,6 +155,22 @@ export async function apagarImagem(publicId: string): Promise<boolean> {
 
   if (!credencial) {
     return false;
+  }
+
+  // A PREVIA NUNCA APAGA ARQUIVO NO CLOUDINARY.
+  //
+  // O banco da previa e separado do de producao, entao mexer nela nao afeta
+  // nenhuma reserva nem nenhuma foto do site de verdade — EXCETO os arquivos
+  // no Cloudinary, que ficam numa conta so, fora do nosso servidor. Apagar uma
+  // foto numa demonstracao apagaria o arquivo de verdade, e ela sumiria do
+  // site real sem ninguem entender por que.
+  //
+  // Na previa a linha sai do banco dela (a foto desaparece da tela, que e o
+  // que a demonstracao precisa mostrar) e o arquivo fica. Devolve "true"
+  // porque, do ponto de vista de quem chamou, deu certo: o arquivo nao esta
+  // mais sendo usado por este sistema.
+  if (ehPrevia()) {
+    return true;
   }
 
   const timestamp = String(Math.floor(Date.now() / 1_000));

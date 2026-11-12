@@ -16,11 +16,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   criarProduto,
+  definirFotoDoProduto,
   editarProduto,
   extratoDoProduto,
   ligarOuDesligarProduto,
   listarProdutos,
   registrarMovimento,
+  removerFotoDoProduto,
   reordenarProdutos,
   TipoMovimentoEstoque,
 } from "@/lib/emporio";
@@ -142,6 +144,84 @@ describe("cadastro de produto", () => {
     const id = await produto();
     const salvo = await editarProduto(id, { nome: `${ZZ} Barrinha`, preco: "7.00" });
     expect(salvo.ok).toBe(true);
+  });
+});
+
+describe("a foto do produto", () => {
+  /**
+   * NULA E ESTADO NORMAL, nao erro. Produto sem foto aparece com a inicial do
+   * nome; nunca com um espaco vazio, nem com imagem quebrada.
+   */
+  it("nasce sem foto, e isso não é problema", async () => {
+    const feito = await criarProduto({ nome: `${ZZ} Café`, preco: "5.00" });
+    if (!feito.ok) throw new Error("deveria criar");
+    expect(feito.dados.foto).toBeNull();
+  });
+
+  it("sem Cloudinary configurado, recusa com explicação e NÃO quebra o resto", async () => {
+    // Credenciais vazias são estado normal: é assim que a prévia roda. O
+    // envio fica indisponível e todo o resto do empório continua de pé.
+    const id = await produto();
+    const arquivo = new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+
+    const feito = await definirFotoDoProduto(id, arquivo);
+
+    expect(feito.ok).toBe(false);
+    if (feito.ok) throw new Error("não deveria enviar");
+    expect(feito.falha.codigo).toBe("CLOUDINARY_DESLIGADO");
+
+    // O produto continua inteiro e listável.
+    expect((await listarProdutos()).find((p) => p.id === id)?.nome).toBeTruthy();
+  });
+
+  it("recusa tipo de arquivo que não é imagem", async () => {
+    // A validação é do SERVIDOR. A tela também confere, mas esconder o botão
+    // não para quem manda o pedido direto.
+    const id = await produto();
+    const pdf = new Blob([new Uint8Array([1])], { type: "application/pdf" });
+
+    const feito = await definirFotoDoProduto(id, pdf);
+    expect(feito.ok).toBe(false);
+    if (feito.ok) throw new Error("não deveria aceitar");
+    expect(feito.falha.codigo).toBe("TIPO_NAO_ACEITO");
+  });
+
+  it("remover a foto de um produto que não tem foto não dá erro", async () => {
+    const id = await produto();
+    const feito = await removerFotoDoProduto(id);
+    expect(feito.ok).toBe(true);
+  });
+
+  it("as duas colunas da foto andam juntas — o BANCO exige", async () => {
+    // Endereço sem identificador deixaria arquivo órfão no Cloudinary para
+    // sempre; identificador sem endereço mostraria imagem quebrada na tela.
+    const id = await produto();
+
+    await expect(
+      bancoDeTeste.produto.update({
+        where: { id },
+        data: { fotoUrl: "https://exemplo/x.png" },
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      bancoDeTeste.produto.update({ where: { id }, data: { fotoPublicId: "x" } }),
+    ).rejects.toThrow();
+  });
+
+  it("a foto sobrevive a renomear e a desligar", async () => {
+    // Gravada direto, porque enviar de verdade exigiria o Cloudinary.
+    const id = await produto();
+    await bancoDeTeste.produto.update({
+      where: { id },
+      data: { fotoPublicId: "mult-coworking/produtos/zz", fotoUrl: "https://x/zz.png" },
+    });
+
+    await editarProduto(id, { nome: `${ZZ} Barrinha nova`, preco: "7.00" });
+    await ligarOuDesligarProduto(id, false);
+
+    const depois = (await listarProdutos()).find((p) => p.id === id);
+    expect(depois?.foto?.publicId).toBe("mult-coworking/produtos/zz");
   });
 });
 

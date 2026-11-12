@@ -24,6 +24,14 @@
  */
 import { TipoMovimentoEstoque } from "@/generated/prisma/enums";
 
+import {
+  apagarImagem,
+  cloudinaryConfigurado,
+  enviarImagem,
+  PASTAS,
+  TAMANHO_MAXIMO_BYTES,
+  TIPOS_ACEITOS,
+} from "./cloudinary";
 import { prisma } from "./prisma";
 
 export { TipoMovimentoEstoque };
@@ -36,6 +44,11 @@ export type ProdutoDoEmporio = {
   preco: string;
   ativo: boolean;
   ordem: number;
+  /**
+   * A foto, como no iFood. NULA e estado normal: produto sem foto aparece com
+   * a inicial do nome, nunca com um espaco vazio.
+   */
+  foto: { publicId: string; url: string } | null;
   /**
    * A SOMA dos movimentos. PODE SER NEGATIVO de proposito — ver
    * "registrarMovimento": o consumo que ja aconteceu nunca e recusado, e
@@ -103,6 +116,7 @@ export async function listarProdutos(opcoes?: {
     preco: produto.preco.toFixed(2),
     ativo: produto.ativo,
     ordem: produto.ordem,
+    foto: fotoDe(produto),
     estoque: porProduto.get(produto.id) ?? 0,
   }));
 }
@@ -223,6 +237,7 @@ export async function criarProduto(entrada: {
       preco: criado.preco.toFixed(2),
       ativo: criado.ativo,
       ordem: criado.ordem,
+      foto: fotoDe(criado),
       estoque: 0,
     },
   };
@@ -304,6 +319,7 @@ export async function editarProduto(
       preco: salvo.preco.toFixed(2),
       ativo: salvo.ativo,
       ordem: salvo.ordem,
+      foto: fotoDe(salvo),
       estoque: soma._sum.quantidade ?? 0,
     },
   };
@@ -484,5 +500,166 @@ export async function registrarMovimento(entrada: {
   return {
     ok: true,
     dados: { id: criado.id, estoque: soma._sum.quantidade ?? 0 },
+  };
+}
+
+// -----------------------------------------------------------------------------
+// A foto do produto
+// -----------------------------------------------------------------------------
+
+/**
+ * As duas colunas viram um objeto so, ou nulo.
+ *
+ * O banco garante que elas andam juntas (trava "produto_foto_completa"): o
+ * endereco sem o identificador deixaria arquivo orfao no Cloudinary para
+ * sempre, e o identificador sem o endereco mostraria imagem quebrada na tela.
+ */
+function fotoDe(produto: {
+  fotoPublicId: string | null;
+  fotoUrl: string | null;
+}): { publicId: string; url: string } | null {
+  return produto.fotoPublicId && produto.fotoUrl
+    ? { publicId: produto.fotoPublicId, url: produto.fotoUrl }
+    : null;
+}
+
+/**
+ * Troca a foto do produto.
+ *
+ * O ARQUIVO PASSA PELO SERVIDOR, nunca direto do navegador: o API Secret do
+ * Cloudinary assina o pedido aqui, e quem tem esse segredo apaga tudo que esta
+ * la. Mesma regra das fotos das salas.
+ *
+ * A VALIDACAO E DAQUI, e nao da tela. A tela tambem confere, mas so para
+ * avisar cedo — esconder o botao nao para quem manda o pedido direto.
+ */
+export async function definirFotoDoProduto(
+  id: string,
+  arquivo: Blob,
+): Promise<Resultado<ProdutoDoEmporio>> {
+  const produto = await prisma.produto.findUnique({ where: { id } });
+
+  if (!produto) {
+    return {
+      ok: false,
+      falha: { motivo: "Produto não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  if (!TIPOS_ACEITOS.includes(arquivo.type as (typeof TIPOS_ACEITOS)[number])) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "A imagem precisa ser JPG, PNG ou WEBP.",
+        codigo: "TIPO_NAO_ACEITO",
+      },
+    };
+  }
+
+  if (arquivo.size > TAMANHO_MAXIMO_BYTES) {
+    return {
+      ok: false,
+      falha: {
+        motivo: `A imagem passa de ${TAMANHO_MAXIMO_BYTES / (1024 * 1024)} MB.`,
+        codigo: "ARQUIVO_GRANDE",
+      },
+    };
+  }
+
+  // So depois de o arquivo passar. Credenciais vazias sao estado NORMAL, nao
+  // erro: o painel avisa que o envio esta indisponivel e todo o resto do
+  // sistema continua funcionando — e assim a previa roda sem Cloudinary.
+  //
+  // A ORDEM IMPORTA: um PDF continua sendo um PDF em qualquer servidor, e
+  // dizer "envio indisponivel" para quem escolheu o arquivo errado manda a
+  // pessoa procurar defeito no lugar errado.
+  if (!cloudinaryConfigurado()) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "O envio de imagens está indisponível neste servidor.",
+        codigo: "CLOUDINARY_DESLIGADO",
+      },
+    };
+  }
+
+  const enviada = await enviarImagem(arquivo, PASTAS.produtos);
+
+  if (!enviada.ok) {
+    return { ok: false, falha: { motivo: enviada.motivo, codigo: "ENVIO_RECUSADO" } };
+  }
+
+  // A ANTIGA SO SAI DEPOIS QUE A NOVA CHEGOU. Apagando antes, uma falha no
+  // envio deixaria o produto sem foto nenhuma — pior do que ficar com a velha.
+  const anterior = produto.fotoPublicId;
+
+  const salvo = await prisma.produto.update({
+    where: { id },
+    data: { fotoPublicId: enviada.foto.publicId, fotoUrl: enviada.foto.url },
+  });
+
+  if (anterior) {
+    // Se o Cloudinary recusar, a foto nova ja esta valendo. O arquivo velho
+    // fica la ocupando espaco, o que e um problema de conta, nao de sistema.
+    await apagarImagem(anterior);
+  }
+
+  const soma = await prisma.movimentoDeEstoque.aggregate({
+    where: { produtoId: id },
+    _sum: { quantidade: true },
+  });
+
+  return {
+    ok: true,
+    dados: {
+      id: salvo.id,
+      nome: salvo.nome,
+      preco: salvo.preco.toFixed(2),
+      ativo: salvo.ativo,
+      ordem: salvo.ordem,
+      foto: fotoDe(salvo),
+      estoque: soma._sum.quantidade ?? 0,
+    },
+  };
+}
+
+/**
+ * Remove a foto do produto.
+ *
+ * A LINHA SAI DO BANCO DE QUALQUER JEITO, mesmo que o Cloudinary recuse — uma
+ * instabilidade la fora nao pode deixar no ar uma imagem que a equipe quer
+ * fora. Mesma decisao das fotos das salas.
+ *
+ * Devolve se o arquivo tambem saiu, para a tela poder avisar que ele pode ter
+ * ficado. Na previa a remocao no Cloudinary nao e nem tentada: o arquivo e
+ * compartilhado com producao.
+ */
+export async function removerFotoDoProduto(
+  id: string,
+): Promise<Resultado<{ arquivoApagado: boolean }>> {
+  const produto = await prisma.produto.findUnique({
+    where: { id },
+    select: { fotoPublicId: true },
+  });
+
+  if (!produto) {
+    return {
+      ok: false,
+      falha: { motivo: "Produto não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  if (!produto.fotoPublicId) {
+    return { ok: true, dados: { arquivoApagado: true } };
+  }
+
+  await prisma.produto.update({
+    where: { id },
+    data: { fotoPublicId: null, fotoUrl: null },
+  });
+
+  return {
+    ok: true,
+    dados: { arquivoApagado: await apagarImagem(produto.fotoPublicId) },
   };
 }

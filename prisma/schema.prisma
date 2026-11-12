@@ -774,6 +774,18 @@ model Produto {
   /// que valia no dia, igual a reserva.
   preco Decimal @db.Decimal(10, 2)
 
+  /// A FOTO DO PRODUTO, como no iFood: e ela que a recepcionista reconhece de
+  /// relance na hora de lancar o que esta escrito na ficha.
+  ///
+  /// UMA foto, nao um carrossel: aqui ela serve para identificar o item, e nao
+  /// para vende-lo como as fotos das salas. Nulo e estado normal — produto sem
+  /// foto aparece com a inicial do nome, e nunca com um espaco vazio.
+  ///
+  /// O arquivo fica no Cloudinary, na pasta "mult-coworking/produtos". O
+  /// "public_id" e o que permite apagar o arquivo de la depois.
+  fotoPublicId String? @map("foto_public_id")
+  fotoUrl      String? @map("foto_url")
+
   /// Desligado sai das telas de lancamento, mas o historico de consumo fica.
   /// Produto NUNCA se exclui — mesma regra de salas, empresas e areas de
   /// atuacao: apagar tiraria o historico de vendas em silencio.
