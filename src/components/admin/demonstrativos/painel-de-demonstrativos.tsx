@@ -293,9 +293,22 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
     ? Math.round(Number(totalAjustado.replace(",", ".")) * 100)
     : totalCalculado;
 
+  /**
+   * DOCUMENTO JÁ ENVIADO NÃO SE REESCREVE.
+   *
+   * Não existe exclusão de demonstrativo, de propósito. Mas regravar em cima
+   * de um que o cliente já recebeu faz o mesmo estrago com outro nome: o que
+   * está guardado deixa de bater com o que ele tem na mão. Para corrigir,
+   * emite-se um novo — o antigo fica como registro do que foi enviado.
+   *
+   * O servidor recusa de todo jeito; isto aqui é para a equipe entender ANTES
+   * de preencher a tela inteira à toa.
+   */
+  const jaEnviado = Boolean(salvo?.enviadoEm);
+
   // O preço por hora NÃO entra aqui: ele é opcional. Sem ele, o documento
   // soma o valor que cada reserva já tem gravado, e não falta nada.
-  const podeSalvar = Boolean(dono && de && ate && !ocupado);
+  const podeSalvar = Boolean(dono && de && ate && !ocupado) && !jaEnviado;
 
   return (
     <div className="flex flex-col gap-4">
@@ -651,6 +664,16 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
 
           {/* --- 6. salvar, baixar, enviar ---------------------------------- */}
           <Secao titulo="Emitir">
+            {jaEnviado ? (
+              <p className="mb-3 rounded-lg border border-border bg-bg-secondary p-3 text-sm leading-relaxed text-text-primary">
+                <strong>Este documento já foi enviado ao cliente</strong> e não
+                pode mais ser alterado — o que está guardado aqui precisa
+                continuar batendo com o que ele tem na mão. Para corrigir algo,
+                emita um documento novo para o mesmo período: este fica como
+                registro do que foi enviado.
+              </p>
+            ) : null}
+
             <div className="flex flex-wrap gap-3">
               <Botao
                 largura="conteudo"

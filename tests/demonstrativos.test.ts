@@ -33,6 +33,7 @@ import {
   comoDinheiro,
   emCentavos,
   listar,
+  marcarEnviado,
   montarDoPeriodo,
   salvar,
 } from "@/lib/demonstrativos";
@@ -612,6 +613,122 @@ describe("salvar CONGELA o documento", () => {
     expect(relido?.linhasExtras).toHaveLength(2);
     expect(relido?.linhasExtras[0]?.descricao).toBe("1 posição: 10 dias");
     expect(emCentavos(relido!.linhasExtras[1]!.valor)).toBe(17_900);
+  });
+});
+
+describe("documento enviado não se reescreve", () => {
+  /**
+   * NAO existe rota que apague um demonstrativo, de proposito. Mas regravar
+   * em cima de um que o cliente ja recebeu faz o mesmo estrago com outro
+   * nome: o que esta guardado deixa de bater com o que ele tem na mao, e
+   * ninguem percebe. A nota de cobranca perde a serventia de ser prova.
+   */
+  it("recusa salvar de novo depois de enviado", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+
+    const primeiro = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!primeiro.ok) throw new Error("deveria salvar");
+    await marcarEnviado(primeiro.dados.id!);
+
+    const segundo = await salvar({
+      id: primeiro.dados.id,
+      clienteId: primeiro.dados.clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: "999.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    expect(segundo.ok).toBe(false);
+    if (segundo.ok) throw new Error("não deveria ter salvo");
+    expect(segundo.falha.codigo).toBe("JA_ENVIADO");
+
+    // E a linha ficou INTACTA: a recusa não é só uma mensagem na tela.
+    const lido = await buscar(primeiro.dados.id!);
+    expect(lido?.valorHora).toBe("30.00");
+    expect(lido?.totalCentavos).toBe(primeiro.dados.totalCentavos);
+  });
+
+  it("antes de enviar, salvar de novo continua valendo", async () => {
+    // A equipe mexe no período e nas linhas à vontade até mandar. É só
+    // depois do envio que o documento vira registro.
+    await reserva("2026-09-11", "09:00", 2);
+
+    const primeiro = await salvar({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!primeiro.ok) throw new Error("deveria salvar");
+
+    const segundo = await salvar({
+      id: primeiro.dados.id,
+      clienteId: primeiro.dados.clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: "50.00",
+      linhasExtras: [{ descricao: "2 posições", valor: "940.00" }],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    expect(segundo.ok).toBe(true);
+    if (!segundo.ok) throw new Error("deveria salvar");
+    // Mesmo documento, não um segundo.
+    expect(segundo.dados.id).toBe(primeiro.dados.id);
+    expect(segundo.dados.valorHora).toBe("50.00");
+  });
+
+  it("corrigir depois do envio é emitir um documento NOVO", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+    const clienteId = await cadastroDaToca();
+
+    const enviado = await salvar({
+      clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!enviado.ok) throw new Error("deveria salvar");
+    await marcarEnviado(enviado.dados.id!);
+
+    // Sem "id": nasce outro, e o enviado continua lá.
+    const novo = await salvar({
+      clienteId,
+      de: DE,
+      ate: ATE,
+      valorHora: "25.00",
+      linhasExtras: [],
+      totalAjustado: null,
+      lembrarPreco: false,
+    });
+
+    if (!novo.ok) throw new Error("deveria salvar o novo");
+    expect(novo.dados.id).not.toBe(enviado.dados.id);
+
+    const lista = await listar({ clienteId });
+    expect(lista.filter((item) => item.id === enviado.dados.id)).toHaveLength(1);
+    expect(lista.filter((item) => item.id === novo.dados.id)).toHaveLength(1);
   });
 });
 

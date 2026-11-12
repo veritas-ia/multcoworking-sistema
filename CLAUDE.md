@@ -1277,6 +1277,83 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
   algum funcionário da Toca por WhatsApp"*. Por enquanto a gestão **baixa o PDF e envia
   por e-mail à mão**. O envio automático por e-mail é o próximo passo.
 
+#### O demonstrativo NÃO trata horas incluídas no plano (12/11/2026)
+- **Levantei isto como possível erro de cobrança e o dono confirmou que está certo.**
+  Fica registrado para ninguém "consertar" depois achando que faltou algo.
+- O mensalista tem uma cota de horas de sala na mensalidade (varia por cliente — 10,
+  15). **O demonstrativo não desconta essa cota:** ele é o documento das **horas
+  extras** e do **empório**, as duas coisas que ficam fora da mensalidade. Palavra do
+  dono: *"o demonstrativo só foca em reservas, ou seja, horas extras e o valor do
+  empório. Ele não foca em horas incluídas."*
+- **A mensalidade também fica fora do sistema** — nem valor, nem dia de vencimento.
+  Motivo da recepcionista: *"eles vão pagar automático, não precisa de cobrança"*. Só
+  um ou dois pedem nota ou boleto, e ela resolve na mão.
+- Consequência a lembrar: **o campo "Preço especial por hora" é o preço da hora
+  extra.** Para quem não é mensalista dá no mesmo, porque todas as horas dele são
+  cobradas.
+
+#### Documento enviado não se reescreve, e excluir não existe (12/11/2026)
+- **Pedido do dono:** *"nem nessa linha aí do controle de horas devia ter a opção de
+  excluir documentos enviados"*.
+- **Excluir nunca existiu:** não há rota que apague um demonstrativo, mesma regra de
+  salas, empresas, áreas de atuação e clientes.
+- **Mas "Salvar de novo" era a mesma coisa com outro nome**, e isso era um defeito meu:
+  depois de enviado, a equipe podia mudar período e valores e regravar em cima — e o
+  que estava guardado deixava de bater com o que o cliente tinha na mão, sem ninguém
+  perceber. Uma nota de cobrança que pode ser reescrita depois de enviada perde a
+  serventia de ser prova. É a doença da planilha voltando por outra porta.
+- **Agora:** demonstrativo com `enviadoEm` preenchido é recusado no servidor
+  (`JA_ENVIADO`), e a tela avisa antes, para a equipe não preencher tudo à toa.
+- **Corrigir é emitir um documento NOVO** para o mesmo período. O antigo fica como
+  registro do que foi enviado. **Antes de enviar, regravar continua liberado** — a
+  equipe mexe à vontade até mandar.
+- Três testes: a recusa (conferindo que a linha ficou **intacta**, não só que a
+  mensagem apareceu), a regravação ainda valendo antes do envio, e a emissão de um
+  segundo documento com o primeiro continuando na lista.
+
+### Fase 15 — Empório: plano aprovado em 12/11/2026 (ainda NÃO construído)
+> Veio de uma ligação do dono com a recepcionista, perguntando como funciona de
+> verdade. Registrado aqui antes de construir: plano que não entra neste arquivo não
+> existe (lição da Fase 14).
+
+- **O empório já é cobrado hoje, digitado à mão.** As "Outras linhas" do controle de
+  horas existem justamente para isso — o comentário no código diz "posições, empório,
+  impressões". Alguém soma a ficha física e digita um valor. É o mesmo risco da
+  planilha: total digitado, sem conferência.
+- **NÃO EXISTE COMANDA.** Duas formas de fechar, e só essas duas:
+  - **paga na hora**, com a forma de pagamento;
+  - **acumula e paga junto com a mensalidade** (o mensalista fecha no dia dele).
+- **A FICHA FÍSICA CONTINUA.** O cliente escreve nela, com a mão: **nome, sala, forma
+  de pagamento, produto e horário**. A recepcionista lê no dia seguinte e lança no
+  sistema. O lançamento guarda **a data e a hora do consumo, não as do lançamento** —
+  carimbar a hora do lançamento faria o relatório dizer que todo mundo consome no fim
+  do dia.
+- **O lançamento usa a BUSCA DE CLIENTE CADASTRADO** da Fase 14, nunca um campo de nome
+  livre. A recepcionista disse por que sem eu perguntar: *"pego o sobrenome para não
+  ficar tipo Matheus da Toca, Matheus Vitullo"*. Nome solto aqui recriaria a bagunça dos
+  44 nomes dentro do empório.
+- **Estoque por MOVIMENTO, nunca por um número solto:** toda entrada e toda saída é uma
+  linha. Assim dá para responder "por que o estoque está em 3?" — um número que alguém
+  edita não responde nada.
+- **Reposição registra só a QUANTIDADE**, não o custo (decisão do dono). Consequência
+  aceita: o sistema controla o estoque mas não sabe a margem do empório.
+- **Produtos: criar, editar, desligar. NUNCA excluir** — mesma regra de salas, empresas
+  e áreas de atuação; apagar tiraria o histórico de vendas em silêncio.
+- **A versão em que o próprio CLIENTE registra o consumo entra SÓ NA PRÉVIA**, atrás da
+  variável `AMBIENTE="previa"`. O dono quer mostrá-la, mas não quer em produção agora:
+  *"não é todo mundo que vai escanear QR code"*. Em produção a tela simplesmente não
+  existe; no dia em que ele aprovar, é uma linha para liberar.
+- **O que fecha o ciclo:** o consumo acumulado do mensalista entra sozinho no controle
+  de horas, em vez de alguém somar a ficha e digitar um valor.
+
+### Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)
+- Reservas, empório e o que mais entrar, por período e por forma de pagamento.
+- **Despesas ficam para depois**, mas o banco já nasce com elas previstas — lançamentos
+  com tipo (entrada/saída), só sem a tela de saída. Sem isso a fase seguinte obrigaria
+  a refazer.
+- **DRE não entra**, e o motivo é de escopo: *"DRE é balanço, é parte de contábeis"*. A
+  decisão de ir até lá é do dono do coworking, depois de ver a prévia.
+
 ### O cliente pertence a uma EMPRESA (11/11/2026)
 - **O que o dono viu, depois do deploy:** procurou "Toca" no controle de horas e achou
   **quatro cadastros** — Matheus Vitullo (30 reservas), Toca (12), Vinicius (2) e Matheus
