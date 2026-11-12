@@ -417,6 +417,33 @@ export async function salvar(entrada: {
   /** Guarda este preco como o padrao do cliente para a proxima vez. */
   lembrarPreco: boolean;
 }): Promise<Resultado<Demonstrativo>> {
+  // DOCUMENTO JA ENVIADO NAO SE REESCREVE.
+  //
+  // Nao existe rota que APAGUE um demonstrativo, de proposito. Mas regravar
+  // em cima de um que o cliente ja recebeu faz o mesmo estrago com outro
+  // nome: o que esta guardado aqui deixa de bater com o que ele tem na mao, e
+  // ninguem percebe — e a nota de cobranca perde a serventia de ser prova.
+  //
+  // Para corrigir, emite-se um documento NOVO. O antigo fica como registro do
+  // que foi enviado, mesma regra de "nunca excluir" das salas e das empresas.
+  if (entrada.id) {
+    const jaExiste = await prisma.demonstrativo.findUnique({
+      where: { id: entrada.id },
+      select: { enviadoEm: true },
+    });
+
+    if (jaExiste?.enviadoEm) {
+      return {
+        ok: false,
+        falha: {
+          motivo:
+            "Este documento já foi enviado ao cliente e não pode mais ser alterado. Emita um novo para o mesmo período.",
+          codigo: "JA_ENVIADO",
+        },
+      };
+    }
+  }
+
   const montado = await montarDoPeriodo(entrada);
 
   if (!montado.ok) {
