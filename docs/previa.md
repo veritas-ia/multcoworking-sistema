@@ -35,9 +35,10 @@ cometer aqui.
 
 | | Sistema real | Prévia |
 | --- | --- | --- |
+| Serviço no EasyPanel | `multcoworking-app` | `multcoworking-previa` |
 | Endereço | `multcoworking.veritassdigital.com.br` | `previa-multcoworking.veritassdigital.com.br` |
 | Branch do GitHub | `main` | `previa` |
-| Banco de dados | o de verdade | **uma cópia, separada** |
+| Banco de dados | `multcoworking-db` | **`multcoworking-previa-db`, serviço próprio** |
 | `AMBIENTE` | vazio | `previa` |
 | `CRON_ATIVO` (rotinas) | `true` | **`false`** |
 | `EVOLUTION_*` (WhatsApp) | preenchidas | **vazias** |
@@ -66,9 +67,10 @@ cometer aqui.
 
 ## Passo 1 — O banco da prévia
 
-1. No EasyPanel, **no mesmo projeto** `mult-coworking`, adicione um serviço do
-   tipo **PostgreSQL**.
-2. **Nome do serviço:** `banco-previa`
+1. No EasyPanel, **no projeto `automacoes`** (o mesmo onde já estão o
+   `multcoworking-app` e o `multcoworking-db`), adicione um serviço do tipo
+   **PostgreSQL**.
+2. **Nome do serviço:** `multcoworking-previa-db`
 3. **Versão:** a mesma do banco de produção (16).
 4. **Senha:** gere uma forte e guarde.
 5. Salve e espere ficar verde.
@@ -76,6 +78,23 @@ cometer aqui.
 > **Serviço novo, e não um banco a mais dentro do de produção.** Assim não
 > existe nenhum caminho, nem por engano de digitação, que leve a prévia a
 > escrever na agenda de verdade.
+
+### Os nomes dos serviços, e por que seguir o padrão
+
+O projeto `automacoes` já tem vários sistemas dentro, inclusive uma prévia de
+outro projeto (`shexpress-previa`). Então o padrão já existe: o nome do sistema,
+com `-previa` no fim.
+
+| | Produção | Prévia |
+| --- | --- | --- |
+| Aplicação | `multcoworking-app` | `multcoworking-previa` |
+| Banco | `multcoworking-db` | `multcoworking-previa-db` |
+
+**Isto não é só organização.** Dentro do servidor, um serviço acha o outro por
+um endereço que é o **nome do projeto + o nome do serviço**: o banco de
+produção é `automacoes_multcoworking-db`. É esse nome que vai no meio do
+`DATABASE_URL` do Passo 4, e é o ponto onde um erro de uma letra ligaria a
+prévia no banco de verdade.
 
 ---
 
@@ -93,8 +112,8 @@ Guarde o resultado: é o `ADMIN_SESSAO_SEGREDO` do passo 4.
 
 ## Passo 3 — A aplicação
 
-1. No mesmo projeto, adicione um serviço do tipo **App**.
-2. **Nome do serviço:** `previa`
+1. No mesmo projeto `automacoes`, adicione um serviço do tipo **App**.
+2. **Nome do serviço:** `multcoworking-previa`
 3. Em **Source**: GitHub, repositório `veritas-ia/multcoworking-sistema`,
    branch **`previa`** ← *é aqui que a maioria erra; não é `main`*.
 4. Em **Build**: Dockerfile, caminho `Dockerfile`.
@@ -105,10 +124,16 @@ Guarde o resultado: é o `ADMIN_SESSAO_SEGREDO` do passo 4.
 
 ## Passo 4 — As variáveis de ambiente
 
-Na tela do serviço `previa`, em **Environment**:
+Na tela do serviço `multcoworking-previa`, em **Environment**:
+
+> **A primeira linha você copia, não inventa.** Na tela do serviço
+> `multcoworking-previa-db`, o EasyPanel mostra o endereço de conexão pronto,
+> com usuário, senha e nome do banco que ele criou. O formato é igual ao da
+> produção, trocando só o nome do serviço:
+> `postgres://USUARIO:SENHA@automacoes_multcoworking-previa-db:5432/NOME?sslmode=disable&schema=public`
 
 ```
-DATABASE_URL=<o endereço que o EasyPanel mostra no serviço banco-previa>?schema=public
+DATABASE_URL=<o endereço do serviço multcoworking-previa-db>?sslmode=disable&schema=public
 APP_URL=https://previa-multcoworking.veritassdigital.com.br
 TZ=America/Sao_Paulo
 AMBIENTE=previa
@@ -128,7 +153,9 @@ CLOUDINARY_API_SECRET=
 **Confira três coisas antes de salvar**, porque nenhuma delas dá erro se
 estiver errada:
 
-1. o `DATABASE_URL` tem `banco-previa` no meio, e não `banco`;
+1. o `DATABASE_URL` tem **`multcoworking-previa-db`** no meio, e não
+   `multcoworking-db`. Esta é a linha mais perigosa do arquivo: errada, a
+   prévia escreve na agenda de verdade e nada avisa;
 2. `AMBIENTE=previa`, escrito assim;
 3. `CRON_ATIVO=false`.
 
@@ -140,8 +167,8 @@ Igual ao do sistema real, no mesmo lugar:
 
 1. No seu provedor de DNS, crie um `CNAME` (ou `A`, igual ao que você usou no
    original) para `previa-multcoworking`.
-2. No EasyPanel, na aba **Domains** do serviço `previa`, registre o domínio e
-   peça o certificado HTTPS.
+2. No EasyPanel, na aba **Domains** do serviço `multcoworking-previa`,
+   registre o domínio e peça o certificado HTTPS.
 
 ---
 
@@ -153,11 +180,11 @@ Igual ao do sistema real, no mesmo lugar:
    Me avise quando o serviço estiver verde e eu restauro a cópia — o arquivo já
    está guardado na VPS, em `/root/backups/`.
 
-Se preferir fazer você mesmo, é um comando só, rodado na VPS, trocando o nome
-do container pelo do `banco-previa`:
+Se preferir fazer você mesmo, é um comando só, rodado na VPS. O nome do
+container começa com `automacoes_multcoworking-previa-db`:
 
 ```
-docker exec -i <container-do-banco-previa> \
+docker exec -i $(docker ps --format '{{.Names}}' | grep automacoes_multcoworking-previa-db) \
   psql -U <usuario> -d <banco> < /root/backups/multcoworking-<data>-para-previa.sql
 ```
 
@@ -181,8 +208,8 @@ Se faltar qualquer uma, **pare**: a variável `AMBIENTE` não chegou no serviço
 ### Mostrar uma novidade para o dono
 
 Tudo que for construído na versão 2.0 vai para a branch `previa`. Cada vez que
-algo novo fica pronto, é um **Deploy** no serviço `previa` — o sistema real não
-muda em nada.
+algo novo fica pronto, é um **Deploy** no serviço `multcoworking-previa` — o
+sistema real não muda em nada.
 
 ### Quando o dono aprovar
 
