@@ -100,13 +100,14 @@ prévia no banco de verdade.
 
 ## Passo 2 — A chave do login da prévia
 
-Gere uma chave **diferente** da de produção. No terminal da VPS:
+Precisa ser **diferente** da de produção, com pelo menos 32 caracteres. Para
+gerar uma, na VPS:
 
 ```
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Guarde o resultado: é o `ADMIN_SESSAO_SEGREDO` do passo 4.
+Guarde o resultado: é o `ADMIN_SESSAO_SEGREDO` do Passo 4.
 
 ---
 
@@ -137,10 +138,7 @@ DATABASE_URL=<o endereço do serviço multcoworking-previa-db>?sslmode=disable&s
 APP_URL=https://previa-multcoworking.veritassdigital.com.br
 TZ=America/Sao_Paulo
 AMBIENTE=previa
-ADMIN_SESSAO_SEGREDO=<a chave do passo 2>
-ADMIN_NOME=Administrador
-ADMIN_USUARIO=admin
-ADMIN_SENHA=<uma senha de pelo menos 8 caracteres>
+ADMIN_SESSAO_SEGREDO=<a chave do Passo 2>
 CRON_ATIVO=false
 EVOLUTION_URL=
 EVOLUTION_API_KEY=
@@ -172,21 +170,59 @@ Igual ao do sistema real, no mesmo lugar:
 
 ---
 
-## Passo 6 — Publicar e carregar os dados
+## Passo 6 — Carregar a cópia dos dados, ANTES de publicar
 
-1. Clique em **Deploy**. Na primeira subida o sistema aplica as migrações
-   sozinho e o banco nasce vazio, só com as salas e textos padrão.
-2. **Para a prévia ficar convincente, ela precisa dos dados reais copiados.**
-   Me avise quando o serviço estiver verde e eu restauro a cópia — o arquivo já
-   está guardado na VPS, em `/root/backups/`.
+**A ordem aqui é regra, não preferência.** Ao subir, o sistema aplica as
+migrações sozinho e cria todas as tabelas vazias. Se você publicar primeiro e
+só depois tentar carregar a cópia, o carregamento **falha**: ele tenta criar
+tabelas que já existem.
 
-Se preferir fazer você mesmo, é um comando só, rodado na VPS. O nome do
-container começa com `automacoes_multcoworking-previa-db`:
+Carregando antes, dá tudo certo de uma vez: a cópia já traz as tabelas, os
+dados **e o registro de quais migrações estavam aplicadas**. Quando o site
+subir, ele vê que não falta nenhuma e simplesmente começa a atender — já com as
+199 reservas dentro.
+
+O arquivo da cópia está na VPS, em `/root/backups/`. **Me avise quando o
+`multcoworking-previa-db` estiver verde e eu carrego.**
+
+Se preferir fazer você mesmo, é um comando só na VPS:
 
 ```
 docker exec -i $(docker ps --format '{{.Names}}' | grep automacoes_multcoworking-previa-db) \
   psql -U <usuario> -d <banco> < /root/backups/multcoworking-<data>-para-previa.sql
 ```
+
+### O login da prévia é o mesmo do sistema real
+
+Os usuários do painel vêm dentro da cópia, com a senha de sempre. Por isso a
+prévia **não precisa** das variáveis `ADMIN_NOME`, `ADMIN_USUARIO` e
+`ADMIN_SENHA`: elas só servem para a carga inicial, que o deploy não roda.
+
+A chave `ADMIN_SESSAO_SEGREDO` é outra coisa e **continua obrigatória** — sem
+ela o site não sobe. Ela ser diferente da de produção só significa que você
+faz login nos dois separadamente.
+
+### Se você já publicou antes de carregar
+
+Não tem problema, mas aí o banco precisa ser esvaziado primeiro. Na VPS:
+
+```
+docker exec -i $(docker ps --format '{{.Names}}' | grep automacoes_multcoworking-previa-db) \
+  psql -U <usuario> -d <banco> -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+```
+
+Depois rode o comando de carregar. **Confira duas vezes que o container é o da
+prévia** antes de apertar Enter: este comando apaga tudo que estiver no banco
+que você apontar.
+
+---
+
+## Passo 6b — Publicar
+
+Clique em **Deploy** no serviço `multcoworking-previa` e acompanhe o log. Você
+deve ver "Aplicando migracoes do banco" e, logo depois, o site subindo. Se a
+migração falhar, o site **não** sobe de propósito — o motivo fica escrito no
+log.
 
 ---
 
