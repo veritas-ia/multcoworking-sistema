@@ -68,6 +68,8 @@ export type ReservaDetalhada = {
   criadoEm: string;
   canceladoEm: string | null;
   recorrenciaId: string | null;
+  /** Se o término já passou. Vem do SERVIDOR — a tela não refaz conta de fuso. */
+  jaTerminou: boolean;
   historico: EntradaDeHistorico[];
 };
 

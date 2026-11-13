@@ -608,6 +608,80 @@ Substitui agenda física. Usada por clientes (área pública) e pela equipe (pai
 - Há teste que **desbloqueia e confirma que a reserva passa na hora** — é o dia em que o
   contrato acabar.
 
+### Reserva lançada depois de acontecer, excluir e mudar status (13/11/2026)
+- **O caso real:** o cliente esquece de marcar, a recepcionista anota no papel e lança
+  no sistema no dia seguinte. *"Eu posso, exatamente agora, adicionar uma reserva para
+  ontem."*
+- **Isso JÁ funcionava, e foi conferido por simulação** com o motor de verdade: a
+  recepção lança para ontem (aceito), a reserva nasce **CONFIRMADA**, e a rotina
+  `marcarConcluidas` a vira **CONCLUIDA**. Duas ressalvas que o dono precisava saber:
+  a rotina roda **de 5 em 5 minutos** (olhar na hora parece defeito) e **não roda com
+  `CRON_ATIVO="false"`** — ou seja, na prévia isso nunca acontece sozinho.
+
+#### O status virou três AÇÕES, nunca uma lista solta
+Uma caixinha "escolha o status" deixaria fazer três coisas erradas sem reclamar:
+marcar como concluída uma reserva de amanhã (o sistema passaria a dizer que algo que
+não aconteceu, aconteceu), escrever REAGENDADA sem remarcação nenhuma (histórico
+mentira) e descancelar por cima de uma sala que outro cliente já pegou.
+
+| Ação | Só aparece quando | Por quê |
+|---|---|---|
+| **Marcar como concluída** | o término já passou | não espera a rotina; é o único caminho com o cron desligado |
+| **Reabrir** | concluída e ainda **não** terminou | depois do término a rotina marcaria de novo em minutos, e o botão pareceria quebrado |
+| **Desfazer cancelamento** | está cancelada | ver abaixo |
+
+- **Descancelar é o mais perigoso:** ao cancelar, o banco **libera o horário**. A
+  conferência é feita na mão, olhando todas as reservas da sala menos as canceladas,
+  mais os bloqueios — **a trava do banco só enxerga reserva ATIVA** e não barraria
+  sozinha quando a concorrente também já estivesse concluída. Mesma armadilha do
+  "Ficou mais tempo". Há teste que prova a recusa e que a reserva **continua
+  cancelada** depois dela.
+- Volta como **CONFIRMADA**, nunca como REAGENDADA: esse status significa "alguém
+  remarcou isto", e desfazer um cancelamento não remarcou nada. E **`canceladoEm` é
+  limpo** — deixá-lo preenchido faria a reserva dizer que está ativa *e* que foi
+  cancelada em tal dia.
+- **Quem decide se já terminou é o SERVIDOR** (`jaTerminou` na resposta). Refazer essa
+  conta no navegador poria a regra de fuso em dois lugares, e o navegador do operador
+  pode estar em outro fuso.
+
+#### Excluir reserva: autorizado, com evidência obrigatória
+- **Pedido e justificativa do dono:** *"pode até ser essa questão de excluir, só que a
+  gente inclui um histórico de ações dentro do sistema... mesmo que exclua, a gente
+  pelo menos tem esse dado. Aí sim, é uma evidência."*
+- **Para que serve:** lançamento errado — sala trocada, dia trocado, duplicado.
+  **Cancelar não resolve esse caso**, e o dono está certo: a reserva cancelada
+  **continua contando como reserva no relatório**, então um engano cancelado infla o
+  número e deixa no histórico do cliente um cancelamento que nunca existiu.
+- **Tabela `acoes_registradas`**, com `RESERVA_EXCLUIDA` e `RESERVA_STATUS_ALTERADO`.
+- **O resumo é CONGELADO** no momento da ação. A reserva excluída não existe mais para
+  ser consultada e o cliente dela pode ter sido desligado depois: montar a frase na
+  hora de LER deixaria o histórico em branco justamente no caso que mais importa. Junto
+  vai o retrato completo em JSON — cliente, telefone, sala, dia, horário, valor, status
+  e origem.
+- **O nome de quem fez vai GRAVADO na linha**, além da chave estrangeira: o usuário
+  pode ser desligado, e a evidência não pode virar "alguém fez isso". A chave é
+  `ON DELETE SET NULL`.
+- **Motivo obrigatório na exclusão**, com trava no banco (`acao_exclusao_exige_motivo`).
+  Mudança de status não exige: o antes-e-depois já está nos dados, e pedir texto a cada
+  clique faria a equipe escrever "a" para passar da tela.
+- **Registro e exclusão na MESMA transação.** Gravando por fora, uma falha no meio
+  deixaria a reserva apagada sem registro nenhum — exatamente o que isto existe para
+  impedir.
+- **O horário fica livre sozinho:** o gatilho do banco já trata DELETE e tira a linha
+  de `ocupacao_salas`. Os registros de mensagem ficam, com a referência nula — a
+  mensagem foi enviada de verdade, e isso não deixa de ser verdade. Há teste que exclui
+  e cria outra reserva no mesmo horário.
+- **O HISTÓRICO NUNCA SE APAGA.** Não existe rota que o remova (a de leitura só tem
+  GET), a faxina diária não o toca, e a tela é só leitura. Um registro de evidência que
+  pode ser mexido não é evidência.
+- Visível em **Configurações → Histórico de ações**, por último na lista: não é uma
+  configuração, é a prova do que foi feito.
+- Mudança de status é registrada nos **dois** lugares: no `historicoAlteracoes` da
+  reserva (para quem abre aquela reserva) e no histórico geral (para quem procura "o
+  que mexeram na agenda" sem abrir uma por uma).
+- 15 testes. **Foi para o `main`, e não para a prévia** — decisão do dono: *"é para
+  atualizar isso de fato no sistema oficial que está rodando hoje."*
+
 ### Ao acrescentar tabela de cadastro nova
 - `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
   tabelas** (salas, horários, configurações, templates e profissões). Tabela de cadastro

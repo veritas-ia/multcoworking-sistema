@@ -23,6 +23,8 @@ import {
   cancelarSerie,
   editarCadastroDaReserva,
   esticarTermino,
+  excluirReservaComoAdmin,
+  mudarStatusDaReserva,
   reagendarComoAdmin,
 } from "./api";
 import { rotuloDoStatus } from "./cores";
@@ -89,6 +91,9 @@ function DetalheDaReserva({
   const [enviando, setEnviando] = useState(false);
   const [erroDaAcao, setErroDaAcao] = useState<string | null>(null);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  /** A exclusão pede motivo antes de acontecer: ele é a única prova que fica. */
+  const [excluindo, setExcluindo] = useState(false);
+  const [motivoDaExclusao, setMotivoDaExclusao] = useState("");
   const [serie, setSerie] = useState<ResumoDaSerie | null>(null);
 
   useEffect(() => {
@@ -167,6 +172,45 @@ function DetalheDaReserva({
       await cancelarComoAdmin(reservaId);
       setConfirmandoCancelamento(false);
       recarregar();
+    } catch (problema: unknown) {
+      setErroDaAcao(mensagemDoErro(problema));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  /**
+   * Muda o status na mão.
+   *
+   * A TELA SÓ MOSTRA o botão onde ele faz sentido; quem decide de verdade é o
+   * servidor, que confere a regra de novo — esconder um botão não para quem
+   * manda o pedido direto.
+   */
+  async function mudarStatus(
+    mudanca: "CONCLUIR" | "REABRIR" | "DESFAZER_CANCELAMENTO",
+  ): Promise<void> {
+    setEnviando(true);
+    setErroDaAcao(null);
+    try {
+      await mudarStatusDaReserva(reservaId, mudanca);
+      recarregar();
+    } catch (problema: unknown) {
+      setErroDaAcao(mensagemDoErro(problema));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function excluir(): Promise<void> {
+    setEnviando(true);
+    setErroDaAcao(null);
+    try {
+      await excluirReservaComoAdmin(reservaId, motivoDaExclusao);
+      setExcluindo(false);
+      setMotivoDaExclusao("");
+      // A reserva não existe mais: não há o que recarregar, só fechar.
+      aoMudarAgenda();
+      aoFechar();
     } catch (problema: unknown) {
       setErroDaAcao(mensagemDoErro(problema));
     } finally {
@@ -330,6 +374,19 @@ function DetalheDaReserva({
                   >
                     Ficou mais tempo
                   </Botao>
+                  {/* A reserva lançada DEPOIS de acontecer. A rotina marca
+                      concluída sozinha, mas só de 5 em 5 minutos — e não roda
+                      com as rotinas desligadas. Este botão não espera. */}
+                  {reserva.jaTerminou ? (
+                    <Botao
+                      aparencia="secundario"
+                      largura="conteudo"
+                      disabled={enviando}
+                      onClick={() => void mudarStatus("CONCLUIR")}
+                    >
+                      Marcar como concluída
+                    </Botao>
+                  ) : null}
                   <Botao
                     aparencia="secundario"
                     largura="conteudo"
@@ -340,9 +397,21 @@ function DetalheDaReserva({
                 </div>
               )
             ) : reserva.status === "CANCELADA" ? (
-              <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm text-text-secondary">
-                Reserva cancelada. Não há ações disponíveis.
-              </p>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-text-secondary">
+                  Reserva cancelada. Se o cancelamento foi engano, dá para
+                  desfazer — desde que ninguém tenha pegado a sala nesse
+                  horário depois.
+                </p>
+                <Botao
+                  aparencia="secundario"
+                  largura="conteudo"
+                  disabled={enviando}
+                  onClick={() => void mudarStatus("DESFAZER_CANCELAMENTO")}
+                >
+                  Desfazer cancelamento
+                </Botao>
+              </div>
             ) : (
               /* CONCLUIDA: a reserva acabou, mas o cliente pode ter ficado
                  mais tempo. Era aqui que a equipe nao tinha o que fazer. */
@@ -351,18 +420,92 @@ function DetalheDaReserva({
                   Reserva encerrada. Se o cliente ficou além do horário, ajuste
                   o término aqui — o valor é recalculado e ele é avisado.
                 </p>
-                <Botao
-                  aparencia="secundario"
-                  largura="conteudo"
-                  onClick={() => {
-                    setErroDaAcao(null);
-                    setModo("estender");
-                  }}
-                >
-                  Ficou mais tempo
-                </Botao>
+                <div className="flex flex-wrap gap-2">
+                  <Botao
+                    aparencia="secundario"
+                    largura="conteudo"
+                    onClick={() => {
+                      setErroDaAcao(null);
+                      setModo("estender");
+                    }}
+                  >
+                    Ficou mais tempo
+                  </Botao>
+                  {/* Só enquanto a reserva NÃO terminou: depois do término a
+                      rotina marcaria concluída de novo em minutos, e o botão
+                      pareceria quebrado. */}
+                  {!reserva.jaTerminou ? (
+                    <Botao
+                      aparencia="secundario"
+                      largura="conteudo"
+                      disabled={enviando}
+                      onClick={() => void mudarStatus("REABRIR")}
+                    >
+                      Reabrir
+                    </Botao>
+                  ) : null}
+                </div>
               </div>
             )}
+
+            {/* EXCLUIR — para lançamento errado, e só para isso.
+                Cancelar não resolve esse caso: a reserva cancelada continua
+                contando como reserva no relatório, então um engano cancelado
+                infla o número e deixa no histórico do cliente um cancelamento
+                que nunca existiu. */}
+            <section className="flex flex-col gap-2 border-t border-border pt-4">
+              {excluindo ? (
+                <div className="flex flex-col gap-3 rounded-lg border border-border bg-bg-secondary p-3">
+                  <p className="text-sm leading-relaxed text-text-primary">
+                    <strong>Excluir apaga a reserva de vez.</strong> Use só
+                    quando o lançamento estiver errado — sala trocada, dia
+                    trocado, duplicado. Se o cliente desmarcou, o certo é
+                    cancelar.
+                  </p>
+                  <Campo
+                    etiqueta="Por que está sendo excluída"
+                    value={motivoDaExclusao}
+                    maxLength={200}
+                    placeholder="lançada na sala errada"
+                    onChange={(evento) => setMotivoDaExclusao(evento.target.value)}
+                    dica="Fica guardado no histórico de ações: depois de excluída, é a única prova de que ela existiu."
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Botao
+                      aparencia="primario"
+                      largura="conteudo"
+                      disabled={enviando || motivoDaExclusao.trim().length < 3}
+                      onClick={() => void excluir()}
+                    >
+                      Excluir mesmo assim
+                    </Botao>
+                    <Botao
+                      aparencia="secundario"
+                      largura="conteudo"
+                      disabled={enviando}
+                      onClick={() => {
+                        setExcluindo(false);
+                        setMotivoDaExclusao("");
+                        setErroDaAcao(null);
+                      }}
+                    >
+                      Deixar como está
+                    </Botao>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="self-start text-sm text-text-secondary underline underline-offset-4 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                  onClick={() => {
+                    setErroDaAcao(null);
+                    setExcluindo(true);
+                  }}
+                >
+                  Excluir esta reserva
+                </button>
+              )}
+            </section>
 
             <section className="flex flex-col gap-2 border-t border-border pt-4">
               <h3 className="text-sm font-bold text-text-primary">

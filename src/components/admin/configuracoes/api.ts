@@ -620,3 +620,23 @@ export function vincularClienteAEmpresa(
     body: JSON.stringify({ acao: "empresa", id, empresaId }),
   });
 }
+
+/** Uma ação do histórico, como a tela mostra. */
+export type AcaoNaTela = {
+  id: string;
+  tipo: "RESERVA_EXCLUIDA" | "RESERVA_STATUS_ALTERADO";
+  /** A frase pronta, congelada no momento da ação. */
+  resumo: string;
+  motivo: string | null;
+  usuarioNome: string;
+  dados: Record<string, unknown>;
+  criadoEm: string;
+};
+
+/**
+ * O histórico de ações. SÓ LEITURA: não existe rota que crie, edite ou apague
+ * um registro — ele é a evidência de uma reserva que não existe mais.
+ */
+export function buscarAcoes(sinal?: AbortSignal): Promise<{ acoes: AcaoNaTela[] }> {
+  return pedir("/api/admin/acoes", { signal: sinal });
+}

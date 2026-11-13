@@ -18,6 +18,7 @@
  */
 import { Prisma } from "@/generated/prisma/client";
 import { OrigemReserva, StatusReserva } from "@/generated/prisma/enums";
+import { registrarAcao, TipoDeAcao } from "@/lib/acoes";
 import { garantirCliente, TelefoneDeOutroCliente } from "@/lib/clientes";
 import {
   calcularValor,
@@ -33,7 +34,7 @@ import { recusaDaProfissao } from "@/lib/profissoes";
 import { BLOCO_MINUTOS, type CategoriaReserva } from "@/lib/precos";
 import { prisma } from "@/lib/prisma";
 import { ehConflitoDeHorario } from "@/lib/reservas";
-import { horaLocalDe, minutosEntre } from "@/lib/tempo";
+import { dataLocalDe, horaLocalDe, minutosEntre } from "@/lib/tempo";
 
 /** Quem esta operando o painel. Vai para o historico de cada acao. */
 export type Operador = { id: string; nome: string };
@@ -760,4 +761,323 @@ export async function reagendarComoAdmin(entrada: {
     }
     throw erro;
   }
+}
+
+// -----------------------------------------------------------------------------
+// EXCLUIR E MUDAR O STATUS NA MAO (13/11/2026)
+// -----------------------------------------------------------------------------
+
+/** "2026-10-14 das 09:00 às 12:00" — no relogio de Sao Paulo. */
+function porExtenso(reserva: { inicio: Date; fim: Date }): string {
+  const [ano, mes, dia] = dataLocalDe(reserva.inicio).split("-");
+  return `${dia}/${mes}/${ano} das ${horaLocalDe(reserva.inicio)} às ${horaLocalDe(reserva.fim)}`;
+}
+
+/**
+ * A copia dos dados da reserva, para o historico de acoes.
+ *
+ * Tudo que alguem precisaria para entender — ou refazer — a reserva depois que
+ * ela nao existir mais.
+ */
+function retratoDaReserva(reserva: {
+  id: string;
+  nomeCliente: string;
+  telefone: string;
+  inicio: Date;
+  fim: Date;
+  valor: Prisma.Decimal;
+  status: StatusReserva;
+  origem: OrigemReserva;
+  sala: { nome: string };
+}): Prisma.InputJsonValue {
+  return {
+    reservaId: reserva.id,
+    cliente: reserva.nomeCliente,
+    telefone: reserva.telefone,
+    sala: reserva.sala.nome,
+    dia: dataLocalDe(reserva.inicio),
+    inicio: horaLocalDe(reserva.inicio),
+    fim: horaLocalDe(reserva.fim),
+    valor: reserva.valor.toFixed(2),
+    status: reserva.status,
+    origem: reserva.origem,
+  };
+}
+
+/**
+ * EXCLUI a reserva de vez.
+ *
+ * PARA QUE SERVE: lancamento errado — sala trocada, dia trocado, duplicada.
+ * Cancelar nao resolve esse caso, e o dono tem razao: a reserva cancelada
+ * CONTINUA contando como reserva no relatorio, entao um engano cancelado
+ * infla o numero e suja o historico do cliente com um cancelamento que nunca
+ * existiu.
+ *
+ * O QUE PROTEGE A EVIDENCIA: antes de apagar, a acao e gravada no historico,
+ * com o retrato completo da reserva e o motivo escrito — tudo na MESMA
+ * transacao. Ou as duas coisas acontecem, ou nenhuma: uma falha no meio nao
+ * pode deixar a reserva apagada sem registro.
+ *
+ * O MOTIVO E OBRIGATORIO (trava no banco tambem). Sem ele, daqui a seis meses
+ * o registro nao explica nada e a evidencia perde a serventia.
+ *
+ * O banco cuida do resto: o gatilho tira a linha de "ocupacao_salas" sozinho
+ * (liberando o horario) e os registros de mensagem ficam, com a referencia
+ * nula — a mensagem foi enviada de verdade, e isso nao deixa de ser verdade.
+ */
+export async function excluirReserva(entrada: {
+  reservaId: string;
+  motivo: string;
+  operador: Operador;
+}): Promise<Resultado<{ id: string; resumo: string }>> {
+  const motivo = entrada.motivo.trim();
+
+  if (motivo.length < 3) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "REGRA",
+        motivo: "Escreva por que esta reserva está sendo excluída.",
+      },
+    };
+  }
+
+  const reserva = await prisma.reserva.findUnique({
+    where: { id: entrada.reservaId },
+    include: { sala: { select: { nome: true } } },
+  });
+
+  if (!reserva) {
+    return {
+      ok: false,
+      falha: { codigo: "NAO_ENCONTRADA", motivo: "Reserva não encontrada." },
+    };
+  }
+
+  const resumo =
+    `Reserva excluída — ${reserva.nomeCliente}, ${reserva.sala.nome}, ` +
+    `${porExtenso(reserva)} (R$ ${reserva.valor.toFixed(2)})`;
+
+  await prisma.$transaction(async (tx) => {
+    await registrarAcao(tx, {
+      tipo: TipoDeAcao.RESERVA_EXCLUIDA,
+      resumo,
+      dados: retratoDaReserva(reserva),
+      usuario: entrada.operador,
+      motivo,
+    });
+
+    await tx.reserva.delete({ where: { id: reserva.id } });
+  });
+
+  return { ok: true, dados: { id: reserva.id, resumo } };
+}
+
+/** Os tres caminhos de mudanca de status que fazem sentido. */
+export type MudancaDeStatus = "CONCLUIR" | "REABRIR" | "DESFAZER_CANCELAMENTO";
+
+/**
+ * Muda o status da reserva NA MAO.
+ *
+ * POR QUE NAO E UMA LISTA SOLTA DE STATUS. Uma caixinha "escolha o status"
+ * deixaria marcar como concluida uma reserva de amanha (o sistema passaria a
+ * dizer que algo que nao aconteceu, aconteceu) e deixaria escrever REAGENDADA
+ * sem remarcacao nenhuma, o que torna o historico mentira. Cada acao daqui
+ * so aparece onde faz sentido, e a regra e conferida no servidor.
+ *
+ * CONCLUIR — a reserva ja terminou e a equipe nao quer esperar a rotina, que
+ *   roda de 5 em 5 minutos. E o caso da reserva lancada depois que aconteceu:
+ *   o cliente esqueceu de marcar, a recepcao anotou no papel e lanca no dia
+ *   seguinte. Tambem e o unico caminho quando as rotinas estao desligadas.
+ *
+ * REABRIR — so enquanto a reserva NAO terminou. Depois do termino a rotina
+ *   marcaria concluida de novo em minutos, e o botao pareceria quebrado.
+ *
+ * DESFAZER_CANCELAMENTO — o mais perigoso, e por isso o mais conferido: ao
+ *   cancelar, o banco LIBERA o horario. Outro cliente pode ja ter pego aquela
+ *   sala naquela hora. A conferencia e feita aqui, olhando todas as reservas
+ *   da sala menos as canceladas, mais os bloqueios — a trava do banco so
+ *   enxerga reserva ativa e nao barraria sozinha em todos os casos.
+ */
+export async function mudarStatusComoAdmin(entrada: {
+  reservaId: string;
+  mudanca: MudancaDeStatus;
+  operador: Operador;
+  agora?: Date;
+}): Promise<Resultado<{ id: string; status: StatusReserva }>> {
+  const agora = entrada.agora ?? new Date();
+
+  const reserva = await prisma.reserva.findUnique({
+    where: { id: entrada.reservaId },
+    include: { sala: { select: { nome: true } } },
+  });
+
+  if (!reserva) {
+    return {
+      ok: false,
+      falha: { codigo: "NAO_ENCONTRADA", motivo: "Reserva não encontrada." },
+    };
+  }
+
+  const novo = await statusDepoisDaMudanca(reserva, entrada.mudanca, agora);
+
+  if (!novo.ok) {
+    return novo;
+  }
+
+  const de = reserva.status;
+  const para = novo.dados;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.reserva.update({
+      where: { id: reserva.id },
+      data: {
+        status: para,
+        // Descancelar limpa a data do cancelamento: deixa-la preenchida faria
+        // a reserva dizer que esta ativa E que foi cancelada em tal dia.
+        canceladoEm: para === StatusReserva.CANCELADA ? reserva.canceladoEm : null,
+        historicoAlteracoes: historicoCom(reserva.historicoAlteracoes, {
+          em: agora.toISOString(),
+          acao: "STATUS",
+          statusDe: de,
+          statusPara: para,
+          por: "ADMIN",
+          quemId: entrada.operador.id,
+          quemNome: entrada.operador.nome,
+          de: momentoDe(reserva),
+        }),
+      },
+    });
+
+    // No historico GERAL tambem: e nele que a equipe procura "o que mexeram
+    // na agenda", sem abrir reserva por reserva.
+    await registrarAcao(tx, {
+      tipo: TipoDeAcao.RESERVA_STATUS_ALTERADO,
+      resumo:
+        `Status alterado de ${de} para ${para} — ${reserva.nomeCliente}, ` +
+        `${reserva.sala.nome}, ${porExtenso(reserva)}`,
+      dados: { ...(retratoDaReserva(reserva) as object), statusNovo: para },
+      usuario: entrada.operador,
+    });
+  });
+
+  return { ok: true, dados: { id: reserva.id, status: para } };
+}
+
+/** Decide o status novo, ou recusa explicando. */
+async function statusDepoisDaMudanca(
+  reserva: {
+    id: string;
+    salaId: string;
+    status: StatusReserva;
+    inicio: Date;
+    fim: Date;
+  },
+  mudanca: MudancaDeStatus,
+  agora: Date,
+): Promise<Resultado<StatusReserva>> {
+  if (mudanca === "CONCLUIR") {
+    if (!ATIVOS.includes(reserva.status)) {
+      return {
+        ok: false,
+        falha: {
+          codigo: "JA_ENCERRADA",
+          motivo:
+            reserva.status === StatusReserva.CANCELADA
+              ? "Esta reserva está cancelada. Desfaça o cancelamento antes."
+              : "Esta reserva já está concluída.",
+        },
+      };
+    }
+
+    if (reserva.fim > agora) {
+      return {
+        ok: false,
+        falha: {
+          codigo: "REGRA",
+          motivo:
+            "Esta reserva ainda não terminou. Só dá para concluir depois do horário de término.",
+        },
+      };
+    }
+
+    return { ok: true, dados: StatusReserva.CONCLUIDA };
+  }
+
+  if (mudanca === "REABRIR") {
+    if (reserva.status !== StatusReserva.CONCLUIDA) {
+      return {
+        ok: false,
+        falha: { codigo: "REGRA", motivo: "Só dá para reabrir uma reserva concluída." },
+      };
+    }
+
+    if (reserva.fim <= agora) {
+      return {
+        ok: false,
+        falha: {
+          codigo: "REGRA",
+          motivo:
+            "Esta reserva já terminou: a rotina voltaria a marcá-la como concluída em minutos. Para mudar o horário, use Remarcar.",
+        },
+      };
+    }
+
+    return { ok: true, dados: StatusReserva.CONFIRMADA };
+  }
+
+  if (reserva.status !== StatusReserva.CANCELADA) {
+    return {
+      ok: false,
+      falha: { codigo: "REGRA", motivo: "Esta reserva não está cancelada." },
+    };
+  }
+
+  // AO CANCELAR, O BANCO LIBERA O HORARIO. Outro cliente pode ja ter pego a
+  // sala. A trava do banco so enxerga reserva ATIVA, entao nao barraria
+  // sozinha quando a concorrente tambem ja estiver concluida.
+  const ocupando = await prisma.reserva.findFirst({
+    where: {
+      salaId: reserva.salaId,
+      id: { not: reserva.id },
+      status: { not: StatusReserva.CANCELADA },
+      inicio: { lt: reserva.fim },
+      fim: { gt: reserva.inicio },
+    },
+    select: { nomeCliente: true, inicio: true },
+    orderBy: { inicio: "asc" },
+  });
+
+  if (ocupando) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "HORARIO_TOMADO",
+        motivo: `Não dá para desfazer: às ${horaLocalDe(ocupando.inicio)} esta sala já está com a reserva de ${ocupando.nomeCliente}.`,
+      },
+    };
+  }
+
+  const bloqueio = await prisma.bloqueio.findFirst({
+    where: {
+      salaId: reserva.salaId,
+      inicio: { lt: reserva.fim },
+      fim: { gt: reserva.inicio },
+    },
+    select: { inicio: true },
+  });
+
+  if (bloqueio) {
+    return {
+      ok: false,
+      falha: {
+        codigo: "HORARIO_TOMADO",
+        motivo: "Não dá para desfazer: a sala está bloqueada neste horário.",
+      },
+    };
+  }
+
+  // Volta como CONFIRMADA, e nao como estava antes: "REAGENDADA" significa
+  // "alguem remarcou isto", e o cancelamento desfeito nao remarcou nada.
+  return { ok: true, dados: StatusReserva.CONFIRMADA };
 }
