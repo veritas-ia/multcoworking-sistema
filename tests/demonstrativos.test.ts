@@ -37,6 +37,11 @@ import {
   montarDoPeriodo,
   salvar,
 } from "@/lib/demonstrativos";
+import {
+  cortarParaCaber,
+  gerarPdfDoDemonstrativo,
+  quebrarTexto,
+} from "@/lib/pdf-demonstrativo";
 import { instanteDe } from "@/lib/tempo";
 
 import { aquecerConexao, bancoDeTeste, idDaProfissao } from "./apoio/banco";
@@ -729,6 +734,105 @@ describe("documento enviado não se reescreve", () => {
     const lista = await listar({ clienteId });
     expect(lista.filter((item) => item.id === enviado.dados.id)).toHaveLength(1);
     expect(lista.filter((item) => item.id === novo.dados.id)).toHaveLength(1);
+  });
+});
+
+describe("a formatação do texto no PDF", () => {
+  /**
+   * O DEFEITO REAL, visto pelo dono num documento ja emitido: a descricao da
+   * linha do emporio era escrita sem limite de largura e o valor ficava
+   * colado a direita POR CIMA dela —
+   * "...chocolate Stick/R$ 201,50Chocobiscuit".
+   *
+   * Uma cobranca que o cliente nao consegue ler nao serve para nada, e o erro
+   * nao aparece em teste nenhum que olhe so os numeros: as contas estavam
+   * certas. Por isso o teste e da QUEBRA do texto.
+   *
+   * A medicao entra como funcao, entao da para testar sem montar um PDF. Aqui
+   * cada letra mede 6 pontos, o que torna as contas conferiveis a mao.
+   */
+  const medir = (texto: string): number => texto.length * 6;
+
+  it("quebra o texto em linhas que cabem na largura", () => {
+    const linhas = quebrarTexto("um dois tres quatro cinco", 60, medir);
+
+    for (const linha of linhas) {
+      expect(medir(linha)).toBeLessThanOrEqual(60);
+    }
+    // Nenhuma palavra se perdeu pelo caminho.
+    expect(linhas.join(" ")).toBe("um dois tres quatro cinco");
+  });
+
+  it("a descrição REAL do empório cabe, e nada se perde", () => {
+    const real =
+      "EMPÓRIO 12 águas sem gás/10 águas com gás/7 barrinhas de proteína/" +
+      "3 YOPRO/1 chocolate Stick/1 Chocobiscuit";
+
+    const linhas = quebrarTexto(real, 300, medir);
+
+    expect(linhas.length).toBeGreaterThan(1);
+    for (const linha of linhas) {
+      expect(medir(linha)).toBeLessThanOrEqual(300);
+    }
+    expect(linhas.join(" ")).toBe(real);
+  });
+
+  it("parte uma palavra sozinha maior que a linha", () => {
+    // Sem isto ela transbordaria igual, e o conserto não teria servido.
+    const linhas = quebrarTexto("abcdefghijklmnopqrst", 60, medir);
+
+    expect(linhas.length).toBeGreaterThan(1);
+    for (const linha of linhas) {
+      expect(medir(linha)).toBeLessThanOrEqual(60);
+    }
+    expect(linhas.join("")).toBe("abcdefghijklmnopqrst");
+  });
+
+  it("texto vazio não vira uma linha vazia", () => {
+    expect(quebrarTexto("", 100, medir)).toEqual([]);
+    expect(quebrarTexto("   ", 100, medir)).toEqual([]);
+  });
+
+  it("corta com reticências o que não cabe numa célula da tabela", () => {
+    // Na TABELA cortar é o certo: quebrar em duas linhas desalinharia a
+    // altura da linha inteira.
+    const cortado = cortarParaCaber("Sala de Reunião Grande", 60, medir);
+
+    expect(medir(cortado)).toBeLessThanOrEqual(60);
+    expect(cortado.endsWith("…")).toBe(true);
+  });
+
+  it("não corta o que já cabe", () => {
+    expect(cortarParaCaber("Sala CI", 600, medir)).toBe("Sala CI");
+  });
+
+  it("o PDF sai inteiro com uma descrição longa de verdade", async () => {
+    await reserva("2026-09-11", "09:00", 2);
+
+    const feito = await montarDoPeriodo({
+      clienteId: await cadastroDaToca(),
+      de: DE,
+      ate: ATE,
+      valorHora: "30.00",
+      linhasExtras: [
+        { descricao: "5 POSIÇÕES", valor: "2350.00" },
+        {
+          descricao:
+            "EMPÓRIO 12 águas sem gás/10 águas com gás/7 barrinhas de " +
+            "proteína/3 YOPRO/1 chocolate Stick/1 Chocobiscuit",
+          valor: "201.50",
+        },
+      ],
+    });
+
+    if (!feito.ok) throw new Error("deveria montar");
+
+    const arquivo = await gerarPdfDoDemonstrativo(feito.dados);
+
+    // É um PDF de verdade, e o total continua certo depois da mudança de
+    // layout: mexer no desenho não pode mexer na conta.
+    expect(Buffer.from(arquivo.slice(0, 5)).toString()).toBe("%PDF-");
+    expect(comoDinheiro(feito.dados.totalCentavos)).toBe("R$ 2.611,50");
   });
 });
 

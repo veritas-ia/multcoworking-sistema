@@ -553,7 +553,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                     <Campo
                       etiqueta="Descrição"
                       value={linha.descricao}
-                      maxLength={120}
+                      maxLength={300}
                       placeholder="2 posições"
                       onChange={(evento) =>
                         setLinhas((atuais) =>

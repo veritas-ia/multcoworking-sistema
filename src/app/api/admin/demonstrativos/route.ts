@@ -16,7 +16,13 @@ const VALOR = z
   .transform((v) => v.replace(",", "."));
 
 const LinhaExtra = z.object({
-  descricao: z.string().trim().min(1, "Escreva o que é esta linha.").max(120),
+  /**
+   * 300 caracteres. Eram 120, e a descricao real do emporio de um mes ja
+   * chegava a 106 — a equipe batia no teto sem o sistema explicar por que o
+   * campo parava de aceitar. O PDF agora quebra o texto em quantas linhas
+   * precisar, entao o limite deixou de ser uma restricao de layout.
+   */
+  descricao: z.string().trim().min(1, "Escreva o que é esta linha.").max(300),
   valor: VALOR,
 });
 

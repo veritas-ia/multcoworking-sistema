@@ -78,6 +78,94 @@ function escrever(
   });
 }
 
+/**
+ * QUEBRA O TEXTO EM LINHAS QUE CABEM NA LARGURA DADA.
+ *
+ * POR QUE ISTO EXISTE: a descricao de uma linha extra era escrita sem limite
+ * de largura, com o valor colado a direita na MESMA linha. Com um texto longo
+ * — "EMPORIO 12 aguas sem gas/10 aguas com gas/7 barrinhas..." — os dois se
+ * sobrepunham e o documento saia ilegivel, com o valor no meio da palavra.
+ * Um documento de cobranca que o cliente nao consegue ler nao serve para nada.
+ *
+ * A medicao vem de FORA (a fonte do PDF sabe a largura de cada letra), o que
+ * tambem torna esta funcao testavel sem montar um PDF.
+ *
+ * Palavra sozinha maior que a linha e partida no meio: sem isso ela
+ * transbordaria igual, e o conserto nao teria servido para nada.
+ */
+export function quebrarTexto(
+  texto: string,
+  larguraMaxima: number,
+  medir: (trecho: string) => number,
+): string[] {
+  const palavras = texto.split(/\s+/).filter(Boolean);
+  const linhas: string[] = [];
+  let atual = "";
+
+  for (const palavra of palavras) {
+    const tentativa = atual ? `${atual} ${palavra}` : palavra;
+
+    if (medir(tentativa) <= larguraMaxima) {
+      atual = tentativa;
+      continue;
+    }
+
+    if (atual) {
+      linhas.push(atual);
+      atual = "";
+    }
+
+    if (medir(palavra) <= larguraMaxima) {
+      atual = palavra;
+      continue;
+    }
+
+    let pedaco = "";
+
+    for (const letra of palavra) {
+      if (pedaco && medir(pedaco + letra) > larguraMaxima) {
+        linhas.push(pedaco);
+        pedaco = letra;
+      } else {
+        pedaco += letra;
+      }
+    }
+
+    atual = pedaco;
+  }
+
+  if (atual) {
+    linhas.push(atual);
+  }
+
+  return linhas;
+}
+
+/**
+ * Corta o texto com reticencias para nao invadir a coluna seguinte.
+ *
+ * Usado nas celulas da TABELA, onde quebrar em duas linhas desalinharia a
+ * altura da linha inteira. Na descricao das linhas extras o certo e quebrar,
+ * nao cortar: ali o texto e a informacao.
+ */
+export function cortarParaCaber(
+  texto: string,
+  larguraMaxima: number,
+  medir: (trecho: string) => number,
+): string {
+  if (medir(texto) <= larguraMaxima) {
+    return texto;
+  }
+
+  let cortado = texto;
+
+  while (cortado.length > 1 && medir(`${cortado}…`) > larguraMaxima) {
+    cortado = cortado.slice(0, -1);
+  }
+
+  return `${cortado.trimEnd()}…`;
+}
+
 /** Escreve alinhado à direita, para os números ficarem na mesma coluna. */
 function escreverADireita(
   caneta: Caneta,
@@ -218,15 +306,29 @@ export async function gerarPdfDoDemonstrativo(
 
   for (const item of dados.itens) {
     garantirEspaco(caneta, 18, cabecalhoDaTabela);
+    const medirNormal = (trecho: string): number =>
+      caneta.normal.widthOfTextAtSize(trecho, 10);
+
     escrever(caneta, emDiaMesAno(item.dia), COL_DIA);
-    escrever(caneta, item.sala, COL_SALA);
+    // Cortadas com reticencias para nunca invadir a coluna seguinte. Um nome
+    // longo escorreria por cima do horario, e o documento mentiria sobre o
+    // que esta sendo cobrado.
     escrever(
       caneta,
-      // Num documento de empresa, quem reservou importa mais do que o
-      // horario exato: e o que o cliente confere.
-      dados.porPessoa.length > 1
-        ? `${item.pessoa} · ${item.inicio}`
-        : `${item.inicio} às ${item.fim}`,
+      cortarParaCaber(item.sala, COL_HORARIO - COL_SALA - 8, medirNormal),
+      COL_SALA,
+    );
+    escrever(
+      caneta,
+      cortarParaCaber(
+        // Num documento de empresa, quem reservou importa mais do que o
+        // horario exato: e o que o cliente confere.
+        dados.porPessoa.length > 1
+          ? `${item.pessoa} · ${item.inicio}`
+          : `${item.inicio} às ${item.fim}`,
+        COL_HORAS - COL_HORARIO - 48,
+        medirNormal,
+      ),
       COL_HORARIO,
       { cor: SECUNDARIO },
     );
@@ -256,29 +358,34 @@ export async function gerarPdfDoDemonstrativo(
     negrito: true,
   });
 
+  /** Escreve um resumo longo em quantas linhas precisar. */
+  const resumoEmLinhas = (texto: string): void => {
+    const linhas = quebrarTexto(texto, LARGURA_UTIL, (trecho) =>
+      caneta.normal.widthOfTextAtSize(trecho, 9),
+    );
+
+    for (const linha of linhas) {
+      caneta.y -= 14;
+      garantirEspaco(caneta, 14);
+      escrever(caneta, linha, COL_DIA, { tamanho: 9, cor: SECUNDARIO });
+    }
+  };
+
   if (dados.porSala.length > 1) {
-    caneta.y -= 14;
-    escrever(
-      caneta,
+    resumoEmLinhas(
       dados.porSala
         .map((s) => `${s.sala}: ${horasPorExtenso(s.horas)}`)
         .join("   ·   "),
-      COL_DIA,
-      { tamanho: 9, cor: SECUNDARIO },
     );
   }
 
   // QUEM RESERVOU, num documento de empresa. O cliente quer saber de quem
   // sao as horas que estao sendo cobradas dele.
   if (dados.porPessoa.length > 1) {
-    caneta.y -= 14;
-    escrever(
-      caneta,
+    resumoEmLinhas(
       dados.porPessoa
         .map((p) => `${p.nome}: ${horasPorExtenso(p.horas)}`)
         .join("   ·   "),
-      COL_DIA,
-      { tamanho: 9, cor: SECUNDARIO },
     );
   }
 
@@ -307,14 +414,39 @@ export async function gerarPdfDoDemonstrativo(
   escreverADireita(caneta, comoDinheiro(dados.valorDasHorasCentavos), COL_HORAS);
   caneta.y -= 18;
 
+  // AS LINHAS EXTRAS, QUEBRADAS EM QUANTAS LINHAS PRECISAREM.
+  //
+  // Era aqui que o documento quebrava: a descricao saia numa linha so, sem
+  // limite de largura, e o valor ficava colado a direita POR CIMA dela —
+  // "...chocolate Stick/R$ 201,50Chocobiscuit". Uma cobranca ilegivel.
+  //
+  // Agora a largura disponivel e medida descontando o proprio valor, e o
+  // texto desce quantas linhas forem necessarias. O VALOR FICA NA PRIMEIRA,
+  // alinhado com o comeco da descricao, para a leitura continuar sendo
+  // "isto custa aquilo".
   for (const linha of dados.linhasExtras) {
-    garantirEspaco(caneta, 18);
-    escrever(caneta, linha.descricao, COL_DIA);
-    escreverADireita(
-      caneta,
-      comoDinheiro(Math.round(Number(linha.valor || "0") * 100)),
-      COL_HORAS,
-    );
+    const valor = comoDinheiro(Math.round(Number(linha.valor || "0") * 100));
+    const medir = (trecho: string): number =>
+      caneta.normal.widthOfTextAtSize(trecho, 10);
+
+    const disponivel = LARGURA_UTIL - medir(valor) - 16;
+    const partes = quebrarTexto(linha.descricao, disponivel, medir);
+    const texto = partes.length > 0 ? partes : [""];
+
+    // O bloco inteiro cabe nesta pagina, ou vai todo para a proxima: o valor
+    // nao pode ficar numa pagina e a descricao dele na outra.
+    garantirEspaco(caneta, 18 + 13 * (texto.length - 1));
+
+    escreverADireita(caneta, valor, COL_HORAS);
+
+    texto.forEach((parte, indice) => {
+      escrever(caneta, parte, COL_DIA);
+
+      if (indice < texto.length - 1) {
+        caneta.y -= 13;
+      }
+    });
+
     caneta.y -= 18;
   }
 
