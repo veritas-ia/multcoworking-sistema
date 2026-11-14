@@ -750,6 +750,46 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
 - **A reposição continua sendo registrada**: sem ela a conta da contagem não fecha (não
   dá para distinguir "vendeu 2" de "chegou 1 e vendeu 3").
 
+#### A CONTAGEM DIÁRIA, construída em 14/11/2026
+- **A contagem RECONCILIA os movimentos, não os substitui.** Gravar uma contagem gera um
+  movimento de **AJUSTE** com a diferença, e o estoque continua sendo a soma dos
+  movimentos. Isto é o ponto: duas fontes de verdade para o mesmo número são o começo de
+  dois números que discordam na mesma tela — a doença que este projeto já teve três vezes.
+- **O "esperado" fica CONGELADO em cada linha da ficha.** Recalculado depois daria sempre
+  zero, porque o ajuste já aconteceu — e o relatório do que faltou ficaria vazio
+  justamente no caso que importa. Mesma lógica do valor congelado na reserva.
+- **Diferença zero não gera movimento:** um movimento que não move nada só suja o extrato.
+- **Contar duas vezes no mesmo dia NÃO conta em dobro**, e isso sai de graça do desenho:
+  a segunda contagem reconcilia contra o estoque já ajustado e encontra zero. Por isso
+  não há trava de "uma contagem por dia" — ela seria uma regra artificial para um
+  problema que não existe. Há teste.
+- **A reposição continua sendo lançada**, e é o `3+1=4` escrito à mão na ficha: sem
+  registrar o que chegou, a contagem acusaria uma sobra que não existe. Há teste com a
+  reposição no meio de duas contagens.
+- **Sobra não compensa falta.** O número "faltaram" soma **só** o que sumiu; o que
+  apareceu a mais é outro problema (chegou mercadoria sem registro). Somar os dois
+  esconderia os dois.
+- A ficha guarda **o horário e a observação** como estão no papel ("09:40", "1 cookies"),
+  e o **dia é o da FICHA**, não o do lançamento — a recepcionista lê o papel no dia
+  seguinte. Formato de hora torto é recusado pelo banco: errado, ele não daria erro, só
+  apareceria estranho na tela.
+- **Dia no futuro é recusado:** a prateleira de amanhã ninguém viu.
+
+#### A MÁQUINA DE CAFÉ TEM CONTADOR, e isso virou um TIPO de produto
+- `TipoDeControle`: **ESTOQUE** (conta unidades na prateleira) ou **CONTADOR** (lê o
+  número acumulado da máquina). Os 12 cafés são CONTADOR; os outros 18, ESTOQUE.
+- **A ficha é preenchida igual nos dois casos** — um número por produto por dia. O que
+  muda é a conta que o sistema faz: na prateleira, `contado − esperado`; na máquina,
+  `leitura − leitura anterior`.
+- **Leitura de contador NÃO gera movimento de estoque.** "Estoque de expresso" não
+  existe, e tratar igual faria o estoque despencar para menos dez mil.
+- **Leitura menor que a anterior é RECUSADA.** O contador só cresce; uma leitura menor é
+  quase sempre erro de digitação, e aceitar faria o consumo do dia sair negativo — um
+  número que não bate com nada e que ninguém vai conferir. A mensagem mostra a leitura
+  anterior, para a pessoa achar o erro.
+- **Teste com os números reais da ficha:** Expresso 10939 → 10949 → 10958 → 10972 →
+  10975 nos dias 3 a 7, dando 10, 9, 14 e 3 cafés. A primeira leitura não tem anterior.
+
 #### Migração que falha pode deixar PEDAÇO PARA TRÁS
 - Esta migração falhou duas vezes no desenvolvimento (erro meu de SQL), e **nas duas o
   que já tinha rodado ficou gravado** — o tipo na primeira, os 30 produtos na segunda.

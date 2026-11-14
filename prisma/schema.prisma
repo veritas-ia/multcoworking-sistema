@@ -96,6 +96,23 @@ enum FrequenciaRecorrencia {
 /// FIXAS de proposito, diferente das TAGS. Sao as duas fichas fisicas que
 /// existem hoje ("CHOCOLATE" e "GELADEIRA"), e todo produto cai numa ou na
 /// outra. As tags e que sao editaveis e se acumulam.
+/// COMO o consumo daquele produto e medido. Sao duas coisas diferentes de
+/// verdade, descobertas nas fichas fisicas:
+///
+///   ESTOQUE  — a equipe CONTA quantas unidades estao na prateleira. E o
+///              chocolate e a geladeira.
+///   CONTADOR — a MAQUINA conta quantos ja fez na vida, e a equipe anota a
+///              leitura. E o cafe: o Expresso foi 10939 -> 10949 -> 10958 nos
+///              dias 3, 4 e 5. O vendido no dia e a DIFERENCA entre duas
+///              leituras, e "estoque de expresso" nao existe.
+///
+/// A ficha e preenchida igual nos dois casos (um numero por produto por dia).
+/// O que muda e a conta que o sistema faz com esse numero.
+enum TipoDeControle {
+  ESTOQUE
+  CONTADOR
+}
+
 enum CategoriaDoProduto {
   COMIDA
   BEBIDA
@@ -238,6 +255,7 @@ model Usuario {
   telefonesDeBalcao   TelefoneDeBalcao[]
   movimentosDeEstoque MovimentoDeEstoque[]
   acoesRegistradas    AcaoRegistrada[]
+  contagensDeEstoque  ContagemDeEstoque[]
 
   @@map("usuarios")
 }
@@ -794,6 +812,9 @@ model Produto {
   /// COMIDA ou BEBIDA — as duas fichas fisicas que a equipe ja usa.
   categoria CategoriaDoProduto
 
+  /// Contagem de prateleira ou leitura de maquina. Ver "TipoDeControle".
+  controle TipoDeControle @default(ESTOQUE)
+
   /// Preco de venda, por unidade. NAO retroage: cada consumo congela o preco
   /// que valia no dia, igual a reserva.
   ///
@@ -828,6 +849,7 @@ model Produto {
 
   movimentos MovimentoDeEstoque[]
   tags       ProdutoComTag[]
+  contagens  ItemDaContagem[]
 
   @@index([ativo, ordem])
   @@index([categoria, ordem])
@@ -954,4 +976,63 @@ model ProdutoComTag {
   @@id([produtoId, tagId])
   @@index([tagId])
   @@map("produtos_com_tag")
+}
+
+/// UMA CONTAGEM: a ficha da parede, passada para o sistema.
+///
+/// POR QUE A CONTAGEM E A ROTINA PRINCIPAL, e nao o lancamento de cada
+/// reposicao: e o que a equipe JA FAZ. E, mais importante, ela e
+/// AUTOCORRETIVA — o que alguem esqueceu de lancar aparece sozinho na conta do
+/// dia seguinte, porque a prateleira nao mente. O lancamento item a item e
+/// exato so se ninguem esquecer, e quando alguem esquece o sistema nunca
+/// descobre.
+///
+/// A CONTAGEM NAO SUBSTITUI OS MOVIMENTOS: ela os RECONCILIA. Gravar a
+/// contagem gera um movimento de AJUSTE com a diferenca, entao o estoque
+/// continua sendo a soma dos movimentos — uma fonte de verdade so — e o
+/// extrato continua respondendo "por que esta em 3?".
+model ContagemDeEstoque {
+  id String @id @default(uuid(7))
+
+  /// O dia contado, no relogio de Sao Paulo. E o dia da FICHA, nao o do
+  /// lancamento: a recepcionista le o papel no dia seguinte.
+  dia DateTime @db.Date
+
+  /// "09:40", como esta escrito na ficha. Opcional: nem toda linha tem.
+  horario String? @db.VarChar(5)
+
+  /// O campo "FALTOU" da ficha, escrito a mao ("1 cookies").
+  observacao String?
+
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id])
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  itens ItemDaContagem[]
+
+  @@index([dia])
+  @@map("contagens_estoque")
+}
+
+/// Um numero da ficha: quanto tinha daquele produto naquele dia.
+model ItemDaContagem {
+  contagemId String            @map("contagem_id")
+  contagem   ContagemDeEstoque @relation(fields: [contagemId], references: [id], onDelete: Cascade)
+  produtoId  String            @map("produto_id")
+  produto    Produto           @relation(fields: [produtoId], references: [id])
+
+  /// O que foi contado. Em ESTOQUE, quantas unidades havia; em CONTADOR, a
+  /// leitura acumulada da maquina.
+  quantidade Int
+
+  /// O que o sistema ESPERAVA, congelado no momento da contagem.
+  ///
+  /// Guardado, e nao recalculado: depois da contagem o estoque e ajustado, e
+  /// refazer a conta depois sempre daria diferenca zero — o relatorio do
+  /// "FALTOU" ficaria vazio justamente no caso que importa.
+  esperado Int
+
+  @@id([contagemId, produtoId])
+  @@index([produtoId])
+  @@map("itens_da_contagem")
 }

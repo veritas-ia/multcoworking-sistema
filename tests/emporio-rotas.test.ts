@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as rotaProduto from "@/app/api/admin/emporio/produtos/[id]/route";
 import * as rotaEstoque from "@/app/api/admin/emporio/produtos/[id]/estoque/route";
+import * as rotaContagem from "@/app/api/admin/emporio/contagem/route";
 import * as rotaProdutos from "@/app/api/admin/emporio/produtos/route";
 import { assinarToken, COOKIE_ADMIN } from "@/lib/sessao-admin";
 
@@ -35,6 +36,10 @@ function params(id: string) {
 }
 
 async function limpar(): Promise<void> {
+  await bancoDeTeste.itemDaContagem.deleteMany({
+    where: { produto: { nome: { startsWith: ZZ } } },
+  });
+  await bancoDeTeste.contagemDeEstoque.deleteMany({ where: { itens: { none: {} } } });
   await bancoDeTeste.movimentoDeEstoque.deleteMany({
     where: { produto: { nome: { startsWith: ZZ } } },
   });
@@ -348,5 +353,105 @@ describe("a ordem pela rota", () => {
     );
 
     expect(resposta.status).toBe(422);
+  });
+});
+
+describe("a contagem pela rota", () => {
+  /** Hoje no relógio de São Paulo — nunca uma data fixa. */
+  const hoje = (): string =>
+    new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  it("recusa sem cookie", async () => {
+    const semCookie = [
+      rotaContagem.GET(pedidoGet("/api/admin/emporio/contagem")),
+      rotaContagem.POST(
+        pedidoPost("/api/admin/emporio/contagem", {
+          dia: hoje(),
+          itens: [{ produtoId: "x", quantidade: 1 }],
+        }),
+      ),
+    ];
+
+    for (const resposta of await Promise.all(semCookie)) {
+      expect(resposta.status).toBe(401);
+    }
+  });
+
+  it("a ficha em branco traz o esperado de cada produto", async () => {
+    const id = await criarPelaRota(`${ZZ} Suflair`, "7,50");
+
+    await rotaEstoque.POST(
+      pedidoPost(
+        `/api/admin/emporio/produtos/${id}/estoque`,
+        { tipo: "REPOSICAO", quantidade: 6 },
+        { cookie },
+      ),
+      params(id),
+    );
+
+    const resposta = await rotaContagem.GET(
+      pedidoGet("/api/admin/emporio/contagem", {}, { cookie }),
+    );
+
+    const corpo = (await resposta.json()) as {
+      linhas: { produtoId: string; esperado: number }[];
+    };
+
+    expect(corpo.linhas.find((l) => l.produtoId === id)?.esperado).toBe(6);
+  });
+
+  it("gravar a contagem reconcilia o estoque e devolve a diferença", async () => {
+    const id = await criarPelaRota(`${ZZ} Suflair`, "7,50");
+
+    await rotaEstoque.POST(
+      pedidoPost(
+        `/api/admin/emporio/produtos/${id}/estoque`,
+        { tipo: "REPOSICAO", quantidade: 6 },
+        { cookie },
+      ),
+      params(id),
+    );
+
+    const resposta = await rotaContagem.POST(
+      pedidoPost(
+        "/api/admin/emporio/contagem",
+        {
+          dia: hoje(),
+          horario: "09:40",
+          observacao: "1 cookies",
+          itens: [{ produtoId: id, quantidade: 4 }],
+        },
+        { cookie },
+      ),
+    );
+
+    expect(resposta.status).toBe(201);
+    const corpo = (await resposta.json()) as {
+      contagem: { faltaram: number; linhas: { diferenca: number }[] };
+    };
+
+    expect(corpo.contagem.linhas[0]?.diferenca).toBe(-2);
+    expect(corpo.contagem.faltaram).toBe(2);
+
+    // E o estoque passou a bater com a prateleira.
+    const lista = (await (
+      await rotaProdutos.GET(pedidoGet("/api/admin/emporio/produtos", {}, { cookie }))
+    ).json()) as { produtos: { id: string; estoque: number }[] };
+
+    expect(lista.produtos.find((p) => p.id === id)?.estoque).toBe(4);
+  });
+
+  it("recusa horário em formato torto, com 400", async () => {
+    const id = await criarPelaRota(`${ZZ} Suflair`, "7,50");
+
+    const resposta = await rotaContagem.POST(
+      pedidoPost(
+        "/api/admin/emporio/contagem",
+        { dia: hoje(), horario: "9h40", itens: [{ produtoId: id, quantidade: 1 }] },
+        { cookie },
+      ),
+    );
+
+    expect(resposta.status).toBe(400);
   });
 });

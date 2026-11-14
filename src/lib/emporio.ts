@@ -22,7 +22,11 @@
  * consegue dizer de onde veio o 3. Somando movimentos, a pergunta "por que
  * esta em 3?" tem resposta, linha por linha.
  */
-import { CategoriaDoProduto, TipoMovimentoEstoque } from "@/generated/prisma/enums";
+import {
+  CategoriaDoProduto,
+  TipoDeControle,
+  TipoMovimentoEstoque,
+} from "@/generated/prisma/enums";
 
 import {
   apagarImagem,
@@ -33,8 +37,9 @@ import {
   TIPOS_ACEITOS,
 } from "./cloudinary";
 import { prisma } from "./prisma";
+import { dataLocalDe } from "./tempo";
 
-export { CategoriaDoProduto, TipoMovimentoEstoque };
+export { CategoriaDoProduto, TipoDeControle, TipoMovimentoEstoque };
 
 /** Uma etiqueta, como a tela desenha. */
 export type TagNaTela = { id: string; nome: string; cor: string };
@@ -789,5 +794,334 @@ export async function removerFotoDoProduto(
   return {
     ok: true,
     dados: { arquivoApagado: await apagarImagem(produto.fotoPublicId) },
+  };
+}
+
+// -----------------------------------------------------------------------------
+// A CONTAGEM DIARIA
+// -----------------------------------------------------------------------------
+
+/**
+ * Uma linha da ficha, pronta para a equipe preencher.
+ *
+ * Traz o que o sistema ESPERA encontrar, para a pessoa ver a diferenca na hora
+ * de digitar — e nao depois, quando ja fechou a tela.
+ */
+export type LinhaParaContar = {
+  produtoId: string;
+  nome: string;
+  categoria: CategoriaDoProduto;
+  controle: TipoDeControle;
+  /**
+   * Em ESTOQUE, quantas unidades o sistema acha que ha. Em CONTADOR, a ULTIMA
+   * LEITURA registrada — e o numero de onde a proxima diferenca sai.
+   */
+  esperado: number;
+};
+
+/** O que a contagem descobriu sobre um produto. */
+export type ResultadoDaLinha = {
+  produtoId: string;
+  nome: string;
+  controle: TipoDeControle;
+  /** O que a equipe escreveu. */
+  contado: number;
+  /** O que o sistema esperava. */
+  esperado: number;
+  /**
+   * ESTOQUE: contado - esperado. Negativo e o "FALTOU" da ficha — sumiu sem
+   * ninguem lancar. Positivo e sobra: chegou mercadoria que ninguem registrou.
+   *
+   * CONTADOR: quantos a maquina fez desde a leitura anterior. Nunca negativo.
+   */
+  diferenca: number;
+};
+
+export type ContagemGravada = {
+  id: string;
+  dia: string;
+  horario: string | null;
+  observacao: string | null;
+  linhas: ResultadoDaLinha[];
+  /** Quantas unidades faltaram no total — o numero que a equipe procura. */
+  faltaram: number;
+  /** Quantas a maquina de cafe fez desde a leitura anterior. */
+  cafesFeitos: number;
+};
+
+/**
+ * Monta a ficha em branco para a equipe preencher.
+ *
+ * Produto DESLIGADO fica de fora: ele nao esta mais na prateleira, e pedir a
+ * contagem dele faria a equipe escrever zero todo dia para sempre.
+ */
+export async function prepararContagem(opcoes?: {
+  categoria?: CategoriaDoProduto;
+  controle?: TipoDeControle;
+}): Promise<LinhaParaContar[]> {
+  const produtos = await prisma.produto.findMany({
+    where: {
+      ativo: true,
+      ...(opcoes?.categoria ? { categoria: opcoes.categoria } : {}),
+      ...(opcoes?.controle ? { controle: opcoes.controle } : {}),
+    },
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    select: { id: true, nome: true, categoria: true, controle: true },
+  });
+
+  if (produtos.length === 0) {
+    return [];
+  }
+
+  const ids = produtos.map((produto) => produto.id);
+
+  // ESTOQUE: o esperado e a soma dos movimentos.
+  const somas = await prisma.movimentoDeEstoque.groupBy({
+    by: ["produtoId"],
+    where: { produtoId: { in: ids } },
+    _sum: { quantidade: true },
+  });
+
+  const estoquePorProduto = new Map(
+    somas.map((soma) => [soma.produtoId, soma._sum.quantidade ?? 0]),
+  );
+
+  // CONTADOR: o esperado e a ULTIMA LEITURA, que mora na contagem anterior.
+  const leituras = await ultimasLeituras(ids);
+
+  return produtos.map((produto) => ({
+    produtoId: produto.id,
+    nome: produto.nome,
+    categoria: produto.categoria,
+    controle: produto.controle,
+    esperado:
+      produto.controle === TipoDeControle.CONTADOR
+        ? (leituras.get(produto.id) ?? 0)
+        : (estoquePorProduto.get(produto.id) ?? 0),
+  }));
+}
+
+/**
+ * A ultima leitura registrada de cada produto de contador.
+ *
+ * Uma consulta so, pegando a linha mais recente por produto. Fazer uma por
+ * produto seriam 12 idas ao banco para montar uma tela.
+ */
+async function ultimasLeituras(ids: string[]): Promise<Map<string, number>> {
+  const linhas = await prisma.itemDaContagem.findMany({
+    where: { produtoId: { in: ids } },
+    orderBy: [{ contagem: { dia: "desc" } }, { contagem: { criadoEm: "desc" } }],
+    select: { produtoId: true, quantidade: true },
+  });
+
+  const porProduto = new Map<string, number>();
+
+  for (const linha of linhas) {
+    // A lista vem da mais recente para a mais antiga: a primeira de cada
+    // produto e a que vale.
+    if (!porProduto.has(linha.produtoId)) {
+      porProduto.set(linha.produtoId, linha.quantidade);
+    }
+  }
+
+  return porProduto;
+}
+
+/**
+ * Grava a contagem e RECONCILIA o estoque.
+ *
+ * O QUE ACONTECE COM CADA LINHA:
+ *
+ * ESTOQUE — a diferenca entre o contado e o esperado vira um movimento de
+ *   AJUSTE, com o dia da ficha escrito no motivo. O estoque continua sendo a
+ *   soma dos movimentos: a contagem nao cria uma segunda fonte de verdade, ela
+ *   conserta a primeira. Diferenca zero nao gera movimento nenhum — um
+ *   movimento que nao move nada so suja o extrato.
+ *
+ * CONTADOR — nada de movimento: "estoque de expresso" nao existe. A leitura
+ *   fica guardada, e o consumo e a diferenca para a leitura anterior.
+ *
+ * O "esperado" FICA GRAVADO em cada linha. Recalculado depois, ele sempre
+ * daria diferenca zero — porque o ajuste ja aconteceu —, e o relatorio do que
+ * faltou ficaria vazio justamente no caso que importa.
+ */
+export async function registrarContagem(entrada: {
+  /** "AAAA-MM-DD", o dia da FICHA — nao o do lancamento. */
+  dia: string;
+  horario?: string | null;
+  observacao?: string | null;
+  itens: { produtoId: string; quantidade: number }[];
+  usuarioId?: string | null;
+  /** Para teste: o "hoje" usado na conferência de data futura. */
+  agora?: Date;
+}): Promise<Resultado<ContagemGravada>> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.dia)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe o dia da contagem.", codigo: "DIA_INVALIDO" },
+    };
+  }
+
+  // Contagem de amanha nao existe: a prateleira de amanha ninguem viu.
+  const hoje = dataLocalDe(entrada.agora ?? new Date());
+
+  if (entrada.dia > hoje) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Não dá para contar um dia que ainda não aconteceu.",
+        codigo: "DIA_NO_FUTURO",
+      },
+    };
+  }
+
+  if (entrada.itens.length === 0) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe ao menos um produto.", codigo: "SEM_ITENS" },
+    };
+  }
+
+  const repetidos =
+    new Set(entrada.itens.map((item) => item.produtoId)).size !==
+    entrada.itens.length;
+
+  if (repetidos) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "O mesmo produto aparece duas vezes na contagem.",
+        codigo: "PRODUTO_REPETIDO",
+      },
+    };
+  }
+
+  for (const item of entrada.itens) {
+    if (!Number.isInteger(item.quantidade) || item.quantidade < 0) {
+      return {
+        ok: false,
+        falha: {
+          motivo: "A quantidade contada precisa ser um número inteiro, zero ou mais.",
+          codigo: "QUANTIDADE_INVALIDA",
+        },
+      };
+    }
+  }
+
+  const ids = entrada.itens.map((item) => item.produtoId);
+  const esperados = await prepararContagem();
+  const porId = new Map(esperados.map((linha) => [linha.produtoId, linha]));
+
+  const desconhecido = ids.find((id) => !porId.has(id));
+
+  if (desconhecido) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Um dos produtos da contagem não existe ou está desligado.",
+        codigo: "NAO_ENCONTRADO",
+      },
+    };
+  }
+
+  // LEITURA DE MAQUINA NAO ANDA PARA TRAS.
+  //
+  // O contador e acumulado: ele so cresce. Uma leitura menor que a anterior e
+  // quase sempre erro de digitacao, e aceitar faria o consumo do dia sair
+  // negativo — um numero que nao bate com nada e que ninguem vai conferir.
+  for (const item of entrada.itens) {
+    const linha = porId.get(item.produtoId)!;
+
+    if (
+      linha.controle === TipoDeControle.CONTADOR &&
+      item.quantidade < linha.esperado
+    ) {
+      return {
+        ok: false,
+        falha: {
+          motivo: `A leitura de "${linha.nome}" (${item.quantidade}) é menor que a anterior (${linha.esperado}). O contador da máquina só aumenta — confira o número.`,
+          codigo: "LEITURA_MENOR",
+        },
+      };
+    }
+  }
+
+  const [ano, mes, dia] = entrada.dia.split("-");
+
+  const gravada = await prisma.$transaction(async (tx) => {
+    const contagem = await tx.contagemDeEstoque.create({
+      data: {
+        dia: new Date(`${entrada.dia}T00:00:00.000Z`),
+        horario: entrada.horario?.trim() || null,
+        observacao: entrada.observacao?.trim() || null,
+        criadoPorId: entrada.usuarioId ?? null,
+        itens: {
+          create: entrada.itens.map((item) => ({
+            produtoId: item.produtoId,
+            quantidade: item.quantidade,
+            esperado: porId.get(item.produtoId)!.esperado,
+          })),
+        },
+      },
+      select: { id: true },
+    });
+
+    for (const item of entrada.itens) {
+      const linha = porId.get(item.produtoId)!;
+
+      if (linha.controle === TipoDeControle.CONTADOR) {
+        continue;
+      }
+
+      const diferenca = item.quantidade - linha.esperado;
+
+      if (diferenca === 0) {
+        continue;
+      }
+
+      await tx.movimentoDeEstoque.create({
+        data: {
+          produtoId: item.produtoId,
+          tipo: TipoMovimentoEstoque.AJUSTE,
+          quantidade: diferenca,
+          motivo: `Contagem de ${dia}/${mes}/${ano}`,
+          criadoPorId: entrada.usuarioId ?? null,
+        },
+      });
+    }
+
+    return contagem;
+  });
+
+  const linhas: ResultadoDaLinha[] = entrada.itens.map((item) => {
+    const linha = porId.get(item.produtoId)!;
+
+    return {
+      produtoId: item.produtoId,
+      nome: linha.nome,
+      controle: linha.controle,
+      contado: item.quantidade,
+      esperado: linha.esperado,
+      diferenca: item.quantidade - linha.esperado,
+    };
+  });
+
+  return {
+    ok: true,
+    dados: {
+      id: gravada.id,
+      dia: entrada.dia,
+      horario: entrada.horario?.trim() || null,
+      observacao: entrada.observacao?.trim() || null,
+      linhas,
+      // O "FALTOU" da ficha: só o que sumiu, em módulo. A sobra não compensa
+      // a falta — são dois problemas diferentes e somá-los esconderia os dois.
+      faltaram: linhas
+        .filter((l) => l.controle === TipoDeControle.ESTOQUE && l.diferenca < 0)
+        .reduce((soma, l) => soma - l.diferenca, 0),
+      cafesFeitos: linhas
+        .filter((l) => l.controle === TipoDeControle.CONTADOR)
+        .reduce((soma, l) => soma + l.diferenca, 0),
+    },
   };
 }
