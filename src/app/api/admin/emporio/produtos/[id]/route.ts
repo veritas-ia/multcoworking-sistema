@@ -3,7 +3,12 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { lerCorpo, respostaErro } from "@/lib/api";
-import { editarProduto, ligarOuDesligarProduto, listarProdutos } from "@/lib/emporio";
+import {
+  CategoriaDoProduto,
+  editarProduto,
+  ligarOuDesligarProduto,
+  listarProdutos,
+} from "@/lib/emporio";
 
 import { operadorDaRequisicao } from "../../../operador";
 import { statusDoEmporio } from "../route";
@@ -21,6 +26,11 @@ export const dynamic = "force-dynamic";
 const Mudanca = z.object({
   nome: z.string().min(1, "Escreva o nome do produto.").optional(),
   preco: z.string().min(1, "Escreva o preço.").optional(),
+  categoria: z
+    .enum([CategoriaDoProduto.COMIDA, CategoriaDoProduto.BEBIDA])
+    .optional(),
+  /** A lista COMPLETA de etiquetas. Ausente = não mexer nelas. */
+  tagIds: z.array(z.string().min(1)).max(10).optional(),
   ativo: z.boolean().optional(),
 });
 
@@ -40,9 +50,15 @@ export async function PATCH(
     return respostaErro(400, corpo.error.issues[0]?.message ?? "Pedido inválido.");
   }
 
-  const { nome, preco, ativo } = corpo.data;
+  const { nome, preco, categoria, tagIds, ativo } = corpo.data;
 
-  if (nome === undefined && preco === undefined && ativo === undefined) {
+  if (
+    nome === undefined &&
+    preco === undefined &&
+    categoria === undefined &&
+    tagIds === undefined &&
+    ativo === undefined
+  ) {
     return respostaErro(400, "Nada para mudar neste produto.");
   }
 
@@ -65,7 +81,7 @@ export async function PATCH(
       return respostaErro(400, "Mande o nome e o preço juntos.");
     }
 
-    const feito = await editarProduto(id, { nome, preco });
+    const feito = await editarProduto(id, { nome, preco, categoria, tagIds });
 
     return feito.ok
       ? NextResponse.json({ produto: feito.dados })

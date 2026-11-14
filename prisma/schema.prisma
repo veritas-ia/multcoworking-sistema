@@ -91,6 +91,16 @@ enum FrequenciaRecorrencia {
 /// estiver errado — e vai estar, porque a reposicao e lancada a mao —, ninguem
 /// consegue dizer de onde veio o 3. Com uma linha por movimento, o estoque e a
 /// SOMA delas, e a pergunta "por que esta em 3?" tem resposta.
+/// As duas prateleiras do emporio, como a equipe ja pensa: comida e bebida.
+///
+/// FIXAS de proposito, diferente das TAGS. Sao as duas fichas fisicas que
+/// existem hoje ("CHOCOLATE" e "GELADEIRA"), e todo produto cai numa ou na
+/// outra. As tags e que sao editaveis e se acumulam.
+enum CategoriaDoProduto {
+  COMIDA
+  BEBIDA
+}
+
 enum TipoMovimentoEstoque {
   /// Chegou mercadoria. Quantidade positiva.
   REPOSICAO
@@ -781,8 +791,15 @@ model Produto {
   id   String @id @default(uuid(7))
   nome String @unique
 
+  /// COMIDA ou BEBIDA — as duas fichas fisicas que a equipe ja usa.
+  categoria CategoriaDoProduto
+
   /// Preco de venda, por unidade. NAO retroage: cada consumo congela o preco
   /// que valia no dia, igual a reserva.
+  ///
+  /// ZERO E VALIDO E SIGNIFICA CORTESIA: quase todos os cafes da maquina sao
+  /// livres ("pode consumir a vontade"), e so dois sao cobrados. O sistema
+  /// precisa conhecer os gratuitos para contar o consumo deles.
   preco Decimal @db.Decimal(10, 2)
 
   /// A FOTO DO PRODUTO, como no iFood: e ela que a recepcionista reconhece de
@@ -810,8 +827,10 @@ model Produto {
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
   movimentos MovimentoDeEstoque[]
+  tags       ProdutoComTag[]
 
   @@index([ativo, ordem])
+  @@index([categoria, ordem])
   @@map("produtos")
 }
 
@@ -893,4 +912,46 @@ model AcaoRegistrada {
   @@index([criadoEm])
   @@index([tipo, criadoEm])
   @@map("acoes_registradas")
+}
+
+/// Uma etiqueta colorida do emporio: chocolate, energetico, cerveja…
+///
+/// POR QUE E TABELA, e nao uma lista fixa no codigo: a equipe acrescenta e
+/// tira etiqueta sem programador, mesma decisao das areas de atuacao. Um enum
+/// do PostgreSQL aceita acrescentar valor mas nunca remover.
+///
+/// A COR E DO CADASTRO, e nao do codigo: e ela que separa as categorias de
+/// relance na tela, e quem escolhe e quem olha a prateleira todo dia.
+model TagDeProduto {
+  id   String @id @default(uuid(7))
+  nome String @unique
+  /// "#RRGGBB". A tela escreve por cima em preto ou branco conforme a cor,
+  /// para a etiqueta nunca ficar ilegivel.
+  cor  String @db.VarChar(7)
+
+  /// Desligada some das telas, mas os produtos continuam marcados: o
+  /// historico de venda nao pode mudar porque uma etiqueta saiu de moda.
+  ativa Boolean @default(true)
+  ordem Int
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  produtos ProdutoComTag[]
+
+  @@index([ativa, ordem])
+  @@map("tags_produto")
+}
+
+/// Liga produto e etiqueta. VARIAS por produto, de proposito: a Barrinha
+/// Proteina e barrinha E proteina, e obrigar a escolher uma so faria a equipe
+/// perder um dos dois jeitos de achar o item.
+model ProdutoComTag {
+  produtoId String       @map("produto_id")
+  produto   Produto      @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  tagId     String       @map("tag_id")
+  tag       TagDeProduto @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([produtoId, tagId])
+  @@index([tagId])
+  @@map("produtos_com_tag")
 }

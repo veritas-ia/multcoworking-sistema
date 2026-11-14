@@ -708,12 +708,69 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
 - **A cópia dos dados é de produção**, e não inventada (decisão do dono): o dono
   reconhece os próprios clientes e a demonstração convence. Fica atrás de login.
 
+### Fase 15 — o catálogo de verdade, categorias e etiquetas (14/11/2026)
+- **O catálogo veio das FICHAS FÍSICAS e das plaquinhas**, conferido um a um: a lista da
+  geladeira bateu com a tabela de preços colada na porta (**10 de 10**) e a do chocolate
+  com as etiquetas do expositor (**8 de 8**). Entra **pela migração, não pelo seed** — o
+  deploy roda `migrate deploy`, e catálogo só no seed deixaria a tela de lançamento
+  nascer vazia em produção.
+- **Duas categorias FIXAS** (`COMIDA` / `BEBIDA`), que são as duas fichas que a equipe já
+  usa — "CHOCOLATE" e "GELADEIRA". A coluna **não tem padrão**: um silencioso poria
+  bebida na ficha da comida.
+- **As etiquetas são TABELA, com cor** (`tags_produto`), editáveis sem programador, mesma
+  decisão das áreas de atuação. Nove de saída: Chocolate, Biscoito, Proteína, Água,
+  Refrigerante, Suco, Energético, Cerveja, Café. A cor tem trava de formato no banco —
+  cor torta não dá erro, a etiqueta só **some da tela** e ninguém liga uma coisa à outra.
+- **VÁRIAS etiquetas por produto**, de propósito: o Chocobiscuit é chocolate *e*
+  biscoito. Obrigar a escolher uma faria a equipe perder um dos dois jeitos de achar.
+
+#### A MÁQUINA DE CAFÉ NÃO TEM ESTOQUE — TEM CONTADOR
+- Descoberto na ficha: o Expresso vai **10939 → 10949 → 10958 → 10972 → 10975** nos dias
+  3 a 7. **Não é quanto tem, é quanto a máquina já fez na vida.** O vendido no dia é a
+  *diferença* entre duas leituras.
+- Os **12 botões entram como produto mesmo sendo GRÁTIS** (preço zero). Palavra do dono:
+  *"os outros que não aparece preço é porque realmente não é cobrado à parte, pode
+  consumir à vontade"*. Eles existem porque a máquina conta, e o coworking precisa do
+  consumo para repor leite, pó e copo.
+- **Em aberto:** a máquina tem duas plaquinhas de **R$ 10** (Mokaccino e Achocolatado) e
+  esses nomes **não batem** com os 12 da ficha. A equipe acerta o preço no painel — é
+  campo editável, não precisa de migração.
+
+#### A CONTAGEM DIÁRIA vai substituir a reposição item a item (aprovado, NÃO construído)
+- **A rotina real da equipe é CONTAR a prateleira**, não lançar cada venda. As fichas
+  mostram isso: um número por produto por dia, com as reposições anotadas na mão
+  ("3+1=4"), mais as linhas TOTAL e FALTOU.
+- **A contagem é AUTOCORRETIVA**, e é por isso que ela ganha: o que foi esquecido aparece
+  sozinho na conta do dia seguinte, porque a prateleira não mente. A reposição item a
+  item é exata **só se ninguém esquecer** — e quando alguém esquece, o sistema nunca
+  descobre.
+- **As duas fichas respondem perguntas diferentes, e as duas ficam:** a do cliente (nome,
+  sala, produto) diz **quem deve**; a contagem diz **o que saiu**. **A diferença entre as
+  duas é a coluna "FALTOU"** — o que sumiu sem ninguém pagar. Hoje ninguém calcula isso.
+- **A reposição continua sendo registrada**: sem ela a conta da contagem não fecha (não
+  dá para distinguir "vendeu 2" de "chegou 1 e vendeu 3").
+
+#### Migração que falha pode deixar PEDAÇO PARA TRÁS
+- Esta migração falhou duas vezes no desenvolvimento (erro meu de SQL), e **nas duas o
+  que já tinha rodado ficou gravado** — o tipo na primeira, os 30 produtos na segunda.
+  `migrate resolve --rolled-back` marca a migração como desfeita **mas não desfaz nada
+  no banco**.
+- **Consequência prática:** antes de tentar de novo é preciso limpar à mão o que a
+  tentativa anterior criou. E em produção isso seria pior — mais um motivo para o
+  ensaio numa cópia antes do deploy, como na Fase 14.
+
 ### Ao acrescentar tabela de cadastro nova
 - `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
-  tabelas** (salas, horários, configurações, templates e profissões). Tabela de cadastro
+  tabelas** (salas, horários, configurações, templates, profissões, **produtos e
+  etiquetas**). Tabela de cadastro
   nova que fique fora dessa lista faz o banco de teste nascer sem ela, e **todo teste
   que cria reserva falha** por registro não encontrado — uma falha que não tem nada a
-  ver com a regra sendo testada. Foi o que aconteceu ao criar as profissões.
+  ver com a regra sendo testada. Foi o que aconteceu ao criar as profissões, e de novo
+  ao criar o catálogo do empório.
+- **A ordem das tabelas importa.** O `pg_dump` escreve em ordem alfabética, então
+  `produtos_com_tag` sairia ANTES de `tags_produto` e a chave estrangeira recusaria cada
+  linha — em silêncio, deixando o banco de teste sem as ligações. Por isso ela vai numa
+  **segunda passada** do script.
 
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.

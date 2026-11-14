@@ -15,12 +15,15 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  CategoriaDoProduto,
   criarProduto,
   definirFotoDoProduto,
   editarProduto,
   extratoDoProduto,
   ligarOuDesligarProduto,
   listarProdutos,
+  listarTags,
+  criarTag,
   registrarMovimento,
   removerFotoDoProduto,
   reordenarProdutos,
@@ -56,6 +59,7 @@ async function limpar(): Promise<void> {
     where: { produto: { nome: { startsWith: ZZ } } },
   });
   await bancoDeTeste.produto.deleteMany({ where: { nome: { startsWith: ZZ } } });
+  await bancoDeTeste.tagDeProduto.deleteMany({ where: { nome: { startsWith: ZZ } } });
 }
 
 afterEach(limpar);
@@ -67,8 +71,12 @@ afterAll(async () => {
 });
 
 /** Cria um produto de teste e devolve o identificador. */
-async function produto(nome = `${ZZ} Barrinha`, preco = "6.00"): Promise<string> {
-  const feito = await criarProduto({ nome, preco });
+async function produto(
+  nome = `${ZZ} Barrinha`,
+  preco = "6.00",
+  categoria: CategoriaDoProduto = CategoriaDoProduto.COMIDA,
+): Promise<string> {
+  const feito = await criarProduto({ nome, categoria, preco });
   if (!feito.ok) throw new Error(`não criou o produto: ${feito.falha.motivo}`);
   return feito.dados.id;
 }
@@ -81,10 +89,139 @@ async function estoque(id: string): Promise<number> {
 
 // -----------------------------------------------------------------------------
 
+describe("o catálogo que veio das fichas físicas", () => {
+  /**
+   * Os produtos e precos saem das fichas da parede e das plaquinhas, e entram
+   * pela MIGRACAO — o deploy roda "migrate deploy" e nao roda o seed, entao
+   * catalogo so no seed nunca chegaria em producao.
+   *
+   * Estes testes nao conferem "o sistema soma certo": conferem que a LISTA
+   * continua sendo a lista. Um preco trocado aqui vira dinheiro cobrado
+   * errado do cliente, e nao aparece como erro em lugar nenhum.
+   */
+  it("as duas fichas estão no sistema, com os preços da parede", async () => {
+    const todos = await listarProdutos();
+    const preco = (nome: string): string | undefined =>
+      todos.find((produto) => produto.nome === nome)?.preco;
+
+    // Ficha "CHOCOLATE" — conferido contra as etiquetas do expositor.
+    expect(preco("Baton")).toBe("2.50");
+    expect(preco("Stick")).toBe("3.80");
+    expect(preco("Chokito")).toBe("4.00");
+    expect(preco("Cookies")).toBe("4.50");
+    expect(preco("Kit Kat")).toBe("6.50");
+    expect(preco("Suflair")).toBe("7.50");
+    expect(preco("Chocobiscuit")).toBe("7.50");
+    expect(preco("Barrinha Proteína")).toBe("12.00");
+
+    // Ficha "GELADEIRA" — conferido contra a tabela colada na porta.
+    expect(preco("Água sem gás")).toBe("3.00");
+    expect(preco("Água com gás")).toBe("4.00");
+    expect(preco("Refrigerante caçulinha 200ml")).toBe("3.50");
+    expect(preco("Refrigerante lata 220ml")).toBe("4.50");
+    expect(preco("Refrigerante lata 350ml")).toBe("6.00");
+    expect(preco("Suco Del Valle")).toBe("5.50");
+    expect(preco("YoPro")).toBe("10.00");
+    expect(preco("Longneck Corona")).toBe("12.00");
+    expect(preco("Longneck Heineken")).toBe("12.00");
+  });
+
+  it("os 12 botões da máquina de café existem, e são CORTESIA", async () => {
+    // Palavra do dono: "não é cobrado à parte, pode consumir à vontade".
+    // Eles existem mesmo sendo grátis porque a máquina CONTA quantos fez, e o
+    // coworking precisa do consumo para repor leite, pó e copo.
+    const cafes = (await listarProdutos()).filter((produto) =>
+      produto.nome.startsWith("Café "),
+    );
+
+    expect(cafes).toHaveLength(12);
+    for (const cafe of cafes) {
+      expect(cafe.preco).toBe("0.00");
+      expect(cafe.categoria).toBe(CategoriaDoProduto.BEBIDA);
+    }
+  });
+
+  it("cada produto está na ficha certa", async () => {
+    const todos = await listarProdutos();
+    const categoria = (nome: string) =>
+      todos.find((produto) => produto.nome === nome)?.categoria;
+
+    expect(categoria("Suflair")).toBe(CategoriaDoProduto.COMIDA);
+    expect(categoria("Barrinha Proteína")).toBe(CategoriaDoProduto.COMIDA);
+    expect(categoria("Água sem gás")).toBe(CategoriaDoProduto.BEBIDA);
+    expect(categoria("YoPro")).toBe(CategoriaDoProduto.BEBIDA);
+  });
+
+  it("filtrar por categoria devolve só uma das fichas", async () => {
+    const bebidas = await listarProdutos({ categoria: CategoriaDoProduto.BEBIDA });
+
+    expect(bebidas.length).toBeGreaterThan(0);
+    for (const bebida of bebidas) {
+      expect(bebida.categoria).toBe(CategoriaDoProduto.BEBIDA);
+    }
+    expect(bebidas.map((b) => b.nome)).not.toContain("Suflair");
+  });
+});
+
+describe("as etiquetas coloridas", () => {
+  it("o Chocobiscuit tem DUAS etiquetas", async () => {
+    // Obrigar a escolher uma só faria a equipe perder um dos dois jeitos de
+    // achar o item. É o mesmo caso da Barrinha Proteína.
+    const produtos = await listarProdutos();
+    const chocobiscuit = produtos.find((p) => p.nome === "Chocobiscuit");
+
+    expect(chocobiscuit?.tags.map((t) => t.nome).sort()).toEqual([
+      "Biscoito",
+      "Chocolate",
+    ]);
+  });
+
+  it("toda etiqueta tem cor em #RRGGBB", async () => {
+    // Cor torta não dá erro: a etiqueta simplesmente some da tela, e ninguém
+    // liga uma coisa à outra.
+    const tags = await listarTags();
+
+    expect(tags.length).toBeGreaterThan(0);
+    for (const tag of tags) {
+      expect(tag.cor).toMatch(/^#[0-9A-F]{6}$/i);
+    }
+  });
+
+  it("recusa etiqueta com cor inválida", async () => {
+    for (const cor of ["vermelho", "#GGG", "#12345", ""]) {
+      const feito = await criarTag({ nome: `${ZZ} Tag`, cor });
+      expect(feito.ok).toBe(false);
+    }
+  });
+
+  it("o BANCO também recusa cor inválida", async () => {
+    await expect(
+      bancoDeTeste.tagDeProduto.create({
+        data: { nome: `${ZZ} Torta`, cor: "vermelho", ordem: 999 },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("produto novo pode nascer com etiquetas", async () => {
+    const tags = await listarTags();
+    const chocolate = tags.find((tag) => tag.nome === "Chocolate")!;
+
+    const feito = await criarProduto({
+      nome: `${ZZ} Trufa`,
+      categoria: CategoriaDoProduto.COMIDA,
+      preco: "5,00",
+      tagIds: [chocolate.id],
+    });
+
+    if (!feito.ok) throw new Error("deveria criar");
+    expect(feito.dados.tags.map((t) => t.nome)).toEqual(["Chocolate"]);
+  });
+});
+
 describe("cadastro de produto", () => {
   it("nasce ativo, com estoque zero e no fim da lista", async () => {
-    const primeiro = await criarProduto({ nome: `${ZZ} Café`, preco: "5.00" });
-    const segundo = await criarProduto({ nome: `${ZZ} Energético`, preco: "9.50" });
+    const primeiro = await criarProduto({ nome: `${ZZ} Café`, categoria: CategoriaDoProduto.COMIDA, preco: "5.00" });
+    const segundo = await criarProduto({ nome: `${ZZ} Energético`, categoria: CategoriaDoProduto.COMIDA, preco: "9.50" });
 
     if (!primeiro.ok || !segundo.ok) throw new Error("deveria criar");
     expect(primeiro.dados.ativo).toBe(true);
@@ -93,18 +230,18 @@ describe("cadastro de produto", () => {
   });
 
   it("aceita preço com vírgula, como a equipe digita", async () => {
-    const feito = await criarProduto({ nome: `${ZZ} Suco`, preco: "7,50" });
+    const feito = await criarProduto({ nome: `${ZZ} Suco`, categoria: CategoriaDoProduto.COMIDA, preco: "7,50" });
     if (!feito.ok) throw new Error("deveria criar");
     expect(feito.dados.preco).toBe("7.50");
   });
 
   it("aceita preço zero: cortesia existe", async () => {
-    const feito = await criarProduto({ nome: `${ZZ} Água`, preco: "0" });
+    const feito = await criarProduto({ nome: `${ZZ} Água`, categoria: CategoriaDoProduto.COMIDA, preco: "0" });
     expect(feito.ok).toBe(true);
   });
 
   it("recusa preço negativo", async () => {
-    const feito = await criarProduto({ nome: `${ZZ} Errado`, preco: "-1" });
+    const feito = await criarProduto({ nome: `${ZZ} Errado`, categoria: CategoriaDoProduto.COMIDA, preco: "-1" });
     expect(feito.ok).toBe(false);
     if (feito.ok) throw new Error("não deveria criar");
     expect(feito.falha.codigo).toBe("PRECO_INVALIDO");
@@ -114,7 +251,7 @@ describe("cadastro de produto", () => {
     // Dois "Barrinha" na lista fariam a recepcionista escolher no chute, e o
     // relatório mostraria o mesmo produto partido em dois.
     await produto(`${ZZ} Barrinha`);
-    const igual = await criarProduto({ nome: `${ZZ} barrinha`, preco: "6.00" });
+    const igual = await criarProduto({ nome: `${ZZ} barrinha`, categoria: CategoriaDoProduto.COMIDA, preco: "6.00" });
 
     expect(igual.ok).toBe(false);
     if (igual.ok) throw new Error("não deveria criar");
@@ -153,7 +290,7 @@ describe("a foto do produto", () => {
    * nome; nunca com um espaco vazio, nem com imagem quebrada.
    */
   it("nasce sem foto, e isso não é problema", async () => {
-    const feito = await criarProduto({ nome: `${ZZ} Café`, preco: "5.00" });
+    const feito = await criarProduto({ nome: `${ZZ} Café`, categoria: CategoriaDoProduto.COMIDA, preco: "5.00" });
     if (!feito.ok) throw new Error("deveria criar");
     expect(feito.dados.foto).toBeNull();
   });

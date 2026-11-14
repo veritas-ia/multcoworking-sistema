@@ -4,7 +4,13 @@ import { z } from "zod";
 
 import { lerCorpo, respostaErro } from "@/lib/api";
 import { cloudinaryConfigurado } from "@/lib/cloudinary";
-import { criarProduto, listarProdutos, reordenarProdutos } from "@/lib/emporio";
+import {
+  CategoriaDoProduto,
+  criarProduto,
+  listarProdutos,
+  listarTags,
+  reordenarProdutos,
+} from "@/lib/emporio";
 
 import { operadorDaRequisicao } from "../../operador";
 
@@ -31,10 +37,19 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
   }
 
-  const somenteAtivos = requisicao.nextUrl.searchParams.get("ativos") === "1";
+  const parametros = requisicao.nextUrl.searchParams;
+  const somenteAtivos = parametros.get("ativos") === "1";
+  const pedida = parametros.get("categoria");
+  const categoria =
+    pedida === CategoriaDoProduto.COMIDA || pedida === CategoriaDoProduto.BEBIDA
+      ? pedida
+      : undefined;
 
   return NextResponse.json({
-    produtos: await listarProdutos({ somenteAtivos }),
+    produtos: await listarProdutos({ somenteAtivos, categoria }),
+    // As etiquetas vao junto: a tela precisa delas para o filtro e para o
+    // formulário, e seriam uma segunda ida ao servidor para nada.
+    tags: await listarTags(),
     // A tela usa isto para avisar que o envio de imagem esta indisponivel,
     // em vez de deixar a pessoa escolher um arquivo e levar erro depois.
     envioDeImagemDisponivel: cloudinaryConfigurado(),
@@ -43,7 +58,10 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
 
 const Novo = z.object({
   nome: z.string().min(1, "Escreva o nome do produto."),
+  /** COMIDA ou BEBIDA. Sem padrão: um silencioso poria bebida na ficha errada. */
+  categoria: z.enum([CategoriaDoProduto.COMIDA, CategoriaDoProduto.BEBIDA]),
   preco: z.string().min(1, "Escreva o preço."),
+  tagIds: z.array(z.string().min(1)).max(10).optional(),
 });
 
 /** POST /api/admin/emporio/produtos — cadastra um produto. */

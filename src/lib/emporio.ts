@@ -22,7 +22,7 @@
  * consegue dizer de onde veio o 3. Somando movimentos, a pergunta "por que
  * esta em 3?" tem resposta, linha por linha.
  */
-import { TipoMovimentoEstoque } from "@/generated/prisma/enums";
+import { CategoriaDoProduto, TipoMovimentoEstoque } from "@/generated/prisma/enums";
 
 import {
   apagarImagem,
@@ -34,12 +34,19 @@ import {
 } from "./cloudinary";
 import { prisma } from "./prisma";
 
-export { TipoMovimentoEstoque };
+export { CategoriaDoProduto, TipoMovimentoEstoque };
+
+/** Uma etiqueta, como a tela desenha. */
+export type TagNaTela = { id: string; nome: string; cor: string };
 
 /** Um produto do emporio, com o estoque somado dos movimentos. */
 export type ProdutoDoEmporio = {
   id: string;
   nome: string;
+  /** COMIDA ou BEBIDA — as duas fichas físicas que a equipe já usa. */
+  categoria: CategoriaDoProduto;
+  /** As etiquetas coloridas. Pode ser vazio. */
+  tags: TagNaTela[];
   /** Em reais, com duas casas: "6.00". */
   preco: string;
   ativo: boolean;
@@ -59,6 +66,40 @@ export type ProdutoDoEmporio = {
 
 export type Falha = { motivo: string; codigo: string };
 export type Resultado<T> = { ok: true; dados: T } | { ok: false; falha: Falha };
+
+/**
+ * Monta o produto como a tela espera.
+ *
+ * UM lugar so: antes disto a montagem estava copiada em tres funcoes, e
+ * acrescentar um campo exigia lembrar das tres — quem esquecesse uma deixaria
+ * a tela sem o dado em UM caminho, que e o tipo de falha que ninguem percebe.
+ */
+function paraTela(
+  produto: {
+    id: string;
+    nome: string;
+    categoria: CategoriaDoProduto;
+    preco: { toFixed: (casas: number) => string };
+    ativo: boolean;
+    ordem: number;
+    fotoPublicId: string | null;
+    fotoUrl: string | null;
+    tags: { tag: { id: string; nome: string; cor: string } }[];
+  },
+  estoque: number,
+): ProdutoDoEmporio {
+  return {
+    id: produto.id,
+    nome: produto.nome,
+    categoria: produto.categoria,
+    tags: produto.tags.map(({ tag }) => ({ id: tag.id, nome: tag.nome, cor: tag.cor })),
+    preco: produto.preco.toFixed(2),
+    ativo: produto.ativo,
+    ordem: produto.ordem,
+    foto: fotoDe(produto),
+    estoque,
+  };
+}
 
 const NOME_MINIMO = 2;
 const NOME_MAXIMO = 60;
@@ -90,10 +131,20 @@ function precoValido(bruto: string): string | null {
 export async function listarProdutos(opcoes?: {
   /** Verdadeiro nas telas de lancamento: produto desligado nao se vende. */
   somenteAtivos?: boolean;
+  /** So uma das fichas: COMIDA ou BEBIDA. */
+  categoria?: CategoriaDoProduto;
 }): Promise<ProdutoDoEmporio[]> {
   const produtos = await prisma.produto.findMany({
-    where: opcoes?.somenteAtivos ? { ativo: true } : {},
+    where: {
+      ...(opcoes?.somenteAtivos ? { ativo: true } : {}),
+      ...(opcoes?.categoria ? { categoria: opcoes.categoria } : {}),
+    },
     orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    include: {
+      // As etiquetas vêm junto: são poucas por produto, e uma consulta por
+      // produto na tela de lançamento seriam 30 idas ao banco.
+      tags: { include: { tag: true } },
+    },
   });
 
   if (produtos.length === 0) {
@@ -110,15 +161,9 @@ export async function listarProdutos(opcoes?: {
     somas.map((soma) => [soma.produtoId, soma._sum.quantidade ?? 0]),
   );
 
-  return produtos.map((produto) => ({
-    id: produto.id,
-    nome: produto.nome,
-    preco: produto.preco.toFixed(2),
-    ativo: produto.ativo,
-    ordem: produto.ordem,
-    foto: fotoDe(produto),
-    estoque: porProduto.get(produto.id) ?? 0,
-  }));
+  return produtos.map((produto) =>
+    paraTela(produto, porProduto.get(produto.id) ?? 0),
+  );
 }
 
 /** Um movimento, como a tela de histórico do produto mostra. */
@@ -167,6 +212,89 @@ export async function extratoDoProduto(
 }
 
 // -----------------------------------------------------------------------------
+// As etiquetas
+// -----------------------------------------------------------------------------
+
+/**
+ * As etiquetas do emporio.
+ *
+ * Lista curta e quase estatica, entao vem inteira — sem paginacao e sem
+ * filtro de ativa por padrao: o painel precisa das desligadas para religar.
+ */
+export async function listarTags(opcoes?: {
+  somenteAtivas?: boolean;
+}): Promise<(TagNaTela & { ativa: boolean; ordem: number })[]> {
+  const tags = await prisma.tagDeProduto.findMany({
+    where: opcoes?.somenteAtivas ? { ativa: true } : {},
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+  });
+
+  return tags.map((tag) => ({
+    id: tag.id,
+    nome: tag.nome,
+    cor: tag.cor,
+    ativa: tag.ativa,
+    ordem: tag.ordem,
+  }));
+}
+
+/** "#FFC700" ou "#ffc700". Qualquer outra coisa vira etiqueta invisivel. */
+const COR_VALIDA = /^#[0-9A-Fa-f]{6}$/;
+
+/**
+ * Cria uma etiqueta.
+ *
+ * A COR E OBRIGATORIA e conferida aqui e no banco. Uma cor torta nao daria
+ * erro na hora: a etiqueta simplesmente sumiria da tela, e ninguem ligaria
+ * uma coisa a outra.
+ */
+export async function criarTag(entrada: {
+  nome: string;
+  cor: string;
+}): Promise<Resultado<TagNaTela>> {
+  const nome = entrada.nome.trim().replace(/\s+/g, " ");
+
+  if (nome.length < 2 || nome.length > 40) {
+    return {
+      ok: false,
+      falha: { motivo: "O nome da etiqueta precisa ter de 2 a 40 caracteres.", codigo: "NOME_INVALIDO" },
+    };
+  }
+
+  const cor = entrada.cor.trim();
+
+  if (!COR_VALIDA.test(cor)) {
+    return {
+      ok: false,
+      falha: { motivo: "Escolha uma cor no formato #RRGGBB.", codigo: "COR_INVALIDA" },
+    };
+  }
+
+  const repetida = await prisma.tagDeProduto.findFirst({
+    where: { nome: { equals: nome, mode: "insensitive" } },
+    select: { id: true },
+  });
+
+  if (repetida) {
+    return {
+      ok: false,
+      falha: { motivo: "Já existe uma etiqueta com este nome.", codigo: "NOME_REPETIDO" },
+    };
+  }
+
+  const ultima = await prisma.tagDeProduto.findFirst({
+    orderBy: { ordem: "desc" },
+    select: { ordem: true },
+  });
+
+  const criada = await prisma.tagDeProduto.create({
+    data: { nome, cor: cor.toUpperCase(), ordem: (ultima?.ordem ?? 0) + 1 },
+  });
+
+  return { ok: true, dados: { id: criada.id, nome: criada.nome, cor: criada.cor } };
+}
+
+// -----------------------------------------------------------------------------
 // Cadastrar e editar
 // -----------------------------------------------------------------------------
 
@@ -179,7 +307,10 @@ export async function extratoDoProduto(
  */
 export async function criarProduto(entrada: {
   nome: string;
+  categoria: CategoriaDoProduto;
   preco: string;
+  /** As etiquetas escolhidas. Vazio é válido. */
+  tagIds?: string[];
 }): Promise<Resultado<ProdutoDoEmporio>> {
   const nome = entrada.nome.trim().replace(/\s+/g, " ");
 
@@ -226,21 +357,17 @@ export async function criarProduto(entrada: {
   });
 
   const criado = await prisma.produto.create({
-    data: { nome, preco, ordem: (ultimo?.ordem ?? 0) + 1 },
+    data: {
+      nome,
+      categoria: entrada.categoria,
+      preco,
+      ordem: (ultimo?.ordem ?? 0) + 1,
+      tags: { create: (entrada.tagIds ?? []).map((tagId) => ({ tagId })) },
+    },
+    include: { tags: { include: { tag: true } } },
   });
 
-  return {
-    ok: true,
-    dados: {
-      id: criado.id,
-      nome: criado.nome,
-      preco: criado.preco.toFixed(2),
-      ativo: criado.ativo,
-      ordem: criado.ordem,
-      foto: fotoDe(criado),
-      estoque: 0,
-    },
-  };
+  return { ok: true, dados: paraTela(criado, 0) };
 }
 
 /**
@@ -252,7 +379,13 @@ export async function criarProduto(entrada: {
  */
 export async function editarProduto(
   id: string,
-  entrada: { nome: string; preco: string },
+  entrada: {
+    nome: string;
+    preco: string;
+    categoria?: CategoriaDoProduto;
+    /** A lista COMPLETA de etiquetas. Ausente = não mexer nelas. */
+    tagIds?: string[];
+  },
 ): Promise<Resultado<ProdutoDoEmporio>> {
   const existente = await prisma.produto.findUnique({ where: { id } });
 
@@ -303,7 +436,23 @@ export async function editarProduto(
 
   const salvo = await prisma.produto.update({
     where: { id },
-    data: { nome, preco },
+    data: {
+      nome,
+      preco,
+      ...(entrada.categoria ? { categoria: entrada.categoria } : {}),
+      // As etiquetas sao REGRAVADAS em bloco quando vierem: a tela manda a
+      // lista inteira, e tirar uma e tao normal quanto acrescentar. Sem a
+      // lista, ficam como estao.
+      ...(entrada.tagIds
+        ? {
+            tags: {
+              deleteMany: {},
+              create: entrada.tagIds.map((tagId) => ({ tagId })),
+            },
+          }
+        : {}),
+    },
+    include: { tags: { include: { tag: true } } },
   });
 
   const soma = await prisma.movimentoDeEstoque.aggregate({
@@ -311,18 +460,7 @@ export async function editarProduto(
     _sum: { quantidade: true },
   });
 
-  return {
-    ok: true,
-    dados: {
-      id: salvo.id,
-      nome: salvo.nome,
-      preco: salvo.preco.toFixed(2),
-      ativo: salvo.ativo,
-      ordem: salvo.ordem,
-      foto: fotoDe(salvo),
-      estoque: soma._sum.quantidade ?? 0,
-    },
-  };
+  return { ok: true, dados: paraTela(salvo, soma._sum.quantidade ?? 0) };
 }
 
 /**
@@ -596,6 +734,7 @@ export async function definirFotoDoProduto(
   const salvo = await prisma.produto.update({
     where: { id },
     data: { fotoPublicId: enviada.foto.publicId, fotoUrl: enviada.foto.url },
+    include: { tags: { include: { tag: true } } },
   });
 
   if (anterior) {
@@ -609,18 +748,7 @@ export async function definirFotoDoProduto(
     _sum: { quantidade: true },
   });
 
-  return {
-    ok: true,
-    dados: {
-      id: salvo.id,
-      nome: salvo.nome,
-      preco: salvo.preco.toFixed(2),
-      ativo: salvo.ativo,
-      ordem: salvo.ordem,
-      foto: fotoDe(salvo),
-      estoque: soma._sum.quantidade ?? 0,
-    },
-  };
+  return { ok: true, dados: paraTela(salvo, soma._sum.quantidade ?? 0) };
 }
 
 /**

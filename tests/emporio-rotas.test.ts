@@ -68,7 +68,11 @@ afterAll(async () => {
 /** Cadastra pela ROTA e devolve o identificador. */
 async function criarPelaRota(nome = `${ZZ} Barrinha`, preco = "6,00"): Promise<string> {
   const resposta = await rotaProdutos.POST(
-    pedidoPost("/api/admin/emporio/produtos", { nome, preco }, { cookie }),
+    pedidoPost(
+      "/api/admin/emporio/produtos",
+      { nome, categoria: "COMIDA", preco },
+      { cookie },
+    ),
   );
 
   expect(resposta.status).toBe(201);
@@ -83,7 +87,11 @@ describe("só a equipe logada mexe no empório", () => {
     const semCookie = [
       rotaProdutos.GET(pedidoGet("/api/admin/emporio/produtos")),
       rotaProdutos.POST(
-        pedidoPost("/api/admin/emporio/produtos", { nome: "x", preco: "1" }),
+        pedidoPost("/api/admin/emporio/produtos", {
+          nome: "x",
+          categoria: "COMIDA",
+          preco: "1",
+        }),
       ),
       rotaProdutos.PUT(pedidoPost("/api/admin/emporio/produtos", { ids: ["x"] })),
       rotaProduto.PATCH(
@@ -170,7 +178,7 @@ describe("cadastrar e listar", () => {
     const resposta = await rotaProdutos.POST(
       pedidoPost(
         "/api/admin/emporio/produtos",
-        { nome: `${ZZ} Errado`, preco: "-1" },
+        { nome: `${ZZ} Errado`, categoria: "COMIDA", preco: "-1" },
         { cookie },
       ),
     );
