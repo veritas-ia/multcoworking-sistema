@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { AbaDeAcoes } from "./aba-acoes";
 import { AbaDeMensagens } from "./aba-mensagens";
 import { AbaDeParametros } from "./aba-parametros";
 import { AbaDePoliticas } from "./aba-politicas";
@@ -48,6 +49,9 @@ const ABAS: readonly Aba[] = [
     conteudo: () => <AbaDeTelefonesDeBalcao />,
   },
   { id: "usuarios", rotulo: "Usuários", conteudo: () => <AbaDeUsuarios /> },
+  /* POR ULTIMO de proposito: nao e uma configuracao, e a prova do que foi
+     feito. Fica aqui porque e onde a equipe ja procura "coisas do sistema". */
+  { id: "acoes", rotulo: "Histórico de ações", conteudo: () => <AbaDeAcoes /> },
 ];
 
 export function Configuracoes() {

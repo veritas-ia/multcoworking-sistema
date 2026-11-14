@@ -84,6 +84,39 @@ export function editarCadastroDaReserva(
   });
 }
 
+/**
+ * Muda o status da reserva NA MAO.
+ *
+ * Tres caminhos com nome, e nao uma lista solta de status: marcar como
+ * concluida uma reserva de amanha faria o sistema dizer que algo que nao
+ * aconteceu, aconteceu. O servidor confere de novo.
+ */
+export function mudarStatusDaReserva(
+  id: string,
+  mudanca: "CONCLUIR" | "REABRIR" | "DESFAZER_CANCELAMENTO",
+): Promise<{ id: string; status: string }> {
+  return pedir(`/api/admin/reservas/${id}/status`, {
+    method: "POST",
+    body: JSON.stringify({ mudanca }),
+  });
+}
+
+/**
+ * EXCLUI a reserva de vez — para lancamento errado.
+ *
+ * O motivo e obrigatorio: a reserva some, e o registro no historico de acoes
+ * passa a ser a unica prova de que ela existiu.
+ */
+export function excluirReservaComoAdmin(
+  id: string,
+  motivo: string,
+): Promise<{ id: string; resumo: string }> {
+  return pedir(`/api/admin/reservas/${id}`, {
+    method: "DELETE",
+    body: JSON.stringify({ motivo }),
+  });
+}
+
 export function cancelarComoAdmin(id: string): Promise<{ id: string }> {
   return pedir(`/api/admin/reservas/${id}/cancelar`, { method: "POST" });
 }

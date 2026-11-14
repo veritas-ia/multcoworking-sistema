@@ -103,6 +103,16 @@ enum TipoMovimentoEstoque {
   AJUSTE
 }
 
+/// O que foi feito. Cada valor e uma acao que MUDA o significado de um
+/// registro ou o destroi — nao e um registro de tudo que acontece no sistema.
+enum TipoDeAcao {
+  /// A reserva deixou de existir. O unico caso em que o registro aqui e a
+  /// UNICA prova de que ela existiu.
+  RESERVA_EXCLUIDA
+  /// A equipe mudou o status na mao (concluida, reaberta, descancelada).
+  RESERVA_STATUS_ALTERADO
+}
+
 enum TipoOcupacao {
   RESERVA
   BLOQUEIO
@@ -217,6 +227,7 @@ model Usuario {
   recorrenciasCriadas Recorrencia[]
   telefonesDeBalcao   TelefoneDeBalcao[]
   movimentosDeEstoque MovimentoDeEstoque[]
+  acoesRegistradas    AcaoRegistrada[]
 
   @@map("usuarios")
 }
@@ -834,4 +845,52 @@ model MovimentoDeEstoque {
 
   @@index([produtoId, criadoEm])
   @@map("movimentos_estoque")
+}
+
+// -----------------------------------------------------------------------------
+// HISTORICO DE ACOES (13/11/2026)
+// -----------------------------------------------------------------------------
+
+/// O QUE A EQUIPE FEZ, guardado para sempre.
+///
+/// POR QUE ISTO EXISTE: passou a ser possivel EXCLUIR uma reserva lancada por
+/// engano. Excluir apaga a prova — e a prova e o que permite responder, tres
+/// meses depois, "por que o relatorio de outubro mudou?". Pedido do dono:
+/// "mesmo que exclua, a gente pelo menos tem esse dado... pelo menos a gente
+/// sabe que aconteceu essa ação. Aí sim, é uma evidência."
+///
+/// ESTE REGISTRO NUNCA SE APAGA. Nao existe rota que o remova, nem a faxina
+/// diaria o toca. Um registro de evidencia que pode ser apagado nao e
+/// evidencia.
+model AcaoRegistrada {
+  id   String     @id @default(uuid(7))
+  tipo TipoDeAcao
+
+  /// O texto pronto, escrito no momento da acao e nunca recalculado.
+  ///
+  /// CONGELADO DE PROPOSITO: a reserva excluida nao existe mais para ser
+  /// consultada, e o cliente dela pode ter sido desligado depois. Montar a
+  /// frase na hora de LER deixaria o historico em branco justamente no caso
+  /// que mais importa.
+  resumo String
+
+  /// A copia dos dados no momento da acao, para quem precisar do detalhe:
+  /// sala, cliente, telefone, dia, horario, valor, status e origem.
+  dados Json
+
+  /// Quem fez. Guardamos o NOME junto porque o usuario pode ser desligado, e
+  /// a evidencia nao pode virar "alguem fez isso".
+  usuarioId   String?  @map("usuario_id")
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id])
+  usuarioNome String   @map("usuario_nome")
+
+  /// Por que foi feito. Obrigatorio na exclusao — sem motivo, daqui a seis
+  /// meses o registro nao explica nada.
+  motivo String?
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([criadoEm])
+  @@index([tipo, criadoEm])
+  @@map("acoes_registradas")
 }

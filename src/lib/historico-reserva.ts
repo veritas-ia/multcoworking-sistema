@@ -16,7 +16,14 @@ export type AcaoDoHistorico =
   | "CANCELADA"
   | "EDITADA"
   /** A equipe esticou o termino porque o cliente ficou mais tempo. */
-  | "ESTENDIDA";
+  | "ESTENDIDA"
+  /**
+   * A equipe mudou o status na mao: concluiu, reabriu ou desfez o
+   * cancelamento. O antes e o depois ficam em "statusDe" e "statusPara" —
+   * escrever isso dentro do nome da acao deixaria o historico impossivel de
+   * filtrar depois.
+   */
+  | "STATUS";
 
 export type AutorDaAcao =
   | { por: "CLIENTE" }
@@ -39,6 +46,9 @@ export type EntradaDeHistorico = AutorDaAcao & {
   para?: Momento;
   /** Campos trocados numa edicao de cadastro (nome, telefone). */
   camposEditados?: string[];
+  /** So em STATUS: de onde para onde. */
+  statusDe?: string;
+  statusPara?: string;
   /**
    * So em ESTENDIDA: quanto tempo a mais e quanto ele custou.
    *
