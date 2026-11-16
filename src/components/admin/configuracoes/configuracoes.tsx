@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { todosOsItens, type AbaDeConfiguracao } from "@/lib/menu-admin";
 import { cn } from "@/lib/utils";
 
 import { AbaDeAcoes } from "./aba-acoes";
@@ -18,9 +19,32 @@ import { AbaDeTelefonesDeBalcao } from "./aba-telefones-balcao";
 import { AbaDeUsuarios } from "./aba-usuarios";
 
 type Aba = {
-  id: string;
+  id: AbaDeConfiguracao;
   rotulo: string;
   conteudo: () => ReactNode;
+};
+
+/**
+ * O conteudo de cada aba.
+ *
+ * "Record<AbaDeConfiguracao, ...>" NAO E DETALHE: e ele que faz o compilador
+ * recusar uma aba sem conteudo e um conteudo sem aba. A barra lateral monta
+ * os itens a partir da MESMA lista de abas — sem esta trava, acrescentar uma
+ * aba e esquecer o menu (ou o contrario) daria um item que leva a lugar
+ * nenhum, sem erro em lugar nenhum.
+ */
+const CONTEUDOS: Record<AbaDeConfiguracao, () => ReactNode> = {
+  salas: () => <AbaDeSalas />,
+  horarios: () => <AbaDeHorarios />,
+  parametros: () => <AbaDeParametros />,
+  politicas: () => <AbaDePoliticas />,
+  mensagens: () => <AbaDeMensagens />,
+  clientes: () => <AbaDeClientes />,
+  empresas: () => <AbaDeEmpresas />,
+  profissoes: () => <AbaDeProfissoes />,
+  "telefones-balcao": () => <AbaDeTelefonesDeBalcao />,
+  usuarios: () => <AbaDeUsuarios />,
+  acoes: () => <AbaDeAcoes />,
 };
 
 /**
@@ -30,29 +54,13 @@ type Aba = {
  * tela: assim recarregar a pagina, ou mandar o link para uma colega, cai no
  * mesmo lugar.
  */
-const ABAS: readonly Aba[] = [
-  { id: "salas", rotulo: "Salas", conteudo: () => <AbaDeSalas /> },
-  { id: "horarios", rotulo: "Horários", conteudo: () => <AbaDeHorarios /> },
-  { id: "parametros", rotulo: "Parâmetros", conteudo: () => <AbaDeParametros /> },
-  { id: "politicas", rotulo: "Políticas", conteudo: () => <AbaDePoliticas /> },
-  { id: "mensagens", rotulo: "Mensagens", conteudo: () => <AbaDeMensagens /> },
-  { id: "clientes", rotulo: "Clientes", conteudo: () => <AbaDeClientes /> },
-  { id: "empresas", rotulo: "Empresas", conteudo: () => <AbaDeEmpresas /> },
-  {
-    id: "profissoes",
-    rotulo: "Áreas de atuação",
-    conteudo: () => <AbaDeProfissoes />,
-  },
-  {
-    id: "telefones-balcao",
-    rotulo: "Telefones do balcão",
-    conteudo: () => <AbaDeTelefonesDeBalcao />,
-  },
-  { id: "usuarios", rotulo: "Usuários", conteudo: () => <AbaDeUsuarios /> },
-  /* POR ULTIMO de proposito: nao e uma configuracao, e a prova do que foi
-     feito. Fica aqui porque e onde a equipe ja procura "coisas do sistema". */
-  { id: "acoes", rotulo: "Histórico de ações", conteudo: () => <AbaDeAcoes /> },
-];
+const ABAS: readonly Aba[] = todosOsItens()
+  .filter((item) => item.aba !== null)
+  .map((item) => ({
+    id: item.aba!,
+    rotulo: item.rotulo,
+    conteudo: CONTEUDOS[item.aba!],
+  }));
 
 export function Configuracoes() {
   const navegador = useRouter();
