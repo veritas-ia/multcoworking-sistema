@@ -102,7 +102,10 @@ async function limpar(): Promise<void> {
     where: { telefone: { in: TELEFONES } },
   });
   await bancoDeTeste.cliente.deleteMany({
-    where: { reservas: { none: {} }, telefones: { none: {} } },
+    where: { reservas: { none: {} },
+      telefones: { none: {} },
+      consumosEmporio: { none: {} },
+      demonstrativos: { none: {} } },
   });
   // Volta o relógio das faixas: sem isto o contador atravessa os testes e
   // estoura as 24 horas do dia.

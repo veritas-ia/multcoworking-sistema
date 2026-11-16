@@ -424,6 +424,38 @@ export async function gerarPdfDoDemonstrativo(
   // texto desce quantas linhas forem necessarias. O VALOR FICA NA PRIMEIRA,
   // alinhado com o comeco da descricao, para a leitura continuar sendo
   // "isto custa aquilo".
+  // O EMPÓRIO, somado pelo sistema a partir dos lançamentos.
+  //
+  // Vem ANTES das linhas digitadas, logo depois das horas: as duas coisas que
+  // o sistema calcula ficam juntas, e o que foi escrito à mão vem depois.
+  // A descrição é longa por natureza ("12 Água sem gás · 7 Barrinha...") e
+  // usa a mesma quebra de linha das extras.
+  if (dados.emporio) {
+    const valor = comoDinheiro(dados.emporio.valorCentavos);
+    const medir = (trecho: string): number =>
+      caneta.normal.widthOfTextAtSize(trecho, 10);
+
+    const disponivel = LARGURA_UTIL - medir(valor) - 16;
+    const texto = quebrarTexto(
+      `Empório · ${dados.emporio.descricao}`,
+      disponivel,
+      medir,
+    );
+
+    garantirEspaco(caneta, 18 + 13 * (texto.length - 1));
+    escreverADireita(caneta, valor, COL_HORAS);
+
+    texto.forEach((parte, indice) => {
+      escrever(caneta, parte, COL_DIA);
+
+      if (indice < texto.length - 1) {
+        caneta.y -= 13;
+      }
+    });
+
+    caneta.y -= 18;
+  }
+
   for (const linha of dados.linhasExtras) {
     const valor = comoDinheiro(Math.round(Number(linha.valor || "0") * 100));
     const medir = (trecho: string): number =>

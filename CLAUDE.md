@@ -790,6 +790,63 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
 - **Teste com os números reais da ficha:** Expresso 10939 → 10949 → 10958 → 10972 →
   10975 nos dias 3 a 7, dando 10, 9, 14 e 3 cafés. A primeira leitura não tem anterior.
 
+#### O LANÇAMENTO DO CONSUMO, e o ciclo que ele fecha (16/11/2026)
+- **Confirmado pelo dono:** a recepcionista **já lança todo dia** na rotina normal, então
+  o volume de digitação não muda muito. **O que muda é quem soma.**
+- **Correção de linguagem minha:** eu disse que o empório "entraria sozinho" no controle
+  de horas, e o dono questionou — *"como vai entrar sozinho sendo que o admin que vai
+  inserir todo o consumo?"*. Ele estava certo: o lançamento continua sendo à mão. O que
+  passa a ser do sistema é **a soma e a transcrição para a cobrança**.
+- **O VALOR NUNCA VEM DA TELA.** A rota não aceita total: ela recebe produto e
+  quantidade, e o servidor multiplica. Aceitar o número de quem chama devolveria
+  exatamente o problema que isto veio resolver — a linha "EMPÓRIO ... R$ 201,50"
+  digitada sem conferência, que é da mesma família dos R$ 70 da planilha.
+- **Preço CONGELADO por lançamento**, igual à reserva: reajustar o produto no painel não
+  muda o que já foi consumido. Há teste que dobra o preço e confere.
+- **A hora é a do PAPEL**, não a do lançamento. Carimbar a hora de agora faria o
+  relatório dizer que todo mundo consome no fim do dia. Consumo no futuro é recusado.
+- **O consumo dá BAIXA no estoque** — e é isso que faz a contagem do dia seguinte poder
+  conferir. A diferença entre o que foi lançado e o que foi contado **é a coluna
+  "FALTOU"** da ficha. **Café não dá baixa**: é contador, não tem estoque.
+
+##### As duas formas de fechar, e a trava que as separa
+- `NA_HORA` (pagou) e `NA_MENSALIDADE` (acumula). *"Não existe comanda"* — palavra do
+  dono.
+- **A forma de pagamento SÓ existe no `NA_HORA`**, com trava no banco. No
+  `NA_MENSALIDADE` ainda não foi pago: gravar uma forma ali seria dizer que aconteceu
+  algo que não aconteceu, e o relatório de formas passaria a contar dinheiro que ninguém
+  recebeu. A aplicação **ignora** a forma nesse caso em vez de recusar — a tela pode
+  mandar o campo preenchido por descuido, e travar ali seria atrito sem ganho.
+- A forma de pagamento é **TABELA** (`formas_pagamento`), não enum: mesma decisão das
+  áreas de atuação e das etiquetas. Nasce com **Pix** (o único confirmado — a plaquinha
+  do empório diz "PAGAMENTO ... POR PIX" com o CNPJ), **Dinheiro** e **Cartão**.
+
+##### O empório no controle de horas
+- Virou **coluna própria** no demonstrativo, separada das "outras linhas". As extras a
+  gestão **digita**; o empório o sistema **soma**. Misturar deixaria a equipe editar por
+  cima de um número calculado, e ninguém saberia mais qual dos dois valia.
+- **Só o `NA_MENSALIDADE` entra.** Cobrar de novo o que foi pago na hora seria cobrar
+  duas vezes pela mesma barrinha, e o cliente não teria como perceber olhando o
+  documento.
+- **Agrupado por PRODUTO**, não linha a linha: a ficha diz "12 águas", não doze linhas de
+  uma água. Somado **em centavos** — há teste com três de R$ 33,33 dando R$ 99,99.
+- **SALVAR CONGELA**, igual à tabela de horas: um lançamento feito depois não muda o
+  documento que o cliente recebeu. Há teste que emite, lança mais e confere.
+- Numa **empresa**, entram os consumos de todos os clientes ligados a ela — mesma regra
+  das reservas.
+
+#### A TABELA NOVA QUEBROU A LIMPEZA DE SEIS ARQUIVOS DE TESTE
+- Seis testes apagam "clientes órfãos" globalmente (`reservas: none, telefones: none`) —
+  é a limpeza que a Fase 14 exigiu. `consumos_emporio` tem chave `ON DELETE RESTRICT`
+  no cliente, então ela passou a **estourar**.
+- **O estrago não foi o erro: foi o que veio depois.** Com a limpeza interrompida no
+  meio, o resto dela não rodava — num dos arquivos um contador de horas não era
+  zerado, e os testes começaram a pedir reserva às `24:00`. **179 testes vermelhos, e
+  nenhuma mensagem apontava para a causa.**
+- **A regra, para a próxima tabela que apontar para `clientes`:** o `none` da limpeza
+  precisa listar **todas** as relações. Órfão é quem não tem nada pendurado — e a
+  definição de "nada" muda a cada tabela nova.
+
 #### Migração que falha pode deixar PEDAÇO PARA TRÁS
 - Esta migração falhou duas vezes no desenvolvimento (erro meu de SQL), e **nas duas o
   que já tinha rodado ficou gravado** — o tipo na primeira, os 30 produtos na segunda.
@@ -801,8 +858,8 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
 
 ### Ao acrescentar tabela de cadastro nova
 - `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
-  tabelas** (salas, horários, configurações, templates, profissões, **produtos e
-  etiquetas**). Tabela de cadastro
+  tabelas** (salas, horários, configurações, templates, profissões, produtos,
+  etiquetas e **formas de pagamento**). Tabela de cadastro
   nova que fique fora dessa lista faz o banco de teste nascer sem ela, e **todo teste
   que cria reserva falha** por registro não encontrado — uma falha que não tem nada a
   ver com a regra sendo testada. Foi o que aconteceu ao criar as profissões, e de novo

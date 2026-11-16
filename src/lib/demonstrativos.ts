@@ -19,6 +19,7 @@
  * depois, o documento que o cliente recebeu continua batendo com o que foi
  * enviado — mesma regra do valor congelado na reserva.
  */
+import { Prisma } from "@/generated/prisma/client";
 import { StatusReserva } from "@/generated/prisma/enums";
 
 import { prisma } from "./prisma";
@@ -52,6 +53,22 @@ export type LinhaExtra = {
   valor: string;
 };
 
+/**
+ * O consumo do emporio no periodo, somado pelo sistema.
+ *
+ * POR QUE ISTO EXISTE: ate aqui a recepcionista lia a ficha fisica, somava de
+ * cabeca e digitava uma linha de texto com o total — "EMPORIO 12 aguas sem
+ * gas/10 aguas com gas/... R$ 201,50". E o mesmo tipo de numero digitado sem
+ * conferencia que gerou os R$ 70 cobrados a mais na planilha da Toca.
+ */
+export type LinhaDoEmporio = {
+  /** "12 Água sem gás · 7 Barrinha Proteína" — montado dos lançamentos. */
+  descricao: string;
+  /** Quantidade por produto, para o cliente conferir item a item. */
+  itens: { produto: string; quantidade: number; valor: string }[];
+  valorCentavos: number;
+};
+
 export type Demonstrativo = {
   id: string | null;
   /** Preenchido quando o documento e de UMA PESSOA. */
@@ -73,6 +90,16 @@ export type Demonstrativo = {
   /** Quanto cada sala somou no periodo — o cliente pediu para ver separado. */
   porSala: { sala: string; horas: number }[];
   horas: number;
+  /**
+   * O EMPORIO, montado pelo sistema a partir dos consumos lancados.
+   *
+   * Separado de "linhasExtras" de proposito: estas a gestao digita; esta
+   * aqui o sistema SOMA. Misturar as duas deixaria a equipe editar por cima
+   * de um numero calculado, e ninguem saberia mais qual dos dois valia.
+   *
+   * Nulo quando nao ha consumo no periodo — nesse caso a linha nem aparece.
+   */
+  emporio: LinhaDoEmporio | null;
   linhasExtras: LinhaExtra[];
   /**
    * O valor das horas, em centavos. Com preco combinado, e horas x preco;
@@ -221,6 +248,8 @@ export async function montarDoPeriodo(entrada: {
       ? alvo.precoAcordado
       : entrada.valorHora?.trim() || null;
 
+  const emporio = await emporioDoPeriodo(alvo, entrada.de, entrada.ate);
+
   return {
     ok: true,
     dados: montar({
@@ -232,10 +261,91 @@ export async function montarDoPeriodo(entrada: {
       ate: entrada.ate,
       valorHora,
       itens,
+      emporio,
       linhasExtras: entrada.linhasExtras ?? [],
       totalAjustado: entrada.totalAjustado ?? null,
       enviadoEm: null,
     }),
+  };
+}
+
+/**
+ * O CONSUMO DO EMPORIO que entra na cobranca.
+ *
+ * SO O "NA_MENSALIDADE". O que foi pago na hora ja foi pago — cobrar de novo
+ * no fim do mes seria cobrar duas vezes pela mesma barrinha, e o cliente nao
+ * teria como perceber olhando o documento.
+ *
+ * Numa EMPRESA, entram os consumos de todos os clientes ligados a ela, mesma
+ * regra das reservas: e a empresa que paga a conta.
+ *
+ * SOMADO EM CENTAVOS. Somar reais em ponto flutuante acumula diferenca, e
+ * aqui sao dezenas de linhas de R$ 3,50 e R$ 7,50 por mes.
+ */
+async function emporioDoPeriodo(
+  alvo: { clienteId: string | null; empresaId: string | null },
+  de: DataLocal,
+  ate: DataLocal,
+): Promise<LinhaDoEmporio | null> {
+  const consumos = await prisma.consumoDoEmporio.findMany({
+    where: {
+      momento: "NA_MENSALIDADE",
+      ...(alvo.clienteId
+        ? { clienteId: alvo.clienteId }
+        : { cliente: { empresaId: alvo.empresaId! } }),
+      consumidoEm: {
+        gte: instanteDe(de, "00:00"),
+        lt: instanteDe(somarDias(ate, 1), "00:00"),
+      },
+    },
+    select: {
+      quantidade: true,
+      valor: true,
+      produto: { select: { nome: true } },
+    },
+    orderBy: { consumidoEm: "asc" },
+  });
+
+  if (consumos.length === 0) {
+    return null;
+  }
+
+  // Agrupado POR PRODUTO, e nao linha a linha: a ficha do cliente diz
+  // "12 aguas sem gas", e nao doze linhas de uma agua. Ler doze linhas iguais
+  // num documento de cobranca so atrapalha a conferencia.
+  const porProduto = new Map<string, { quantidade: number; centavos: number }>();
+
+  for (const consumo of consumos) {
+    const atual = porProduto.get(consumo.produto.nome) ?? {
+      quantidade: 0,
+      centavos: 0,
+    };
+
+    porProduto.set(consumo.produto.nome, {
+      quantidade: atual.quantidade + consumo.quantidade,
+      centavos: atual.centavos + emCentavos(consumo.valor.toFixed(2)),
+    });
+  }
+
+  const itens = [...porProduto.entries()]
+    .map(([produto, soma]) => ({
+      produto,
+      quantidade: soma.quantidade,
+      valor: emReais(soma.centavos),
+      centavos: soma.centavos,
+    }))
+    .sort((a, b) => b.centavos - a.centavos);
+
+  return {
+    descricao: itens
+      .map((item) => `${item.quantidade} ${item.produto}`)
+      .join(" · "),
+    itens: itens.map(({ produto, quantidade, valor }) => ({
+      produto,
+      quantidade,
+      valor,
+    })),
+    valorCentavos: itens.reduce((soma, item) => soma + item.centavos, 0),
   };
 }
 
@@ -328,6 +438,7 @@ function montar(bruto: {
    */
   valorHora: string | null;
   itens: ItemDoDemonstrativo[];
+  emporio: LinhaDoEmporio | null;
   linhasExtras: LinhaExtra[];
   totalAjustado: string | null;
   enviadoEm: Date | null;
@@ -352,7 +463,10 @@ function montar(bruto: {
     0,
   );
 
-  const totalCalculadoCentavos = valorDasHorasCentavos + valorDasLinhasCentavos;
+  const totalCalculadoCentavos =
+    valorDasHorasCentavos +
+    valorDasLinhasCentavos +
+    (bruto.emporio?.valorCentavos ?? 0);
 
   // QUEM RESERVOU. Sai dos itens congelados, e nao de uma consulta nova:
   // assim o documento salvo e a pre-visualizacao contam a mesma coisa.
@@ -461,6 +575,9 @@ export async function salvar(entrada: {
       valorHora: dados.valorHora,
       horas: String(dados.horas),
       itens: dados.itens,
+      // CONGELA o empório junto com a tabela de horas: um lançamento feito
+      // depois não pode mudar o documento que o cliente recebeu.
+      emporio: dados.emporio ?? Prisma.DbNull,
       linhasExtras: dados.linhasExtras,
       totalAjustado: dados.totalAjustado || null,
     };
@@ -513,6 +630,7 @@ export async function buscar(id: string): Promise<Demonstrativo | null> {
     // Os demonstrativos emitidos antes de o valor por hora virar opcional
     // nao guardam o valor de cada reserva. Eles sempre tem preco combinado,
     // entao o zero aqui nunca e somado — esta so para o tipo fechar.
+    emporio: (linha.emporio as unknown as LinhaDoEmporio | null) ?? null,
     itens: (linha.itens as unknown as ItemDoDemonstrativo[]).map((item) => ({
       ...item,
       valorCentavos: item.valorCentavos ?? 0,
@@ -562,9 +680,12 @@ export async function listar(dono?: {
       ? Math.round(emCentavos(linha.valorHora.toFixed(2)) * Number(linha.horas))
       : itens.reduce((soma, item) => soma + (item.valorCentavos ?? 0), 0);
 
+    const emporio = linha.emporio as unknown as LinhaDoEmporio | null;
+
     const calculado =
       valorDasHoras +
-      extras.reduce((soma, extra) => soma + emCentavos(extra.valor || "0"), 0);
+      extras.reduce((soma, extra) => soma + emCentavos(extra.valor || "0"), 0) +
+      (emporio?.valorCentavos ?? 0);
 
     return {
       id: linha.id,

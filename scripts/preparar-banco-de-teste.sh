@@ -40,6 +40,7 @@ docker exec "$CONTAINER" sh -c \
      --table=configuracoes --table=templates_mensagem \
      --table=profissoes \
      --table=produtos --table=tags_produto \
+     --table=formas_pagamento \
      $ORIGEM | psql -U coworking -d $DESTINO -q"
 
 # A LIGACAO produto-etiqueta vai NUMA SEGUNDA PASSADA, de proposito.

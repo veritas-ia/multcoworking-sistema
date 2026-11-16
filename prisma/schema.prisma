@@ -108,6 +108,20 @@ enum FrequenciaRecorrencia {
 ///
 /// A ficha e preenchida igual nos dois casos (um numero por produto por dia).
 /// O que muda e a conta que o sistema faz com esse numero.
+/// QUANDO o consumo e pago. Sao as DUAS unicas formas que existem no
+/// coworking (palavra do dono: "nao existe comanda"):
+///
+///   NA_HORA        — a pessoa paga na hora, e acabou.
+///   NA_MENSALIDADE — o mensalista acumula e paga junto com a mensalidade,
+///                    no dia dele. E o que entra no controle de horas.
+///
+/// Isto NAO e a forma de pagamento (Pix, dinheiro): e o momento. A forma so
+/// faz sentido no NA_HORA.
+enum MomentoDoPagamento {
+  NA_HORA
+  NA_MENSALIDADE
+}
+
 enum TipoDeControle {
   ESTOQUE
   CONTADOR
@@ -198,6 +212,8 @@ model Sala {
   recorrencias Recorrencia[]
   ocupacoes   OcupacaoSala[]
 
+  consumosEmporio ConsumoDoEmporio[]
+
   @@map("salas")
 }
 
@@ -256,6 +272,7 @@ model Usuario {
   movimentosDeEstoque MovimentoDeEstoque[]
   acoesRegistradas    AcaoRegistrada[]
   contagensDeEstoque  ContagemDeEstoque[]
+  consumosLancados    ConsumoDoEmporio[]
 
   @@map("usuarios")
 }
@@ -406,6 +423,8 @@ model Cliente {
 
   @@index([nome])
   @@index([empresaId])
+  consumosEmporio ConsumoDoEmporio[]
+
   @@map("clientes")
 }
 
@@ -505,9 +524,18 @@ model Demonstrativo {
   ///    "pessoa": "Matheus Vitullo" }]
   itens Json
 
-  /// As linhas que a gestao acrescenta a mao — posicoes, emporio, impressoes:
+  /// As linhas que a gestao acrescenta a mao — posicoes, impressoes:
   /// [{ "descricao": "2 posicoes", "valor": "940.00" }]
+  ///
+  /// O EMPORIO SAIU DAQUI em 16/11/2026: ele passou a ser somado pelo sistema
+  /// a partir dos consumos lancados, e tem coluna propria.
   linhasExtras Json @map("linhas_extras")
+
+  /// O EMPORIO, CONGELADO na emissao — mesma regra da tabela de horas.
+  ///
+  /// Recalculado na leitura, um lancamento feito depois mudaria um documento
+  /// que o cliente ja recebeu. Nulo = nao havia consumo no periodo.
+  emporio Json?
 
   /// Total escrito a mao, quando houve renegociacao. NULO e o normal: vale a
   /// soma que o sistema faz. Existe porque o dono pediu a saida de emergencia,
@@ -850,6 +878,7 @@ model Produto {
   movimentos MovimentoDeEstoque[]
   tags       ProdutoComTag[]
   contagens  ItemDaContagem[]
+  consumos   ConsumoDoEmporio[]
 
   @@index([ativo, ordem])
   @@index([categoria, ordem])
@@ -1035,4 +1064,81 @@ model ItemDaContagem {
   @@id([contagemId, produtoId])
   @@index([produtoId])
   @@map("itens_da_contagem")
+}
+
+/// Pix, dinheiro, cartao… A lista que a equipe usa no balcao.
+///
+/// TABELA e nao enum, mesma decisao das areas de atuacao e das etiquetas: um
+/// enum do PostgreSQL aceita acrescentar valor mas NUNCA remover, e a forma
+/// de pagamento e exatamente o tipo de lista que muda sem avisar programador.
+model FormaDePagamento {
+  id    String  @id @default(uuid(7))
+  nome  String  @unique
+  /// Desligada some da tela de lancamento; o historico fica.
+  ativa Boolean @default(true)
+  ordem Int
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  consumos ConsumoDoEmporio[]
+
+  @@index([ativa, ordem])
+  @@map("formas_pagamento")
+}
+
+/// UM CONSUMO DO EMPORIO: uma linha da ficha fisica, passada para o sistema.
+///
+/// POR QUE ISTO EXISTE: hoje a recepcionista le a ficha, SOMA DE CABECA por
+/// cliente e digita uma linha de texto no controle de horas, com um total
+/// escrito a mao ("EMPORIO 12 aguas... R$ 201,50"). E o mesmo numero digitado
+/// sem conferencia que gerou os R$ 70 cobrados a mais na planilha da Toca.
+///
+/// Aqui cada item vira uma linha, e QUEM SOMA E O SISTEMA.
+model ConsumoDoEmporio {
+  id String @id @default(uuid(7))
+
+  /// O CADASTRO da Fase 14, nunca um nome digitado. A recepcionista disse por
+  /// que sem ninguem perguntar: "pego o sobrenome para nao ficar tipo Matheus
+  /// da Toca, Matheus Vitullo". Nome solto aqui recriaria a bagunca dos 44
+  /// nomes dentro do emporio.
+  clienteId String  @map("cliente_id")
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  produtoId String  @map("produto_id")
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  quantidade Int
+
+  /// O preco de UMA unidade, CONGELADO no lancamento — igual a reserva.
+  /// Reajustar o produto no painel nao pode mudar o que ja foi consumido.
+  precoUnitario Decimal @map("preco_unitario") @db.Decimal(10, 2)
+  /// quantidade x precoUnitario, tambem congelado. Guardado, e nao
+  /// recalculado: e ele que entra na cobranca.
+  valor         Decimal @db.Decimal(10, 2)
+
+  /// QUANDO A PESSOA CONSUMIU, lido da ficha — nao quando foi lancado. A
+  /// recepcionista le o papel no dia seguinte; carimbar a hora do lancamento
+  /// faria o relatorio dizer que todo mundo consome no fim do dia.
+  consumidoEm DateTime @map("consumido_em") @db.Timestamptz(3)
+
+  /// A sala onde a pessoa estava, quando escrito na ficha. Opcional: nem
+  /// toda linha tem.
+  salaId String? @map("sala_id")
+  sala   Sala?   @relation(fields: [salaId], references: [id])
+
+  momento MomentoDoPagamento
+
+  /// So faz sentido no NA_HORA. No NA_MENSALIDADE fica nulo: ainda nao foi
+  /// pago, e inventar uma forma agora seria dizer algo que nao aconteceu.
+  formaPagamentoId String?           @map("forma_pagamento_id")
+  formaPagamento   FormaDePagamento? @relation(fields: [formaPagamentoId], references: [id])
+
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id])
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([clienteId, consumidoEm])
+  @@index([consumidoEm])
+  @@index([produtoId])
+  @@map("consumos_emporio")
 }

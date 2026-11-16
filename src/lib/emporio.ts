@@ -24,6 +24,7 @@
  */
 import {
   CategoriaDoProduto,
+  MomentoDoPagamento,
   TipoDeControle,
   TipoMovimentoEstoque,
 } from "@/generated/prisma/enums";
@@ -37,9 +38,14 @@ import {
   TIPOS_ACEITOS,
 } from "./cloudinary";
 import { prisma } from "./prisma";
-import { dataLocalDe } from "./tempo";
+import { dataLocalDe, horaLocalDe, instanteDe, type DataLocal } from "./tempo";
 
-export { CategoriaDoProduto, TipoDeControle, TipoMovimentoEstoque };
+export {
+  CategoriaDoProduto,
+  MomentoDoPagamento,
+  TipoDeControle,
+  TipoMovimentoEstoque,
+};
 
 /** Uma etiqueta, como a tela desenha. */
 export type TagNaTela = { id: string; nome: string; cor: string };
@@ -1124,4 +1130,311 @@ export async function registrarContagem(entrada: {
         .reduce((soma, l) => soma + l.diferenca, 0),
     },
   };
+}
+
+// -----------------------------------------------------------------------------
+// O LANCAMENTO DO CONSUMO
+// -----------------------------------------------------------------------------
+
+/** Uma linha lancada, como a tela mostra. */
+export type ConsumoLancado = {
+  id: string;
+  clienteId: string;
+  clienteNome: string;
+  produtoId: string;
+  produtoNome: string;
+  quantidade: number;
+  /** Em reais, congelado: "7.50". */
+  precoUnitario: string;
+  valor: string;
+  /** "AAAA-MM-DD" e "HH:MM" no relógio de São Paulo, do papel. */
+  dia: string;
+  hora: string;
+  sala: string | null;
+  momento: MomentoDoPagamento;
+  formaPagamento: string | null;
+  lancadoPor: string | null;
+};
+
+/** As formas de pagamento que a equipe usa. */
+export async function listarFormasDePagamento(opcoes?: {
+  somenteAtivas?: boolean;
+}): Promise<{ id: string; nome: string; ativa: boolean }[]> {
+  const formas = await prisma.formaDePagamento.findMany({
+    where: opcoes?.somenteAtivas ? { ativa: true } : {},
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+  });
+
+  return formas.map((forma) => ({
+    id: forma.id,
+    nome: forma.nome,
+    ativa: forma.ativa,
+  }));
+}
+
+/**
+ * LANCA UM CONSUMO, lido da ficha fisica.
+ *
+ * O QUE O SISTEMA FAZ QUE A PESSOA FAZIA DE CABECA:
+ *
+ *  1. multiplica quantidade x preco e CONGELA os dois na linha. Reajustar o
+ *     produto no painel depois nao muda o que ja foi consumido — mesma regra
+ *     do valor congelado na reserva;
+ *  2. da baixa no ESTOQUE, para a contagem do dia seguinte poder conferir. E
+ *     essa conferencia que vira a coluna "FALTOU" da ficha;
+ *  3. guarda DE QUEM foi, pelo cadastro — nunca por nome digitado.
+ *
+ * A HORA E A DO PAPEL, nao a do lancamento. A recepcionista le a ficha no dia
+ * seguinte; carimbar a hora de agora faria o relatorio dizer que todo mundo
+ * consome no fim do dia.
+ *
+ * CAFE NAO DA BAIXA NO ESTOQUE: ele e medido por contador da maquina, e
+ * "estoque de expresso" nao existe. O consumo dele e registrado do mesmo
+ * jeito — precisa entrar na cobranca quando for cobrado —, mas sem movimento.
+ */
+export async function lancarConsumo(entrada: {
+  clienteId: string;
+  produtoId: string;
+  quantidade: number;
+  /** "AAAA-MM-DD", o dia da FICHA. */
+  dia: string;
+  /** "HH:MM", a hora da FICHA. */
+  hora: string;
+  salaId?: string | null;
+  momento: MomentoDoPagamento;
+  formaPagamentoId?: string | null;
+  usuarioId?: string | null;
+  /** Para teste: o "hoje" usado na conferência de data futura. */
+  agora?: Date;
+}): Promise<Resultado<ConsumoLancado>> {
+  if (!Number.isInteger(entrada.quantidade) || entrada.quantidade <= 0) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "A quantidade precisa ser um número inteiro maior que zero.",
+        codigo: "QUANTIDADE_INVALIDA",
+      },
+    };
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.dia)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe o dia do consumo.", codigo: "DIA_INVALIDO" },
+    };
+  }
+
+  if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(entrada.hora)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe a hora como 09:40.", codigo: "HORA_INVALIDA" },
+    };
+  }
+
+  const quando = instanteDe(entrada.dia as DataLocal, entrada.hora);
+  const agora = entrada.agora ?? new Date();
+
+  // Consumo de amanha nao existe. A ficha e sempre do passado.
+  if (quando > agora) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Não dá para lançar um consumo que ainda não aconteceu.",
+        codigo: "DIA_NO_FUTURO",
+      },
+    };
+  }
+
+  const produto = await prisma.produto.findUnique({
+    where: { id: entrada.produtoId },
+    select: { id: true, nome: true, preco: true, ativo: true, controle: true },
+  });
+
+  if (!produto || !produto.ativo) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Produto não encontrado ou desligado.",
+        codigo: "NAO_ENCONTRADO",
+      },
+    };
+  }
+
+  const cliente = await prisma.cliente.findUnique({
+    where: { id: entrada.clienteId },
+    select: { id: true, nome: true, ativo: true },
+  });
+
+  if (!cliente || !cliente.ativo) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Cliente não encontrado ou desligado.",
+        codigo: "NAO_ENCONTRADO",
+      },
+    };
+  }
+
+  // A FORMA DE PAGAMENTO SO EXISTE NO "NA_HORA".
+  //
+  // No NA_MENSALIDADE ainda nao foi pago: gravar uma forma ali seria dizer
+  // que aconteceu algo que nao aconteceu, e o relatorio de formas passaria a
+  // contar dinheiro que ninguem recebeu. O banco tambem recusa.
+  const naHora = entrada.momento === MomentoDoPagamento.NA_HORA;
+  const formaPagamentoId = naHora ? (entrada.formaPagamentoId ?? null) : null;
+
+  if (formaPagamentoId) {
+    const forma = await prisma.formaDePagamento.findUnique({
+      where: { id: formaPagamentoId },
+      select: { ativa: true },
+    });
+
+    if (!forma?.ativa) {
+      return {
+        ok: false,
+        falha: {
+          motivo: "Forma de pagamento não encontrada ou desligada.",
+          codigo: "NAO_ENCONTRADO",
+        },
+      };
+    }
+  }
+
+  if (entrada.salaId) {
+    const sala = await prisma.sala.findUnique({
+      where: { id: entrada.salaId },
+      select: { id: true },
+    });
+
+    if (!sala) {
+      return {
+        ok: false,
+        falha: { motivo: "Sala não encontrada.", codigo: "NAO_ENCONTRADO" },
+      };
+    }
+  }
+
+  // O VALOR E CALCULADO AQUI, NUNCA RECEBIDO DA TELA. Aceitar o total de
+  // quem chama devolveria o problema que esta funcao veio resolver: um numero
+  // digitado que ninguem confere.
+  const precoUnitario = produto.preco;
+  const valorCentavos = Math.round(Number(precoUnitario) * 100) * entrada.quantidade;
+
+  const gravado = await prisma.$transaction(async (tx) => {
+    const consumo = await tx.consumoDoEmporio.create({
+      data: {
+        clienteId: cliente.id,
+        produtoId: produto.id,
+        quantidade: entrada.quantidade,
+        precoUnitario,
+        valor: (valorCentavos / 100).toFixed(2),
+        consumidoEm: quando,
+        salaId: entrada.salaId ?? null,
+        momento: entrada.momento,
+        formaPagamentoId,
+        criadoPorId: entrada.usuarioId ?? null,
+      },
+      include: {
+        cliente: { select: { nome: true } },
+        produto: { select: { nome: true } },
+        sala: { select: { nome: true } },
+        formaPagamento: { select: { nome: true } },
+        criadoPor: { select: { nome: true } },
+      },
+    });
+
+    // A BAIXA NO ESTOQUE, que e o que permite a contagem conferir depois.
+    // Cafe fica de fora: contador nao tem estoque.
+    if (produto.controle === TipoDeControle.ESTOQUE) {
+      await tx.movimentoDeEstoque.create({
+        data: {
+          produtoId: produto.id,
+          tipo: TipoMovimentoEstoque.VENDA,
+          quantidade: -entrada.quantidade,
+          motivo: `Consumo de ${cliente.nome}`,
+          criadoPorId: entrada.usuarioId ?? null,
+        },
+      });
+    }
+
+    return consumo;
+  });
+
+  return { ok: true, dados: paraTelaOConsumo(gravado) };
+}
+
+/** Monta o consumo como a tela espera. */
+function paraTelaOConsumo(consumo: {
+  id: string;
+  clienteId: string;
+  produtoId: string;
+  quantidade: number;
+  precoUnitario: { toFixed: (casas: number) => string };
+  valor: { toFixed: (casas: number) => string };
+  consumidoEm: Date;
+  momento: MomentoDoPagamento;
+  cliente: { nome: string };
+  produto: { nome: string };
+  sala: { nome: string } | null;
+  formaPagamento: { nome: string } | null;
+  criadoPor: { nome: string } | null;
+}): ConsumoLancado {
+  return {
+    id: consumo.id,
+    clienteId: consumo.clienteId,
+    clienteNome: consumo.cliente.nome,
+    produtoId: consumo.produtoId,
+    produtoNome: consumo.produto.nome,
+    quantidade: consumo.quantidade,
+    precoUnitario: consumo.precoUnitario.toFixed(2),
+    valor: consumo.valor.toFixed(2),
+    dia: dataLocalDe(consumo.consumidoEm),
+    hora: horaLocalDe(consumo.consumidoEm),
+    sala: consumo.sala?.nome ?? null,
+    momento: consumo.momento,
+    formaPagamento: consumo.formaPagamento?.nome ?? null,
+    lancadoPor: consumo.criadoPor?.nome ?? null,
+  };
+}
+
+/**
+ * Os consumos de um periodo, para a tela conferir contra a ficha.
+ *
+ * O periodo e em DIAS do relogio de Sao Paulo, e nao em instantes: a
+ * recepcionista pensa em "o que foi lancado no dia 14", e o dia dela comeca a
+ * meia-noite daqui, nao a do banco.
+ */
+export async function listarConsumos(entrada: {
+  de: string;
+  ate: string;
+  clienteId?: string;
+  momento?: MomentoDoPagamento;
+}): Promise<ConsumoLancado[]> {
+  const consumos = await prisma.consumoDoEmporio.findMany({
+    where: {
+      consumidoEm: {
+        gte: instanteDe(entrada.de as DataLocal, "00:00"),
+        lt: instanteDe(somarDiasLocal(entrada.ate, 1), "00:00"),
+      },
+      ...(entrada.clienteId ? { clienteId: entrada.clienteId } : {}),
+      ...(entrada.momento ? { momento: entrada.momento } : {}),
+    },
+    orderBy: [{ consumidoEm: "desc" }],
+    include: {
+      cliente: { select: { nome: true } },
+      produto: { select: { nome: true } },
+      sala: { select: { nome: true } },
+      formaPagamento: { select: { nome: true } },
+      criadoPor: { select: { nome: true } },
+    },
+  });
+
+  return consumos.map(paraTelaOConsumo);
+}
+
+/** "2026-11-14" + 1 -> "2026-11-15". */
+function somarDiasLocal(dia: string, dias: number): DataLocal {
+  const data = new Date(`${dia}T12:00:00.000Z`);
+  data.setUTCDate(data.getUTCDate() + dias);
+  return data.toISOString().slice(0, 10) as DataLocal;
 }

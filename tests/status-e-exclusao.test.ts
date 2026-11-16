@@ -61,7 +61,10 @@ async function limpar(): Promise<void> {
   await bancoDeTeste.reserva.deleteMany({ where: { telefone: TELEFONE } });
   await bancoDeTeste.telefoneDoCliente.deleteMany({ where: { telefone: TELEFONE } });
   await bancoDeTeste.cliente.deleteMany({
-    where: { reservas: { none: {} }, telefones: { none: {} } },
+    where: { reservas: { none: {} },
+      telefones: { none: {} },
+      consumosEmporio: { none: {} },
+      demonstrativos: { none: {} } },
   });
   await bancoDeTeste.usuario.deleteMany({ where: { usuario: USUARIO } });
 }
