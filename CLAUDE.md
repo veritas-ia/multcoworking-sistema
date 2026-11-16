@@ -682,6 +682,61 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
 - 15 testes. **Foi para o `main`, e não para a prévia** — decisão do dono: *"é para
   atualizar isso de fato no sistema oficial que está rodando hoje."*
 
+### Fase 17 — o painel ganhou barra lateral (16/11/2026)
+- **O que o dono viu:** o painel era um cabeçalho e quatro cartões. *"Está muito
+  simples, não tem nada muito profissional."* A referência que ele mandou foi um CRM de
+  clínica, com menu vertical agrupado.
+- **A auditoria mostrou que o problema NÃO era cor.** A paleta já é um design system de
+  verdade: tokens num lugar só, usados em todo canto, sem hex solto. O que faltava era
+  **esqueleto** — cada uma das cinco telas carregava a **própria cópia** do cabeçalho, e
+  trocar de seção exigia voltar à tela inicial.
+- **O achado que mudou o tamanho da entrega:** Configurações escondia **onze destinos**
+  atrás de um cartão. O dono percebeu antes de mim (*"achei muito simples... poderia ter
+  tudo que já existe ali"*) e estava certo. O menu passou de 5 para **15 itens**.
+- **Saiu de graça** porque as abas de Configurações **já funcionavam por endereço**
+  (`?aba=clientes`): cada item é só um link diferente, sem refatorar a tela.
+
+#### As decisões de desenho, e o motivo de cada uma
+- **O item aceso é faixa amarela + fundo claro + preto em negrito, nunca a linha inteira
+  amarela.** O amarelo é a cor dos botões; uma linha de menu amarela cheia brigaria com
+  eles e o olho deixaria de saber o que é clicável.
+- **A ordem dos grupos segue a FREQUÊNCIA DE USO**, não a importância: a agenda abre
+  dezenas de vezes por dia, o histórico de ações talvez uma vez por mês. Quem usa todo
+  dia não lê o menu — vai pela posição.
+- **No celular e no tablet em pé a barra fica escondida e abre por botão**, e **escolher
+  um item fecha**. A referência é um sistema de monitor; a recepção trabalha no tablet, e
+  uma barra fixa de quinze itens comeria metade da tela em pé.
+- **Grupo de rotas `(painel)`** para o `/admin/login` não herdar a moldura: quem ainda
+  não entrou não pode ver a estrutura do sistema. O grupo **não aparece no endereço** —
+  conferido no build: `/admin/agenda` continua `/admin/agenda`.
+- **A conferência de sessão de cada página CONTINUA**, além da do layout. São camadas, e
+  a nova não substitui nenhuma: middleware (assinatura), layout (banco) e página (banco).
+
+#### A garantia subiu para o COMPILADOR, em vez de virar teste
+- A tela de Configurações declara o conteúdo num `Record<AbaDeConfiguracao, ...>` e monta
+  as abas a partir **do mesmo menu**. Esquecer uma aba, ou criar um item de menu que não
+  leva a lugar nenhum, **vira erro de compilação**.
+- **Conferido removendo uma aba de propósito:** `tsc` recusa com "Property 'empresas' is
+  missing". Erro antes do commit vale mais que teste que alguém marca como pendente.
+- O que continuou em teste é a regra de **qual item acende** (10 testes). Onze itens
+  apontam para o mesmo caminho e só o parâmetro muda — uma comparação ingênua acenderia
+  os onze juntos. E item aceso errado **não dá erro nenhum**: a tela abre, tudo funciona,
+  e a pessoa só fica perdida.
+
+#### O defeito de teste que isto revelou (o mesmo de duas vezes seguidas)
+- Seis arquivos apagam "clientes órfãos" (`reservas: none, telefones: none`) e a chave
+  de `demonstrativos` fazia a limpeza estourar. **179 testes vermelhos, nenhum apontando
+  a causa** — com a limpeza interrompida no meio, um contador de horas não era zerado e
+  os testes passavam a pedir reserva às `24:00`.
+- Aconteceu **duas vezes em dois dias**, com tabelas diferentes (`consumos_emporio` na
+  prévia, `demonstrativos` aqui). **A regra:** o `none` da limpeza precisa listar
+  **todas** as relações de cliente. "Órfão" é quem não tem nada pendurado, e a definição
+  de "nada" muda a cada tabela nova.
+- **Armadilha de banco entre branches:** `npm run db:teste` copia o schema do banco de
+  DESENVOLVIMENTO, que carrega as migrações da branch em que se mexeu por último. Rodar
+  os testes do `main` logo depois de trabalhar na `previa` traz tabelas que o `main` não
+  conhece. Rode `npm run db:teste` depois de trocar de branch.
+
 ### Ao acrescentar tabela de cadastro nova
 - `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
   tabelas** (salas, horários, configurações, templates e profissões). Tabela de cadastro
