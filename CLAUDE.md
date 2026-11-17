@@ -1838,6 +1838,116 @@ refaz-se.**
   sistema mostraria uma agenda velha guardada no aparelho e alguém reservaria em cima de
   horário ocupado. Risco grande para ganho nenhum.
 
+### Fase 16, Parte A — construída em 17/11/2026
+- **O que entrou:** três tabelas (`categorias_financeiras`, `fornecedores`,
+  `lancamentos`), o motor `src/lib/financeiro.ts`, sete rotas e a tela
+  `/admin/financeiro` com três abas — **Contas**, **Categorias** e
+  **Fornecedores**, cada uma como item da barra lateral. O menu foi a **22 itens**.
+- **As 18 categorias entram pela MIGRAÇÃO** (14 de saída + 4 de entrada), não pelo
+  seed: o deploy roda `migrate deploy` e não roda o seed, e categoria só no seed
+  deixaria a tela de lançamento sem opção nenhuma em produção. Há teste conferindo
+  que as que o dono listou existem, pelo nome interno.
+- A migração **não religa nenhuma linha existente** — só cria tabelas vazias e enche
+  a de categorias. Por isso **não precisou do ensaio numa cópia de produção** que a
+  Fase 14 exigiu; a regra do ensaio continua valendo para migração que mexe no que
+  já está gravado.
+
+#### AS DUAS DECISÕES QUE EXPLICAM O RESTO
+1. **O SINAL NUNCA ESTÁ NO VALOR.** O valor é sempre positivo, com trava no banco
+   (`lancamento_valor_positivo`), e quem diz o lado é o **tipo da CATEGORIA**. Um
+   valor negativo gravado abriria a porta para uma "entrada de −200" subtraindo do
+   caixa, e a linha continuaria parecendo certa na lista. O sinal é escrito **na
+   leitura** (`− R$ 430,25`), nunca no dado.
+2. **NÃO EXISTE COLUNA DE SITUAÇÃO.** "Pago", "pendente" e "atrasado" saem de duas
+   datas: vencimento e pagamento. Uma coluna de status precisaria de rotina
+   virando-a todo dia, e com `CRON_ATIVO="false"` — como na prévia — **nada ficaria
+   atrasado nunca**, o que pareceria defeito sem dar erro em lugar nenhum. Pior: a
+   coluna poderia discordar da data de vencimento ao lado dela na mesma tela.
+
+#### Outras decisões, e o motivo de cada uma
+- **O TIPO DA CATEGORIA NUNCA MUDA**, e não há tela para isso: virar o lado
+  inverteria o sinal de todo lançamento que aponta para ela — meses de caixa
+  mudariam de lado de uma vez, e cada linha continuaria parecendo certa. Para trocar
+  o lado, cadastra-se outra.
+- **Renomear categoria troca o rótulo também nos lançamentos antigos**, e isso é o
+  desejado: eles apontam para a categoria e não guardam o texto. Há teste comparando
+  **a linha inteira** do lançamento antes e depois — renomear não é gancho para mexer
+  em lançamento nenhum.
+- **A última categoria ativa de um lado não se desliga.** Sem nenhuma escolhível,
+  ninguém consegue lançar daquele lado, e o erro apareceria como "escolha a
+  categoria" numa lista vazia. Mesma regra da última área de atuação. Há teste que
+  confere também que ela **continua ligada** depois da recusa.
+- **Categoria e fornecedor desligados recusam lançamento NOVO**, mas os antigos deles
+  continuam editáveis — sem essa ressalva, corrigir o valor de uma despesa antiga
+  ficaria impossível depois de a equipe desligar a categoria, e a mensagem falaria de
+  categoria, que não é o que a pessoa está tentando mudar. Há teste.
+- **Cliente e fornecedor juntos é recusado**, na aplicação e no banco: ou o dinheiro
+  veio de um cliente, ou foi para um fornecedor. A conferência olha o lançamento
+  **como ele ficaria**, não só o que veio na mudança — trocar só o cliente, numa linha
+  que já tem fornecedor, continua sendo os dois juntos.
+- **Fornecedor é separado de cliente** de propósito: cliente é quem PAGA ao coworking.
+  Misturar faria a empresa de limpeza aparecer no relatório de clientes.
+- **"Contas do mês" e "Caixa do mês" são duas visões, não um filtro.** Uma conta de
+  outubro paga em novembro é **despesa de outubro e caixa de novembro**; misturar daria
+  um número que não bate com nenhuma das duas e seria impossível explicar o saldo.
+  Na visão de caixa, o que nunca foi pago não entra. Há teste nos dois sentidos.
+- **O resumo é somado NO SERVIDOR, em centavos**, e a tela só formata. Duas somas do
+  mesmo número em lugares diferentes é como começam dois valores que discordam na
+  mesma tela. Há teste com três de R$ 33,33 dando R$ 99,99.
+- **"Já foi paga" é uma caixa de marcar, não um campo de data sempre visível.** A
+  maioria das contas é lançada ANTES de pagar; data sempre à vista faria a equipe
+  preenchê-la por reflexo, passando a dizer que pagou o que não pagou.
+- **"Paguei" é ação própria**, e não "editar a data": é o que a equipe faz dezenas de
+  vezes por mês. **Desmarcar existe** porque marcar errado acontece, e devolve a linha
+  a pendente (ou atrasada) sem tocar em mais nada.
+- **O vencimento é coluna DATE e lido em UTC, de propósito.** Lido com a regra de fuso
+  de São Paulo voltaria **um dia** (meia-noite UTC é 21h do dia anterior aqui), e todo
+  vencimento apareceria um dia mais cedo. Há teste de ida e volta.
+- **"hoje" vem do SERVIDOR**, no relógio de São Paulo: é ele que decide o que está
+  atrasado, qual mês abrir e que data propor no pagamento.
+- **Excluir exige MOTIVO** e grava o retrato da linha em `acoes_registradas`
+  (`LANCAMENTO_EXCLUIDO`), na mesma transação. O resumo é **congelado** — a linha não
+  existirá mais para ser consultada. O valor de enum novo foi numa **migração
+  separada**: o Postgres não deixa usar um valor de enum na mesma transação em que ele
+  nasce.
+- **Excluir não existe para categoria nem para fornecedor** — desliga-se, mesma regra
+  de salas, empresas, áreas de atuação e clientes. As chaves são `ON DELETE RESTRICT`,
+  e há teste provando que o banco recusa.
+
+#### O DEFEITO DO BUILD que isto revelou, e que já estava lá
+- O `next build` falhou com *"`statusDoEmporio` is not a valid Route export field"*.
+  Um `route.ts` do Next 15 **só pode exportar os métodos HTTP** e alguns campos de
+  configuração; qualquer outra exportação derruba o build.
+- **O erro já existia nas rotas do empório desde 16/11** — eu copiei o padrão para o
+  financeiro e ele apareceu. **Nem o `tsc` nem o lint acusam**: só o `next build`.
+- Os dois ajudantes foram para `status.ts` ao lado das rotas (mesmo lugar e mesma
+  razão de `operador.ts`). **A regra: `route.ts` não exporta nada além dos métodos
+  HTTP.**
+- **Honestidade sobre o porquê:** builds anteriores de hoje passaram com a exportação
+  do empório no lugar, e eu não sei explicar o que mudou. O que importa é que a
+  exportação é inválida pela mensagem do próprio Next, agora falha de forma
+  consistente, e o lugar novo é o certo de qualquer jeito.
+
+#### O teste do menu mudou de forma por desatualização, não por defeito
+- Ele listava `/admin/configuracoes` e `/admin/emporio` **escritos à mão**, e a
+  TERCEIRA tela com abas o derrubou sem haver defeito nenhum.
+- Agora a lista sai de **`telasComAbas()`**, e as regras (um item aceso por tela, a
+  aba padrão de cada uma, nenhum vazamento entre telas) valem também **para a tela
+  com abas que ainda não existe**. 15 testes.
+- A garantia do compilador foi conferida de novo: removendo a aba "fornecedores" de
+  propósito, `tsc` recusa com *"Property 'fornecedores' is missing"*.
+
+#### O QR code do empório ficou PARADO, e o visual da shark ficou sem destino
+- Palavra do dono (17/11): *"provavelmente a gente não vai usar aquela parte de QR
+  code para a pessoa fazer a compra ali. Vai ser ainda continuar no papel físico."*
+- Consequência que precisa ficar registrada: **a referência visual da shark22**
+  (elementos gráficos/3D dos produtos) era justificada pela **tela do cliente**. Sem
+  ela, aquele visual **não tem onde morar** — a tela da recepcionista é ferramenta de
+  trabalho, e enfeite ali atrapalharia quem lança trinta linhas.
+- **Fica em aberto, por decisão do dono**, com a pergunta não respondida: se um dia
+  voltar, é vitrine no site público ou tela do cliente? Registrado para não virar
+  tarefa órfã que alguém "conserta" sem saber para quê.
+
 ### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
 > **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
 > "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem

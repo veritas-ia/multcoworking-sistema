@@ -11,7 +11,7 @@ import {
 } from "@/lib/emporio";
 
 import { operadorDaRequisicao } from "../../operador";
-import { statusDoEmporio } from "../produtos/route";
+import { statusDoEmporio } from "../status";
 
 export const dynamic = "force-dynamic";
 

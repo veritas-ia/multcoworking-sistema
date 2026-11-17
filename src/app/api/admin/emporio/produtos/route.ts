@@ -13,17 +13,9 @@ import {
 } from "@/lib/emporio";
 
 import { operadorDaRequisicao } from "../../operador";
+import { statusDoEmporio } from "../status";
 
 export const dynamic = "force-dynamic";
-
-export function statusDoEmporio(codigo: string): number {
-  if (codigo === "NAO_ENCONTRADO") {
-    return 404;
-  }
-  // "Sem Cloudinary" e 503: nao e culpa de quem pediu, e passa a funcionar
-  // quando as variaveis forem preenchidas no servidor.
-  return codigo === "CLOUDINARY_DESLIGADO" ? 503 : 422;
-}
 
 /**
  * GET /api/admin/emporio/produtos — o catalogo, com o estoque de cada um.

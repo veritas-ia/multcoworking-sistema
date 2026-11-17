@@ -47,7 +47,10 @@ export type NomeDoIcone =
   | "ShoppingBasket"
   | "ClipboardList"
   | "Package"
-  | "ArrowLeftRight";
+  | "ArrowLeftRight"
+  | "Wallet"
+  | "Tags"
+  | "Truck";
 
 /**
  * As abas de Configuracoes, como TIPO.
@@ -73,9 +76,13 @@ export type AbaDeConfiguracao =
 /** As abas do Emporio, pela mesma razao: o compilador cobra o conteudo. */
 export type AbaDoEmporio = "lancar" | "produtos" | "contagem" | "movimentos";
 
+/** As abas do Financeiro, idem. */
+export type AbaDoFinanceiro = "contas" | "categorias" | "fornecedores";
+
 /** As telas que guardam a aba escolhida no endereco. */
 export const TELA_CONFIGURACOES = "/admin/configuracoes";
 export const TELA_EMPORIO = "/admin/emporio";
+export const TELA_FINANCEIRO = "/admin/financeiro";
 
 type Comum = { rotulo: string; href: string; icone: NomeDoIcone };
 
@@ -97,8 +104,16 @@ export type ItemDoEmporio = Comum & {
   tela: typeof TELA_EMPORIO;
   aba: AbaDoEmporio;
 };
+export type ItemDoFinanceiro = Comum & {
+  tela: typeof TELA_FINANCEIRO;
+  aba: AbaDoFinanceiro;
+};
 
-export type ItemDoMenu = ItemSimples | ItemDeConfiguracao | ItemDoEmporio;
+export type ItemDoMenu =
+  | ItemSimples
+  | ItemDeConfiguracao
+  | ItemDoEmporio
+  | ItemDoFinanceiro;
 
 export type GrupoDoMenu = { titulo: string; itens: ItemDoMenu[] };
 
@@ -110,13 +125,15 @@ export type GrupoDoMenu = { titulo: string; itens: ItemDoMenu[] };
  */
 export const ABA_PADRAO: AbaDeConfiguracao = "salas";
 export const ABA_PADRAO_EMPORIO: AbaDoEmporio = "lancar";
+export const ABA_PADRAO_FINANCEIRO: AbaDoFinanceiro = "contas";
 
 const PADRAO_DA_TELA: Record<
-  typeof TELA_CONFIGURACOES | typeof TELA_EMPORIO,
+  typeof TELA_CONFIGURACOES | typeof TELA_EMPORIO | typeof TELA_FINANCEIRO,
   string
 > = {
   [TELA_CONFIGURACOES]: ABA_PADRAO,
   [TELA_EMPORIO]: ABA_PADRAO_EMPORIO,
+  [TELA_FINANCEIRO]: ABA_PADRAO_FINANCEIRO,
 };
 
 /** Atalho para montar um item de Configuracoes sem repetir o endereco. */
@@ -145,6 +162,21 @@ function emporio(
     href: `${TELA_EMPORIO}?aba=${aba}`,
     icone,
     tela: TELA_EMPORIO,
+    aba,
+  };
+}
+
+/** O mesmo para o Financeiro. */
+function financeiro(
+  rotulo: string,
+  aba: AbaDoFinanceiro,
+  icone: NomeDoIcone,
+): ItemDoFinanceiro {
+  return {
+    rotulo,
+    href: `${TELA_FINANCEIRO}?aba=${aba}`,
+    icone,
+    tela: TELA_FINANCEIRO,
     aba,
   };
 }
@@ -184,6 +216,16 @@ export const MENU: readonly GrupoDoMenu[] = [
       emporio("Contagem do dia", "contagem", "ClipboardList"),
       emporio("Produtos", "produtos", "Package"),
       emporio("Movimentos", "movimentos", "ArrowLeftRight"),
+    ],
+  },
+  {
+    titulo: "Financeiro",
+    itens: [
+      // "Contas" primeiro: e a tela do dia a dia. Categoria e fornecedor sao
+      // cadastro, mexidos quase nunca.
+      financeiro("Contas", "contas", "Wallet"),
+      financeiro("Categorias", "categorias", "Tags"),
+      financeiro("Fornecedores", "fornecedores", "Truck"),
     ],
   },
   {
@@ -231,6 +273,18 @@ export const MENU: readonly GrupoDoMenu[] = [
   },
 ];
 
+/**
+ * As telas que guardam a aba no endereco, com a aba que cada uma abre.
+ *
+ * EXISTE PARA O TESTE NAO PRECISAR DE EDICAO A CADA TELA NOVA. Antes ele
+ * listava as telas a mao, e a terceira tela com abas (o Financeiro) o fez
+ * falhar — nao por um defeito, mas por desatualizacao. Derivando daqui, as
+ * regras valem para toda tela com abas, inclusive as que ainda nao existem.
+ */
+export function telasComAbas(): { tela: string; padrao: string }[] {
+  return Object.entries(PADRAO_DA_TELA).map(([tela, padrao]) => ({ tela, padrao }));
+}
+
 /** Todos os itens, sem os grupos. */
 export function todosOsItens(): ItemDoMenu[] {
   return MENU.flatMap((grupo) => grupo.itens);
@@ -253,6 +307,13 @@ export function itensDeConfiguracao(): ItemDeConfiguracao[] {
 export function itensDoEmporio(): ItemDoEmporio[] {
   return todosOsItens().filter(
     (item): item is ItemDoEmporio => item.tela === TELA_EMPORIO,
+  );
+}
+
+/** Os itens do Financeiro, pelo mesmo motivo. */
+export function itensDoFinanceiro(): ItemDoFinanceiro[] {
+  return todosOsItens().filter(
+    (item): item is ItemDoFinanceiro => item.tela === TELA_FINANCEIRO,
   );
 }
 

@@ -5,7 +5,7 @@ import { respostaErro } from "@/lib/api";
 import { definirFotoDoProduto, removerFotoDoProduto } from "@/lib/emporio";
 
 import { operadorDaRequisicao } from "../../../../operador";
-import { statusDoEmporio } from "../../route";
+import { statusDoEmporio } from "../../../status";
 
 export const dynamic = "force-dynamic";
 

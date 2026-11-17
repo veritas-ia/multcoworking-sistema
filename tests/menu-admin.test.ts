@@ -17,13 +17,17 @@ import { describe, expect, it } from "vitest";
 import {
   ABA_PADRAO,
   ABA_PADRAO_EMPORIO,
+  ABA_PADRAO_FINANCEIRO,
   estaAceso,
   itensDeConfiguracao,
   itensDoEmporio,
+  itensDoFinanceiro,
   MENU,
   TELA_CONFIGURACOES,
   TELA_EMPORIO,
+  TELA_FINANCEIRO,
   telaAberta,
+  telasComAbas,
   todosOsItens,
 } from "@/lib/menu-admin";
 
@@ -62,14 +66,34 @@ describe("o menu tem tudo que existe no painel", () => {
     }
   });
 
-  it("as duas telas com abas têm itens, e nenhum item solto", () => {
+  /**
+   * TODA tela com abas tem item, e todo item com aba aponta para uma delas.
+   *
+   * ESTE TESTE JA FALHOU POR DESATUALIZACAO, e por isso mudou de forma: ele
+   * listava "/admin/configuracoes" e "/admin/emporio" a mao, e a TERCEIRA
+   * tela com abas (o Financeiro) o derrubou sem haver defeito nenhum. Agora a
+   * lista sai de "telasComAbas()", e a regra vale tambem para a tela com abas
+   * que ainda nao existe.
+   */
+  it("toda tela com abas tem item, e nenhum item solto", () => {
+    const telas = telasComAbas().map((uma) => uma.tela);
+
+    expect(telas.length).toBeGreaterThanOrEqual(3);
     expect(itensDeConfiguracao().length).toBeGreaterThan(0);
     expect(itensDoEmporio().length).toBeGreaterThan(0);
+    expect(itensDoFinanceiro().length).toBeGreaterThan(0);
 
-    // Todo item ou é de uma das duas telas com abas, ou é um link direto.
+    // Cada tela com abas precisa de ao menos um item apontando para ela:
+    // tela sem item e um destino que ninguem alcanca pelo menu.
+    for (const tela of telas) {
+      const quantos = todosOsItens().filter((i) => i.tela === tela).length;
+      expect(quantos).toBeGreaterThan(0);
+    }
+
+    // E todo item ou e de uma tela com abas, ou e um link direto.
     for (const item of todosOsItens()) {
       if (item.tela !== null) {
-        expect([TELA_CONFIGURACOES, TELA_EMPORIO]).toContain(item.tela);
+        expect(telas).toContain(item.tela);
       } else {
         expect(item.href.startsWith("/admin/")).toBe(true);
       }
@@ -142,15 +166,50 @@ describe("qual item fica aceso", () => {
     }
   });
 
-  it("sem aba, o Empório acende a mesma que a tela dele abre", () => {
+  /**
+   * NENHUM ITEM ACENDE NA TELA DE OUTRA, qualquer que seja o par.
+   *
+   * Nada impede duas abas de telas diferentes de se chamarem igual — e o
+   * Financeiro tem "categorias", nome que uma aba de Configuracoes poderia ter
+   * amanha. Se a regra comparasse so o nome da aba, a pessoa veria dois itens
+   * acesos em telas diferentes e nao saberia onde esta.
+   */
+  it("item de uma tela nunca acende na tela de outra", () => {
+    for (const { tela } of telasComAbas()) {
+      for (const item of todosOsItens()) {
+        if (item.tela === null || item.tela === tela) continue;
+
+        expect(estaAceso(item, tela, item.aba)).toBe(false);
+      }
+    }
+  });
+
+  /**
+   * Sem aba no endereco, CADA tela acende a propria padrao — e exatamente uma.
+   *
+   * Vale para todas, derivado de "telasComAbas()": a tela cai na primeira aba
+   * da lista dela, e a barra precisa concordar, senao o item aceso e a aba
+   * aberta ficam diferentes.
+   */
+  it("sem aba, cada tela acende a padrão dela, e só uma", () => {
+    for (const { tela, padrao } of telasComAbas()) {
+      const acesos = todosOsItens().filter((i) => estaAceso(i, tela, null));
+
+      expect(acesos, `na tela ${tela}`).toHaveLength(1);
+      expect(acesos[0]?.aba, `na tela ${tela}`).toBe(padrao);
+    }
+
+    // As tres padroes sao nomes diferentes: igual, um teste de vazamento
+    // entre telas passaria por coincidencia.
+    expect(new Set([ABA_PADRAO, ABA_PADRAO_EMPORIO, ABA_PADRAO_FINANCEIRO]).size).toBe(3);
+  });
+
+  it("uma aba do Financeiro acende só o item dela", () => {
     const acesos = todosOsItens().filter((i) =>
-      estaAceso(i, TELA_EMPORIO, null),
+      estaAceso(i, TELA_FINANCEIRO, "fornecedores"),
     );
 
-    expect(acesos).toHaveLength(1);
-    expect(acesos[0]?.aba).toBe(ABA_PADRAO_EMPORIO);
-    // E a padrao de uma tela nao pode ser a da outra.
-    expect(ABA_PADRAO_EMPORIO).not.toBe(ABA_PADRAO);
+    expect(acesos.map((i) => i.rotulo)).toEqual(["Fornecedores"]);
   });
 
   it("em qualquer tela do painel, no máximo UM item acende", () => {
@@ -161,6 +220,7 @@ describe("qual item fica aceso", () => {
       ["/admin/demonstrativos", null],
       ["/admin/configuracoes", null],
       ["/admin/emporio", null],
+      ["/admin/financeiro", null],
       // Cada aba na tela DELA: é assim que a pessoa realmente navega.
       ...todosOsItens()
         .filter((i) => i.tela !== null)

@@ -18,8 +18,11 @@ import {
   ScrollText,
   ShoppingBasket,
   SlidersHorizontal,
+  Tags,
+  Truck,
   UserCog,
   Users,
+  Wallet,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -55,6 +58,9 @@ const DESENHOS: Record<NomeDoIcone, typeof CalendarDays> = {
   ClipboardList,
   Package,
   ArrowLeftRight,
+  Wallet,
+  Tags,
+  Truck,
 };
 
 /**

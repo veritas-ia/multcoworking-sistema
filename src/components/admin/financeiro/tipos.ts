@@ -1,0 +1,74 @@
+/**
+ * O que as telas do financeiro recebem do servidor.
+ *
+ * Declarado aqui, e nao importado de "@/lib/financeiro", pela mesma razao que
+ * a agenda e o emporio fazem igual: aquele modulo fala com o Prisma, e o tipo
+ * que a tela precisa e so o formato do JSON que chega.
+ */
+
+export type TipoDeLancamento = "ENTRADA" | "SAIDA";
+
+/**
+ * Os tres estados que a equipe le.
+ *
+ * NENHUM DELES ESTA GRAVADO NO BANCO: o servidor os calcula a partir do
+ * vencimento e da data de pagamento. A tela recebe pronto e NAO refaz a
+ * conta — o navegador do operador pode estar em outro fuso, e aí ela mostraria
+ * uma conta atrasada que não está (ou o contrário).
+ */
+export type SituacaoDoLancamento = "PAGO" | "PENDENTE" | "ATRASADO";
+
+export type CategoriaNaTela = {
+  id: string;
+  nome: string;
+  tipo: TipoDeLancamento;
+  slug: string;
+  ativa: boolean;
+  ordem: number;
+  /** Quantos lançamentos apontam para ela. A tela avisa antes de desligar. */
+  lancamentos: number;
+};
+
+export type FornecedorNaTela = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  observacao: string | null;
+  lancamentos: number;
+};
+
+export type LancamentoNaTela = {
+  id: string;
+  descricao: string;
+  /** Em reais, com duas casas. Toda soma na tela passa por centavos. */
+  valor: string;
+  /** O lado, que vem da categoria — nunca do sinal do valor. */
+  tipo: TipoDeLancamento;
+  categoria: { id: string; nome: string };
+  cliente: { id: string; nome: string } | null;
+  empresa: { id: string; nome: string } | null;
+  fornecedor: { id: string; nome: string } | null;
+  formaPagamento: { id: string; nome: string } | null;
+  /** "AAAA-MM-DD" no relógio de São Paulo. */
+  vencimento: string;
+  pagoEm: string | null;
+  situacao: SituacaoDoLancamento;
+  diasDeAtraso: number;
+  observacao: string | null;
+  lancadoPor: string | null;
+  criadoEm: string;
+};
+
+/** Somado no SERVIDOR, em centavos. A tela só formata. */
+export type ResumoDoPeriodo = {
+  entradasCentavos: number;
+  saidasCentavos: number;
+  saldoCentavos: number;
+  aReceberCentavos: number;
+  aPagarCentavos: number;
+  atrasadoAReceberCentavos: number;
+  atrasadoAPagarCentavos: number;
+  quantas: number;
+};
+
+export type FormaDePagamento = { id: string; nome: string; ativa: boolean };
