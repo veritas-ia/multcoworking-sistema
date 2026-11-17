@@ -60,6 +60,20 @@ export async function GET(requisicao: NextRequest): Promise<NextResponse> {
     de: entrada.data.de,
     ate: entrada.data.ate,
     valorHora: p.get("valorHora") ?? undefined,
+    /*
+     * A COTA DE HORAS, com a mesma mecanica de tres estados do preco:
+     *
+     *   parametro ausente -> vale a cota do CONTRATO vigente (e assim que a
+     *     tela a mostra preenchida na primeira vez);
+     *   parametro vazio   -> a gestao APAGOU o campo de proposito, e o
+     *     documento cobra todas as horas;
+     *   um numero         -> manda ele.
+     *
+     * Juntar os dois primeiros tiraria da equipe a possibilidade de emitir um
+     * documento sem desconto: o campo se preencheria de novo sozinho a cada
+     * atualizacao da previa.
+     */
+    cotaHoras: cotaPedida(p.get("cotaHoras")),
   });
 
   return feito.ok
@@ -80,6 +94,11 @@ const Corpo = z.object({
    * valor que cada reserva ja tem gravado.
    */
   valorHora: VALOR.nullish(),
+  /**
+   * HORAS INCLUSAS NA MENSALIDADE. Nula = sem cota, tudo cobrado. Zero e
+   * tratado como nula pelo motor: quem nao tem plano deixa em branco.
+   */
+  cotaHoras: z.number().int().min(0).nullish(),
   linhasExtras: z.array(LinhaExtra).max(30),
   /**
    * O total escrito a mao, quando houve renegociacao. Vazio e o normal:
@@ -113,6 +132,7 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
     de: corpo.data.de,
     ate: corpo.data.ate,
     valorHora: corpo.data.valorHora ?? null,
+    cotaHoras: corpo.data.cotaHoras ?? null,
     linhasExtras: corpo.data.linhasExtras,
     totalAjustado: corpo.data.totalAjustado ?? null,
     lembrarPreco: corpo.data.lembrarPreco,
@@ -121,4 +141,27 @@ export async function POST(requisicao: NextRequest): Promise<NextResponse> {
   return feito.ok
     ? NextResponse.json({ demonstrativo: feito.dados }, { status: 201 })
     : respostaErro(422, feito.falha.motivo, feito.falha.codigo);
+}
+
+/**
+ * Le a cota do endereco, preservando os TRES estados.
+ *
+ * Nulo (parametro ausente) devolve "undefined", que o motor entende como
+ * "vale a cota do contrato". Vazio devolve null — a gestao apagou. Texto que
+ * nao e numero tambem vira null, em vez de derrubar a previa: a pessoa esta
+ * digitando, e um erro a cada tecla seria pior que cobrar tudo por um
+ * instante.
+ */
+function cotaPedida(bruto: string | null): number | null | undefined {
+  if (bruto === null) {
+    return undefined;
+  }
+
+  if (bruto.trim() === "") {
+    return null;
+  }
+
+  const numero = Number(bruto);
+
+  return Number.isInteger(numero) && numero > 0 ? numero : null;
 }

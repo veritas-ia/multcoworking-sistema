@@ -123,6 +123,7 @@ async function limpar(): Promise<void> {
       consumosEmporio: { none: {} },
       demonstrativos: { none: {} },
       lancamentos: { none: {} },
+      contratos: { none: {} },
     },
   });
   await bancoDeTeste.usuario.deleteMany({ where: { usuario: USUARIO } });

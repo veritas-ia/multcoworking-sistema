@@ -523,8 +523,21 @@ model Demonstrativo {
   /// so para quem paga um preco diferente da tabela da sala — a Toca paga
   /// R$ 30 numa sala de R$ 40.
   valorHora Decimal? @map("valor_hora") @db.Decimal(10, 2)
+
+  /// HORAS INCLUSAS NA MENSALIDADE, congeladas na emissao (Fase 16, Parte D).
+  ///
+  /// NULO = sem cota, toda hora e cobrada. E o caso de quem nao e mensalista,
+  /// e tambem o dos demonstrativos emitidos antes desta coluna existir — com
+  /// um padrao zero eles passariam a dizer "cota de 0 h", e a tela leria isso
+  /// como "tem plano" em vez de "nao tem".
+  ///
+  /// CONGELADA como o resto: o contrato pode ser reajustado depois, e o
+  /// documento que o cliente recebeu nao pode mudar sozinho. O desconto em si
+  /// e RECALCULADO na leitura, a partir desta cota e dos itens congelados —
+  /// duas fontes do mesmo numero e como comecam dois valores que discordam.
+  cotaHoras Int?    @map("cota_horas")
   /// Total de horas do periodo, somado pelo sistema.
-  horas     Decimal  @db.Decimal(10, 2)
+  horas     Decimal @db.Decimal(10, 2)
 
   /// A tabela de horas, como estava na emissao. Guarda tambem QUEM reservou,
   /// porque num documento de empresa o cliente quer saber de quem foram as

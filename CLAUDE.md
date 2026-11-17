@@ -2161,6 +2161,108 @@ as três salas continuam idênticas.
   manuais, e a mensalidade vencida e não paga aparece com os dias de atraso
   certos.
 
+### Fase 16, Parte D — a cota de horas no demonstrativo (17/11/2026)
+
+> **ISTO REABRE, COM AUTORIZAÇÃO DO DONO, a decisão de 12/11/2026** que dizia *"o
+> demonstrativo NÃO trata horas incluídas no plano"*. Aquela seção fica no arquivo,
+> para ninguém "consertar" isto depois achando que foi descuido.
+
+#### O QUE MUDOU
+Até aqui o demonstrativo cobrava **todas** as horas do período, e a gestão
+descontava a cota **de cabeça** — exatamente o tipo de conta manual que gerou os
+R$ 70 cobrados a mais na planilha da Toca. Agora o sistema desconta as horas que
+**já estão pagas na mensalidade** e cobra só o excedente.
+
+A cota vem do **contrato** (Parte C) e aparece preenchida na tela, sem ninguém
+precisar saber de cabeça o plano de cada cliente.
+
+#### AS HORAS DA COTA SÃO AS PRIMEIRAS, EM ORDEM CRONOLÓGICA
+Esta escolha precisa de justificativa porque as outras seriam arbitrárias:
+- pelas **mais caras**, o cliente pagaria menos e o coworking decidiria sozinho
+  presenteá-lo com as horas de pico;
+- pelas **mais baratas**, o cliente pagaria mais e acharia (com razão) que o
+  sistema escolheu contra ele;
+- **cronológica** é a única que se explica numa frase: *"suas 15 horas inclusas
+  foram as de 05/10 a 12/10; a partir dali é extra"*. E é assim que a pessoa usa
+  o espaço — em março ela não sabe quais horas serão as caras.
+
+Os itens já vêm em ordem cronológica da consulta (`orderBy: inicio asc`) e são
+congelados nessa ordem no documento salvo. Reordenar na leitura faria o documento
+guardado contar uma história diferente da prévia.
+
+#### UMA RESERVA PODE SER PARTIDA
+Restam 1 h de cota e a reserva tem 2 h: uma entra na cota, a outra é cobrada. Sem
+partir, ou a hora extra sairia de graça ou a cota seria perdida — as duas
+injustas, e nenhuma explicável.
+
+- **Com preço combinado**, o valor é `horas cobradas × preço`, arredondado uma vez
+  no fim.
+- **Sem preço combinado**, a parte cobrada sai **proporcional ao valor congelado**
+  da reserva: ela custou X, cobra-se `X × cobradas / horas`. Qualquer outra conta
+  (o preço de hoje, a média do período) criaria um número que não bate com a
+  reserva gravada.
+- **A reserva cobrada INTEIRA vale exatamente o valor gravado**, tratada à parte no
+  motor: a conta proporcional daria o mesmo número quase sempre, e "quase" num
+  valor congelado é o começo de um centavo de diferença que ninguém explica.
+
+#### O QUE NÃO MUDOU, e é o teste mais importante do arquivo
+**O caminho SEM cota é byte por byte o de antes.** Todo demonstrativo já emitido
+tem cota nula, e qualquer desvio ali mudaria uma cobrança que o cliente recebeu.
+Há três testes só disso: com preço combinado, sem preço combinado, e cota zero
+(que é tratada como "sem cota").
+
+- **Cota maior que o uso não gera crédito:** quem tem 15 h e usou 4 paga **zero**
+  de horas extras, nunca "menos 11 horas". Um valor negativo viraria desconto no
+  empório e nas linhas extras, e o total sairia menor que a mensalidade.
+- **A cota é das HORAS, não da conta:** empório e linhas extras ficam inteiros.
+
+#### A COTA É CONGELADA NA EMISSÃO
+- Gravada em `demonstrativos.cota_horas`, **opcional de propósito**: NULO = sem
+  cota. Com um padrão zero, cada documento antigo passaria a dizer "cota de 0 h", e
+  a tela leria isso como "tem plano" em vez de "não tem".
+- **Reajustar o contrato depois não mexe no documento salvo** — há teste comparando
+  **a linha inteira** antes e depois, e outro que reabre o documento e confere que
+  ele continua contando a mesma história.
+- **O desconto em si é RECALCULADO na leitura**, a partir da cota congelada e dos
+  itens congelados. Guardar a quebra também criaria duas fontes do mesmo número, e
+  um dia as duas discordariam — a doença que este projeto já teve várias vezes.
+- Zero é recusado no banco (`demonstrativo_cota_positiva`): quem não tem cota deixa
+  nulo.
+
+#### A COTA É APLICADA UMA VEZ POR DOCUMENTO, e isto precisa ficar dito
+Ela é **mensal**, e o período do demonstrativo é **livre** (o ciclo da Toca vai de
+10/09 a 10/10). Para o uso normal — um documento por ciclo — uma vez é exatamente
+certo. **Num período de três meses seria uma cota só**, e a gestão corrige o número
+na tela, que é onde ela está olhando o documento.
+
+Multiplicar por "meses do período" exigiria decidir se 10/09–10/10 são um mês ou
+dois, e qualquer resposta estaria errada metade das vezes.
+
+Por isso o campo tem a **mesma mecânica de três estados** do preço combinado:
+ausente = a cota do contrato; **vazio = a gestão apagou de propósito** e tudo é
+cobrado; um número = manda ele. Juntar os dois primeiros faria o campo se preencher
+de novo sozinho a cada vez que ela o apagasse. Há teste.
+
+#### A COTA APARECE NO DOCUMENTO, não só no total
+Linha própria no PDF e na tela: *"Horas inclusas na mensalidade · 15 h de 15 h ·
+já pagas"*, e a linha seguinte vira **"Horas extras"**. Sem isso o cliente somaria
+as horas da tabela, multiplicaria pelo preço e acharia que a conta está errada — ou,
+pior, que o coworking cobrou menos do que devia.
+
+**O número da linha é o das horas COBRADAS**, o mesmo que multiplica o valor ao
+lado: se a linha dissesse o total e o valor fosse do excedente, a conta não
+fecharia na vista de quem lê.
+
+#### A tabela nova quebrou a limpeza de NOVE arquivos de teste — pela quinta vez
+`contratos_mensais` aponta para `clientes` com `ON DELETE RESTRICT`, então o `none`
+da limpeza de "clientes órfãos" passou a precisar de `contratos: { none: {} }`.
+**Corrigido preventivamente nos nove arquivos, antes de quebrar.**
+
+Aconteceu agora com `consumos_emporio`, `demonstrativos`, `lancamentos` e
+`contratos_mensais`. **A regra continua a mesma, e vale repetir:** "órfão" é quem
+não tem **nada** pendurado, e a definição de "nada" muda a cada tabela nova que
+aponta para `clientes`.
+
 ### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
 > **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
 > "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem

@@ -86,6 +86,16 @@ export type Demonstrativo = {
    * negociado, cada reserva vale o que ela custou no dia.
    */
   valorHora: string | null;
+  /**
+   * HORAS INCLUSAS NA MENSALIDADE (Fase 16, Parte D).
+   *
+   * NULO = sem cota, toda hora e cobrada. E o caso de quem nao e mensalista.
+   */
+  cotaHoras: number | null;
+  /** Quantas horas do periodo couberam na cota — ja pagas na mensalidade. */
+  horasNaCota: number;
+  /** Quantas horas sobraram para cobrar. Sem cota, e igual ao total. */
+  horasCobradas: number;
   itens: ItemDoDemonstrativo[];
   /** Quanto cada sala somou no periodo — o cliente pediu para ver separado. */
   porSala: { sala: string; horas: number }[];
@@ -173,6 +183,12 @@ export async function montarDoPeriodo(entrada: {
    * reserva vale o valor que ela ja tem gravado.
    */
   valorHora?: string | null;
+  /**
+   * HORAS INCLUSAS NA MENSALIDADE. Mesma mecanica de tres estados do
+   * "valorHora": ausente = vale a cota do CONTRATO vigente; nula ou zero = a
+   * gestao apagou de proposito e tudo e cobrado; um numero = manda ele.
+   */
+  cotaHoras?: number | null;
   linhasExtras?: LinhaExtra[];
   totalAjustado?: string | null;
 }): Promise<Resultado<Demonstrativo>> {
@@ -248,6 +264,23 @@ export async function montarDoPeriodo(entrada: {
       ? alvo.precoAcordado
       : entrada.valorHora?.trim() || null;
 
+  /*
+   * A COTA SEGUE A MESMA MECANICA DE TRES ESTADOS, e pela mesma razao: juntar
+   * "nao veio" com "veio vazio" tiraria da gestao a possibilidade de emitir um
+   * documento SEM desconto — o campo se preencheria de novo sozinho a cada vez
+   * que ela o apagasse.
+   *
+   * O caso de apagar e real: um periodo de tres meses tem UMA cota aplicada
+   * (ver "cotaDoContrato"), e aí a gestao pode preferir cobrar tudo e acertar
+   * à parte.
+   */
+  const cotaHoras =
+    entrada.cotaHoras === undefined
+      ? await cotaDoContrato(alvo)
+      : entrada.cotaHoras && entrada.cotaHoras > 0
+        ? entrada.cotaHoras
+        : null;
+
   const emporio = await emporioDoPeriodo(alvo, entrada.de, entrada.ate);
 
   return {
@@ -257,6 +290,7 @@ export async function montarDoPeriodo(entrada: {
       clienteId: alvo.clienteId,
       empresaId: alvo.empresaId,
       clienteNome: alvo.nome,
+      cotaHoras,
       de: entrada.de,
       ate: entrada.ate,
       valorHora,
@@ -425,6 +459,104 @@ async function alvoDoDemonstrativo(entrada: {
  * em ponto flutuante acumula diferenca de um centavo ao longo de muitas
  * linhas.
  */
+/**
+ * DESCONTA A COTA DE HORAS DA MENSALIDADE.
+ *
+ * O QUE ELA RESOLVE: o mensalista tem horas de sala JA PAGAS na mensalidade
+ * (10, 15). Até 17/11/2026 o demonstrativo cobrava todas as horas do periodo,
+ * e a gestao descontava de cabeca — exatamente o tipo de conta manual que
+ * gerou os R$ 70 cobrados a mais na planilha da Toca.
+ *
+ * AS HORAS DA COTA SAO AS PRIMEIRAS, EM ORDEM CRONOLOGICA, e esta escolha
+ * precisa de justificativa porque as outras seriam arbitrarias:
+ *
+ *  - pelas mais CARAS, o cliente pagaria menos e o coworking decidiria sozinho
+ *    presentea-lo com as horas de pico;
+ *  - pelas mais BARATAS, o cliente pagaria mais e acharia (com razao) que o
+ *    sistema escolheu contra ele;
+ *  - cronologica e a unica que se EXPLICA numa frase: "suas 15 horas inclusas
+ *    foram as de 05/10 a 12/10; a partir dali e extra". E e assim que a pessoa
+ *    usa o espaco — ela nao sabe, em marco, quais horas serao as caras.
+ *
+ * UMA RESERVA PODE SER PARTIDA. Se restam 1 h de cota e a reserva tem 2 h, uma
+ * entra na cota e a outra e cobrada. Sem partir, ou a hora extra sairia de
+ * graca ou a cota seria perdida — as duas injustas, e nenhuma explicavel.
+ */
+function descontarACota(
+  itens: ItemDoDemonstrativo[],
+  cotaHoras: number | null,
+  valorHora: string | null,
+): { horasNaCota: number; horasCobradas: number; valorCentavos: number } {
+  const total = UMA_CASA(itens.reduce((soma, item) => soma + item.horas, 0));
+
+  /*
+   * SEM COTA, O CAMINHO E O DE ANTES, byte por byte.
+   *
+   * Isto importa: todo demonstrativo ja emitido tem cota NULA, e qualquer
+   * desvio aqui mudaria um documento que o cliente recebeu. A conta com preco
+   * combinado arredonda UMA vez no fim (R$ 30,00 x 2,5 h = 7500 centavos
+   * exatos), e a sem preco soma o valor congelado de cada reserva.
+   */
+  if (cotaHoras === null || cotaHoras <= 0) {
+    return {
+      horasNaCota: 0,
+      horasCobradas: total,
+      valorCentavos: valorHora
+        ? Math.round(emCentavos(valorHora) * total)
+        : itens.reduce((soma, item) => soma + item.valorCentavos, 0),
+    };
+  }
+
+  let restante = cotaHoras;
+  let naCota = 0;
+  let cobradas = 0;
+  let valorSemPrecoCombinado = 0;
+
+  // OS ITENS JA VEM EM ORDEM CRONOLOGICA ("orderBy: { inicio: 'asc' }" na
+  // consulta, e congelados nessa ordem no documento salvo). Reordenar aqui
+  // faria o documento guardado contar uma historia diferente da previa.
+  for (const item of itens) {
+    const dentro = Math.min(item.horas, restante);
+    const fora = UMA_CASA(item.horas - dentro);
+
+    restante = UMA_CASA(restante - dentro);
+    naCota = UMA_CASA(naCota + dentro);
+    cobradas = UMA_CASA(cobradas + fora);
+
+    if (valorHora) {
+      // Com preco combinado o valor sai das horas cobradas, somadas e
+      // arredondadas uma vez so no fim — nada a fazer por item.
+      continue;
+    }
+
+    /*
+     * SEM PRECO COMBINADO, o valor de cada reserva e o congelado nela, e a
+     * parte cobrada sai PROPORCIONAL as horas.
+     *
+     * Os dois extremos sao tratados a parte, de proposito: quando a reserva e
+     * cobrada INTEIRA, vale exatamente o valor gravado — a multiplicacao
+     * proporcional daria o mesmo numero quase sempre, mas "quase" num valor
+     * congelado e o comeco de um centavo de diferenca que ninguem explica.
+     */
+    if (fora === 0) {
+      continue;
+    }
+
+    valorSemPrecoCombinado +=
+      fora === item.horas
+        ? item.valorCentavos
+        : Math.round((item.valorCentavos * fora) / item.horas);
+  }
+
+  return {
+    horasNaCota: naCota,
+    horasCobradas: cobradas,
+    valorCentavos: valorHora
+      ? Math.round(emCentavos(valorHora) * cobradas)
+      : valorSemPrecoCombinado,
+  };
+}
+
 function montar(bruto: {
   id: string | null;
   clienteId: string | null;
@@ -437,6 +569,8 @@ function montar(bruto: {
    * negociado, cada reserva vale o que ela custou no dia.
    */
   valorHora: string | null;
+  /** NULO = sem cota, toda hora e cobrada. */
+  cotaHoras: number | null;
   itens: ItemDoDemonstrativo[];
   emporio: LinhaDoEmporio | null;
   linhasExtras: LinhaExtra[];
@@ -444,6 +578,8 @@ function montar(bruto: {
   enviadoEm: Date | null;
 }): Demonstrativo {
   const horas = UMA_CASA(bruto.itens.reduce((soma, item) => soma + item.horas, 0));
+
+  const quebra = descontarACota(bruto.itens, bruto.cotaHoras, bruto.valorHora);
 
   // DOIS CAMINHOS, e o normal e o segundo.
   //
@@ -454,9 +590,10 @@ function montar(bruto: {
   // SEM preco combinado, e a SOMA do valor congelado em cada reserva — o que
   // o cliente foi cobrado no dia. Nunca um recalculo pela tabela de hoje:
   // mudar o preco da sala no painel nao pode mexer num mes ja fechado.
-  const valorDasHorasCentavos = bruto.valorHora
-    ? Math.round(emCentavos(bruto.valorHora) * horas)
-    : bruto.itens.reduce((soma, item) => soma + item.valorCentavos, 0);
+  // QUEM FAZ ESTA CONTA E "descontarACota", acima: com cota, ela cobra so as
+  // horas que sobraram; sem cota, cobra todas e o resultado e identico ao que
+  // era antes da Parte D existir.
+  const valorDasHorasCentavos = quebra.valorCentavos;
 
   const valorDasLinhasCentavos = bruto.linhasExtras.reduce(
     (soma, linha) => soma + emCentavos(linha.valor || "0"),
@@ -495,6 +632,8 @@ function montar(bruto: {
   return {
     ...bruto,
     horas,
+    horasNaCota: quebra.horasNaCota,
+    horasCobradas: quebra.horasCobradas,
     porPessoa,
     porSala,
     valorDasHorasCentavos,
@@ -526,6 +665,8 @@ export async function salvar(entrada: {
   ate: DataLocal;
   /** O preco combinado. Nulo = vale o valor de cada reserva. */
   valorHora?: string | null;
+  /** As horas inclusas. Ausente = vale a cota do contrato; nula = tudo cobrado. */
+  cotaHoras?: number | null;
   linhasExtras: LinhaExtra[];
   totalAjustado: string | null;
   /** Guarda este preco como o padrao do cliente para a proxima vez. */
@@ -573,6 +714,10 @@ export async function salvar(entrada: {
       de: new Date(`${dados.de}T00:00:00.000Z`),
       ate: new Date(`${dados.ate}T00:00:00.000Z`),
       valorHora: dados.valorHora,
+      // CONGELA A COTA junto com a tabela de horas: reajustar o contrato
+      // depois nao pode mudar o documento que o cliente recebeu. O desconto
+      // em si e recalculado na leitura, a partir desta cota e dos itens.
+      cotaHoras: dados.cotaHoras,
       horas: String(dados.horas),
       itens: dados.itens,
       // CONGELA o empório junto com a tabela de horas: um lançamento feito
@@ -627,6 +772,10 @@ export async function buscar(id: string): Promise<Demonstrativo | null> {
     de: linha.de.toISOString().slice(0, 10) as DataLocal,
     ate: linha.ate.toISOString().slice(0, 10) as DataLocal,
     valorHora: linha.valorHora?.toFixed(2) ?? null,
+    // CONGELADA na emissao. O desconto em si e recalculado aqui a partir dela
+    // e dos itens congelados: guardar a quebra tambem criaria duas fontes do
+    // mesmo numero, e um dia as duas discordariam.
+    cotaHoras: linha.cotaHoras,
     // Os demonstrativos emitidos antes de o valor por hora virar opcional
     // nao guardam o valor de cada reserva. Eles sempre tem preco combinado,
     // entao o zero aqui nunca e somado — esta so para o tipo fechar.
@@ -707,4 +856,48 @@ export async function marcarEnviado(id: string): Promise<void> {
     where: { id },
     data: { enviadoEm: new Date() },
   });
+}
+
+/**
+ * A COTA DE HORAS do contrato de mensalidade vigente deste cliente/empresa.
+ *
+ * É ela que vem preenchida na tela, na primeira vez. Nula quando não há
+ * contrato, ou quando o contrato não tem horas inclusas.
+ *
+ * A COTA É APLICADA UMA VEZ POR DOCUMENTO, e isto precisa ficar dito: ela é
+ * mensal, e o período do demonstrativo é LIVRE (o ciclo da Toca vai de 10/09 a
+ * 10/10). Para o uso normal — um documento por ciclo — uma vez é exatamente
+ * certo. Num período de três meses seria uma cota só, e a gestão corrige o
+ * número na tela, que é onde ela está olhando o documento. Multiplicar por
+ * "meses do período" exigiria decidir se 10/09–10/10 são um mês ou dois, e
+ * qualquer resposta estaria errada metade das vezes.
+ *
+ * VIGENTE é "valia no FIM do período cobrado", e não hoje: emitir em dezembro
+ * o documento de outubro tem de usar a cota que valia em outubro.
+ */
+async function cotaDoContrato(alvo: {
+  clienteId: string | null;
+  empresaId: string | null;
+}): Promise<number | null> {
+  const contrato = await prisma.contratoMensal.findFirst({
+    where: {
+      ativo: true,
+      cotaHoras: { not: null },
+      ...(alvo.empresaId
+        ? {
+            OR: [
+              { empresaId: alvo.empresaId },
+              // A empresa pode ter o contrato no nome de um funcionário —
+              // ignorar isso faria a cota da Toca desaparecer do documento
+              // dela sem ninguém entender por quê.
+              { cliente: { empresaId: alvo.empresaId } },
+            ],
+          }
+        : { clienteId: alvo.clienteId }),
+    },
+    orderBy: { inicio: "desc" },
+    select: { cotaHoras: true },
+  });
+
+  return contrato?.cotaHoras ?? null;
 }

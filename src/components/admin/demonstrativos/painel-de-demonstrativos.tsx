@@ -83,6 +83,14 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
   const [ate, setAte] = useState(hoje);
   const [valorHora, setValorHora] = useState("");
   /**
+   * HORAS INCLUSAS NA MENSALIDADE (Fase 16, Parte D).
+   *
+   * Vem preenchida da cota do CONTRATO na primeira vez. Em branco = sem
+   * desconto, tudo cobrado — e apagar o campo tem de valer, por isso ela
+   * acompanha o mesmo controle de "ja sugerido" do preco.
+   */
+  const [cotaHoras, setCotaHoras] = useState("");
+  /**
    * Se o preço cadastrado do cliente já foi sugerido neste documento.
    *
    * Sem isto, apagar o campo seria impossível: a sugestão voltaria a
@@ -192,6 +200,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
       inicio: string,
       fim: string,
       preco: string | undefined,
+      cota: string | undefined,
     ) => {
       if (!inicio || !fim) {
         return;
@@ -206,6 +215,7 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
           de: inicio,
           ate: fim,
           valorHora: preco,
+          cotaHoras: cota,
         });
         setPrevia(resposta.demonstrativo);
         // O preço combinado que já estava cadastrado aparece preenchido na
@@ -213,6 +223,11 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
         // o documento usa o valor de cada reserva.
         if (preco === undefined && resposta.demonstrativo.valorHora) {
           setValorHora(resposta.demonstrativo.valorHora);
+        }
+        // A cota do contrato aparece preenchida na primeira vez, pela mesma
+        // razão: a equipe não precisa saber de cabeça o plano de cada um.
+        if (cota === undefined && resposta.demonstrativo.cotaHoras) {
+          setCotaHoras(String(resposta.demonstrativo.cotaHoras));
         }
       } catch (falha) {
         setPrevia(null);
@@ -228,13 +243,14 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
       // servidor poder sugerir o do cliente. Daí em diante vai o que está no
       // campo — inclusive vazio, quando a equipe o apagou.
       const preco = precoJaSugerido.current ? valorHora : undefined;
+      const cota = precoJaSugerido.current ? cotaHoras : undefined;
       precoJaSugerido.current = true;
-      void atualizarPrevia(dono, de, ate, preco);
+      void atualizarPrevia(dono, de, ate, preco, cota);
     }
     // "dono" é derivado de cliente e empresa; depender deles evita refazer a
     // consulta a cada renderização.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cliente, empresa, de, ate, valorHora, atualizarPrevia]);
+  }, [cliente, empresa, de, ate, valorHora, cotaHoras, atualizarPrevia]);
 
   function limparEscolha(): void {
     setSalvo(null);
@@ -479,6 +495,23 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                 onChange={(evento) => setValorHora(evento.target.value)}
                 dica="Só para quem paga um preço combinado, diferente da tabela. Em branco, vale o valor de cada reserva."
               />
+              {/*
+                A COTA vem preenchida do contrato do mensalista. Em branco, o
+                documento cobra todas as horas — é o caso de quem não é
+                mensalista, e também do período de vários meses, onde a cota
+                mensal é aplicada uma vez só e a gestão pode preferir acertar
+                à parte.
+              */}
+              <Campo
+                etiqueta="Horas inclusas na mensalidade (opcional)"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                placeholder="deixe vazio"
+                value={cotaHoras}
+                onChange={(evento) => setCotaHoras(evento.target.value)}
+                dica="Vem do contrato do mensalista. Essas horas não são cobradas — só o que passar delas."
+              />
             </div>
           </Secao>
 
@@ -608,11 +641,23 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
           {previa ? (
             <Secao titulo="Total">
               <dl className="flex flex-col gap-1 text-sm">
+                {/*
+                  A COTA APARECE COMO LINHA PRÓPRIA, e não só embutida no
+                  total: sem ela, a equipe (e o cliente, no PDF) somaria as
+                  horas da tabela acima, multiplicaria pelo preço e acharia
+                  que o valor está errado.
+                */}
+                {previa.cotaHoras ? (
+                  <Linha
+                    rotulo={`Horas inclusas na mensalidade · ${horasPorExtenso(previa.horasNaCota)} de ${horasPorExtenso(previa.cotaHoras)}`}
+                    valor="já pagas"
+                  />
+                ) : null}
                 <Linha
                   rotulo={
                     valorHora.trim()
-                      ? `Horas · ${horasPorExtenso(previa.horas)} × ${valorHora}`
-                      : `Horas · ${horasPorExtenso(previa.horas)} · valor de cada reserva`
+                      ? `${previa.cotaHoras ? "Horas extras" : "Horas"} · ${horasPorExtenso(previa.cotaHoras ? previa.horasCobradas : previa.horas)} × ${valorHora}`
+                      : `${previa.cotaHoras ? "Horas extras" : "Horas"} · ${horasPorExtenso(previa.cotaHoras ? previa.horasCobradas : previa.horas)} · valor de cada reserva`
                   }
                   valor={comoDinheiro(previa.valorDasHorasCentavos)}
                 />
@@ -689,6 +734,9 @@ export function PainelDeDemonstrativos({ hoje }: { hoje: string }) {
                       valorHora: valorHora.trim()
                         ? valorHora.replace(",", ".")
                         : null,
+                      // CONGELA a cota no documento: reajustar o contrato
+                      // depois não pode mudar o que o cliente recebeu.
+                      cotaHoras: Number(cotaHoras) > 0 ? Number(cotaHoras) : null,
                       linhasExtras: linhas
                         .filter((l) => l.descricao.trim() && l.valor.trim())
                         .map((l) => ({

@@ -137,7 +137,8 @@ async function limpar(): Promise<void> {
       telefones: { none: {} },
       consumosEmporio: { none: {} },
       demonstrativos: { none: {} },
-      lancamentos: { none: {} } },
+      lancamentos: { none: {} },
+      contratos: { none: {} } },
   });
   proxima = 8;
 }

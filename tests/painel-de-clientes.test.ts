@@ -127,7 +127,8 @@ async function limpar(): Promise<void> {
       telefones: { none: {} },
       consumosEmporio: { none: {} },
       demonstrativos: { none: {} },
-      lancamentos: { none: {} } },
+      lancamentos: { none: {} },
+      contratos: { none: {} } },
   });
   await bancoDeTeste.empresa.deleteMany({ where: { nome: { startsWith: PREFIXO } } });
   proxima = 8;
