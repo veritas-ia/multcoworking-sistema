@@ -41,7 +41,13 @@ docker exec "$CONTAINER" sh -c \
      --table=profissoes \
      --table=produtos --table=tags_produto \
      --table=formas_pagamento \
+     --table=categorias_financeiras \
      $ORIGEM | psql -U coworking -d $DESTINO -q"
+
+# FORNECEDORES NAO ENTRA nesta lista, de proposito: a tabela nasce VAZIA e
+# cada teste cria o fornecedor de que precisa. Copiar os de producao faria o
+# resultado dos testes mudar conforme a equipe cadastrasse fornecedor no
+# painel. Mesma razao de "telefones_balcao" ficar de fora.
 
 # A LIGACAO produto-etiqueta vai NUMA SEGUNDA PASSADA, de proposito.
 #

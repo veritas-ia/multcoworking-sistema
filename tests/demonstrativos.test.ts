@@ -105,7 +105,8 @@ async function limpar(): Promise<void> {
     where: { reservas: { none: {} },
       telefones: { none: {} },
       consumosEmporio: { none: {} },
-      demonstrativos: { none: {} } },
+      demonstrativos: { none: {} },
+      lancamentos: { none: {} } },
   });
   await bancoDeTeste.empresa.deleteMany({
     where: { nome: { startsWith: PREFIXO_EMPRESA } },
