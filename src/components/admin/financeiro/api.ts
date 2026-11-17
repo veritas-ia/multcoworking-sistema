@@ -6,6 +6,7 @@ import type {
   ContratoNaTela,
   EmpresaParaEscolher,
   EspacoNaTela,
+  PainelFinanceiro,
   RelatorioDaGeracao,
   FormaDePagamento,
   FornecedorNaTela,
@@ -405,4 +406,30 @@ export function buscarEmpresas(): Promise<{
   empresas: EmpresaParaEscolher[];
 }> {
   return pedir("/api/admin/empresas");
+}
+
+// -----------------------------------------------------------------------------
+// O painel (Fase 16, Parte E)
+// -----------------------------------------------------------------------------
+
+/**
+ * O painel de um mês. SÓ LEITURA — a rota não tem método de escrita.
+ *
+ * Todos os números vêm SOMADOS do servidor, em centavos; a tela só formata e
+ * desenha. Somar aqui abriria uma segunda conta do mesmo número, e um dia as
+ * duas discordariam na mesma página.
+ */
+export function buscarPainel(competencia?: string): Promise<{
+  painel: PainelFinanceiro;
+  hoje: string;
+}> {
+  const busca = new URLSearchParams();
+
+  if (competencia) {
+    busca.set("competencia", competencia);
+  }
+
+  const query = busca.toString();
+
+  return pedir(`/api/admin/financeiro/painel${query ? `?${query}` : ""}`);
 }

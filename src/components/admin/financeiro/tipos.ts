@@ -134,3 +134,54 @@ export type RelatorioDaGeracao = {
 };
 
 export type EmpresaParaEscolher = { id: string; nome: string; ativa: boolean };
+
+// -----------------------------------------------------------------------------
+// O painel (Fase 16, Parte E)
+// -----------------------------------------------------------------------------
+
+export type FatiaDoPainel = {
+  categoria: string;
+  centavos: number;
+  /** Quantas linhas somaram nela — a equipe pergunta "de quantas contas?". */
+  quantas: number;
+};
+
+export type MesDoPainel = {
+  competencia: string;
+  entradasCentavos: number;
+  saidasCentavos: number;
+  resultadoCentavos: number;
+};
+
+export type PainelFinanceiro = {
+  competencia: string;
+  competenciaAnterior: string;
+  /** O caixa do mês: só o que entrou e saiu DE VERDADE. */
+  entradasCentavos: number;
+  saidasCentavos: number;
+  resultadoCentavos: number;
+  /**
+   * A margem em porcentagem, com uma casa. NULA quando não entrou nada —
+   * "margem de 0%" é outra informação, e dividir por zero daria Infinity.
+   */
+  margem: number | null;
+  anterior: {
+    entradasCentavos: number;
+    saidasCentavos: number;
+    resultadoCentavos: number;
+  };
+  /** A inadimplência olha TODO o passado, não só o mês escolhido. */
+  atrasadoAReceberCentavos: number;
+  atrasadoAPagarCentavos: number;
+  quantasAtrasadasAReceber: number;
+  quantasAtrasadasAPagar: number;
+  entradasPorCategoria: FatiaDoPainel[];
+  saidasPorCategoria: FatiaDoPainel[];
+  /** Os últimos meses. O mês escolhido é o último da lista. */
+  evolucao: MesDoPainel[];
+  projecao: {
+    competencia: string;
+    aReceberCentavos: number;
+    aPagarCentavos: number;
+  }[];
+};

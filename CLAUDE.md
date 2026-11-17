@@ -2263,6 +2263,87 @@ Aconteceu agora com `consumos_emporio`, `demonstrativos`, `lancamentos` e
 não tem **nada** pendurado, e a definição de "nada" muda a cada tabela nova que
 aponta para `clientes`.
 
+### Fase 16, Parte E — o painel do financeiro (17/11/2026)
+
+#### O QUE ELE MOSTRA
+Entrou, saiu, resultado e margem do mês, com a **variação contra o mês
+anterior**; a **inadimplência**; a evolução dos **últimos seis meses**; de onde
+entrou e para onde saiu **por categoria**; e a **projeção** dos próximos três
+meses. Abre como a **primeira aba** do Financeiro: quem entra ali quer saber
+"como foi o mês" antes de mexer em conta nenhuma.
+
+**É SÓ LEITURA**, mesma regra do dashboard de relatórios: a rota não tem método
+de escrita, e nada ali altera lançamento, contrato ou configuração. **Há teste
+comparando todas as linhas antes e depois de montar o painel** — sem ele,
+bastaria alguém acrescentar um "marcar como atrasado" na montagem para a tela de
+leitura passar a escrever, e ninguém notaria até um número mudar sozinho.
+
+#### O SALDO INICIAL FICOU DE FORA, e isto é decisão, não esquecimento
+O plano aprovado listava "saldo inicial". **Não entrou**, e a razão é que ele
+mentiria: **o sistema não conhece o dinheiro que já estava no banco** antes dele
+existir. Um "saldo acumulado" somaria só o que foi lançado aqui e apareceria na
+tela como se fosse o saldo da conta — errado, e do jeito que ninguém desconfia.
+
+O painel mostra **o resultado do período**, e a tela diz isso por escrito, em
+uma nota fixa. Quem quiser um saldo de partida **lança uma entrada normal** — não
+precisou de conceito novo, tabela nova nem parâmetro.
+
+**DRE continua fora** (decisão do dono de 17/11). É por isso que o número se
+chama **"resultado"** e não "lucro": lucro contábil tem depreciação, provisão e
+competência, que o sistema não tem. Chamá-lo de lucro seria prometer uma coisa e
+entregar outra.
+
+#### O CAIXA É PELA DATA DE PAGAMENTO
+Uma conta de outubro paga em novembro **saiu do caixa em novembro** — é ali que o
+dinheiro se mexeu. O que **nunca foi pago não entra**: somar o pendente diria que
+o dinheiro já entrou, e a equipe decidiria em cima de um saldo que não existe.
+
+- A janela do mês é **fechada nas duas pontas**, e o último dia entra. Há teste
+  nas bordas (01/12, 31/12, 01/01) e em **fevereiro**, que tem 28 dias.
+- A série de meses é buscada **mês a mês**, e não num agrupamento do banco:
+  agrupar lá faria o corte acontecer no fuso **dele**, e um pagamento de 30/11 às
+  22h é 1º de dezembro em UTC — cairia no mês errado e discordaria da lista de
+  lançamentos ao lado. Mesma razão do relatório de reservas. São poucas consultas,
+  todas por índice.
+- **Mês sem movimento aparece com ZERO**, e não some da lista: um buraco no meio
+  do gráfico faria o olho ler a tendência errada. Há teste, e outro na virada do
+  ano.
+
+#### MARGEM E VARIAÇÃO SÃO NULAS SEM BASE, nunca zero nem 100%
+- **Margem nula** quando não entrou nada: "margem de 0%" é uma informação
+  diferente de "não há o que dividir", e a conta daria `Infinity`. A tela escreve
+  "—" e explica.
+- **Variação nula** quando o mês anterior foi zero: escrever "+100%" inventaria
+  uma comparação que não existe. A tela escreve "sem comparação com o mês
+  anterior".
+- **Em despesa, subir é RUIM.** A seta de "Saiu" usa o sentido invertido — uma
+  seta verde para cima numa despesa pareceria boa notícia.
+
+#### A INADIMPLÊNCIA OLHA TODO O PASSADO
+**É o número mais perigoso de se errar nesta tela.** Uma conta de agosto que
+ninguém pagou continua em atraso em dezembro; limitá-la ao mês escolhido faria a
+dívida **desaparecer sozinha com o tempo**, e o painel diria "nada em atraso" com
+o cliente devendo há meses.
+
+**Quem vence hoje não está atrasado** — a conta é `vencimento < hoje`, e não
+`<=`: quem vence hoje tem o dia todo para pagar. Mesma regra da situação do
+lançamento, e há teste.
+
+#### A PROJEÇÃO COMEÇA NO MÊS SEGUINTE
+Ela é do que **vence** à frente e **ainda não foi pago**. O que já foi pago sai
+dela: uma conta de janeiro paga em dezembro já está no caixa, e contá-la nos dois
+lugares faria o mesmo dinheiro aparecer duas vezes na mesma tela. Há teste.
+
+#### Os gráficos
+SVG e CSS, **sem biblioteca** — a stack do projeto não tem nenhuma e as formas são
+simples. E **todo gráfico escreve o número ao lado**: num mês de R$ 20 e outro de
+R$ 20.000 as barras pequenas ficam invisíveis, e a informação não pode depender de
+o olho conseguir medir. Mesma regra dos relatórios de reserva.
+
+**24 testes.** Entre eles: três contas de R$ 33,33 dando R$ 99,99 em **todos** os
+números do painel (total, categoria e evolução), e a prova de que o lado de cada
+linha vem da categoria, nunca do sinal do valor.
+
 ### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
 > **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
 > "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem

@@ -80,6 +80,7 @@ export type AbaDoEmporio = "lancar" | "produtos" | "contagem" | "movimentos";
 
 /** As abas do Financeiro, idem. */
 export type AbaDoFinanceiro =
+  | "painel"
   | "contas"
   | "mensalidades"
   | "espacos"
@@ -132,7 +133,13 @@ export type GrupoDoMenu = { titulo: string; itens: ItemDoMenu[] };
  */
 export const ABA_PADRAO: AbaDeConfiguracao = "salas";
 export const ABA_PADRAO_EMPORIO: AbaDoEmporio = "lancar";
-export const ABA_PADRAO_FINANCEIRO: AbaDoFinanceiro = "contas";
+/**
+ * O PAINEL abre primeiro, e nao as Contas.
+ *
+ * Quem entra no Financeiro quer saber "como foi o mes" antes de mexer em
+ * conta nenhuma — e a tela de contas e a de TRABALHO, nao a de leitura.
+ */
+export const ABA_PADRAO_FINANCEIRO: AbaDoFinanceiro = "painel";
 
 const PADRAO_DA_TELA: Record<
   typeof TELA_CONFIGURACOES | typeof TELA_EMPORIO | typeof TELA_FINANCEIRO,
@@ -230,6 +237,7 @@ export const MENU: readonly GrupoDoMenu[] = [
     itens: [
       // "Contas" primeiro: e a tela do dia a dia. Categoria e fornecedor sao
       // cadastro, mexidos quase nunca.
+      financeiro("Painel", "painel", "ChartColumn"),
       financeiro("Contas", "contas", "Wallet"),
       financeiro("Mensalidades", "mensalidades", "Landmark"),
       financeiro("Categorias", "categorias", "Tags"),

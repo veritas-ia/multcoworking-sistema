@@ -11,6 +11,7 @@ import { AbaDeContas } from "./aba-contas";
 import { AbaDeEspacos } from "./aba-espacos";
 import { AbaDeFornecedores } from "./aba-fornecedores";
 import { AbaDeMensalidades } from "./aba-mensalidades";
+import { AbaDoPainel } from "./aba-painel";
 
 type Aba = {
   id: AbaDoFinanceiro;
@@ -27,6 +28,7 @@ type Aba = {
  * nas duas.
  */
 const CONTEUDOS: Record<AbaDoFinanceiro, (hoje: string) => ReactNode> = {
+  painel: (hoje) => <AbaDoPainel hoje={hoje} />,
   contas: (hoje) => <AbaDeContas hoje={hoje} />,
   mensalidades: (hoje) => <AbaDeMensalidades hoje={hoje} />,
   espacos: () => <AbaDeEspacos />,

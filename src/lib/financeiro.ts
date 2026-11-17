@@ -2606,3 +2606,306 @@ export async function cobrancasDoContrato(
 
   return linhas.map((linha) => paraTela(linha, hoje));
 }
+
+// -----------------------------------------------------------------------------
+// FASE 16, PARTE E — O PAINEL DO FINANCEIRO
+// -----------------------------------------------------------------------------
+
+/**
+ * O PAINEL É SÓ LEITURA, e isso é regra — mesma do dashboard de relatórios:
+ * não existe rota de escrita nele, e nada aqui altera lançamento, contrato ou
+ * configuração. Ele monta números a partir do que já está gravado.
+ *
+ * O QUE ELE NÃO MOSTRA, E POR QUÊ
+ *
+ *  - **SALDO DO BANCO.** O sistema não conhece o dinheiro que já estava na
+ *    conta antes dele existir. Um "saldo acumulado" somaria só o que foi
+ *    lançado aqui e apareceria na tela como se fosse o saldo de verdade —
+ *    errado, e do jeito que ninguém desconfia. O painel mostra o RESULTADO DO
+ *    PERÍODO. Quem quiser um saldo de partida lança uma entrada normal.
+ *  - **DRE.** Decisão do dono em 17/11: *"DRE é balanço, é parte de
+ *    contábeis"*. O que está aqui é caixa — entrou menos saiu —, e é por isso
+ *    que o número se chama "resultado" e não "lucro": lucro contábil tem
+ *    depreciação, provisão e competência, que o sistema não tem.
+ */
+
+export type FatiaDoPainel = {
+  categoria: string;
+  centavos: number;
+  /** Quantas linhas somaram nela — a equipe pergunta "de quantas contas?". */
+  quantas: number;
+};
+
+export type MesDoPainel = {
+  /** "2026-12". */
+  competencia: string;
+  entradasCentavos: number;
+  saidasCentavos: number;
+  resultadoCentavos: number;
+};
+
+export type PainelFinanceiro = {
+  competencia: string;
+  /** O mês de comparação: o anterior no calendário. */
+  competenciaAnterior: string;
+  /**
+   * O CAIXA DO MÊS: só o que entrou e saiu DE VERDADE (tem data de pagamento).
+   * É a visão "pagamento", não a de vencimento.
+   */
+  entradasCentavos: number;
+  saidasCentavos: number;
+  resultadoCentavos: number;
+  /**
+   * A margem, em porcentagem com uma casa. NULA quando não entrou nada: zero
+   * diria "margem de 0%", que é uma informação diferente de "não há o que
+   * dividir" — e dividir por zero daria Infinity na tela.
+   */
+  margem: number | null;
+  /** Os mesmos números do mês anterior, para a comparação. */
+  anterior: { entradasCentavos: number; saidasCentavos: number; resultadoCentavos: number };
+  /** A INADIMPLÊNCIA: pendente cujo vencimento já passou, em qualquer mês. */
+  atrasadoAReceberCentavos: number;
+  atrasadoAPagarCentavos: number;
+  quantasAtrasadasAReceber: number;
+  quantasAtrasadasAPagar: number;
+  /** Onde o dinheiro entrou e saiu, por categoria, do maior para o menor. */
+  entradasPorCategoria: FatiaDoPainel[];
+  saidasPorCategoria: FatiaDoPainel[];
+  /** Os últimos meses, para ver a tendência. O mês escolhido é o último. */
+  evolucao: MesDoPainel[];
+  /** O que VENCE nos próximos meses e ainda não foi pago. */
+  projecao: { competencia: string; aReceberCentavos: number; aPagarCentavos: number }[];
+};
+
+/** "2026-12" + n meses. */
+function somarCompetencia(competencia: string, meses: number): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  const data = new Date(Date.UTC(ano!, mes! - 1 + meses, 1));
+
+  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** O primeiro e o último dia de "2026-12". */
+function limitesDoMes(competencia: string): { de: string; ate: string } {
+  return {
+    de: `${competencia}-01`,
+    ate: vencimentoDaCompetencia(competencia, 31),
+  };
+}
+
+/**
+ * O caixa de um mês: o que entrou e saiu DE VERDADE.
+ *
+ * Usa a data de PAGAMENTO, e não a de vencimento. Uma conta de outubro paga em
+ * novembro saiu do caixa em novembro — é ali que o dinheiro se mexeu.
+ */
+async function caixaDoMes(competencia: string): Promise<MesDoPainel> {
+  const { de, ate } = limitesDoMes(competencia);
+
+  const linhas = await prisma.lancamento.findMany({
+    where: { pagoEm: { gte: paraData(de), lte: paraData(ate) } },
+    select: { valor: true, categoria: { select: { tipo: true } } },
+  });
+
+  let entradas = 0;
+  let saidas = 0;
+
+  for (const linha of linhas) {
+    const centavos = centavosDe(comoTexto(linha.valor)) ?? 0;
+
+    if (linha.categoria.tipo === TipoDeLancamento.ENTRADA) {
+      entradas += centavos;
+    } else {
+      saidas += centavos;
+    }
+  }
+
+  return {
+    competencia,
+    entradasCentavos: entradas,
+    saidasCentavos: saidas,
+    resultadoCentavos: entradas - saidas,
+  };
+}
+
+/**
+ * MONTA O PAINEL de um mês.
+ *
+ * "quantosMeses" é o tamanho da série de evolução, contando o mês escolhido
+ * como o último. Seis é um semestre — o bastante para ver tendência sem fazer
+ * seis consultas virarem sessenta.
+ */
+export async function montarPainelFinanceiro(entrada: {
+  /** "2026-12". Padrão: o mês de hoje, no relógio de São Paulo. */
+  competencia?: string;
+  quantosMeses?: number;
+  /** Quantos meses de projeção à frente. */
+  mesesDeProjecao?: number;
+  agora?: Date;
+}): Promise<Resultado<PainelFinanceiro>> {
+  const hoje = dataLocalDe(entrada.agora ?? new Date());
+  const competencia = entrada.competencia ?? hoje.slice(0, 7);
+
+  if (!COMPETENCIA.test(competencia)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe o mês como 2026-12.", codigo: "COMPETENCIA_INVALIDA" },
+    };
+  }
+
+  const quantosMeses = Math.min(Math.max(entrada.quantosMeses ?? 6, 1), 24);
+  const mesesDeProjecao = Math.min(Math.max(entrada.mesesDeProjecao ?? 3, 0), 12);
+
+  const competenciaAnterior = somarCompetencia(competencia, -1);
+
+  /*
+   * A SÉRIE INTEIRA É BUSCADA MÊS A MÊS, e não numa consulta agrupada.
+   *
+   * Agrupar no banco faria o agrupamento acontecer no fuso DELE: um pagamento
+   * de 30/11 às 22h é, em UTC, 1º de dezembro — e cairia no mês errado,
+   * discordando da lista de lançamentos que a equipe vê ao lado. É a mesma
+   * razão pela qual o relatório de reservas agrupa no relógio de São Paulo.
+   *
+   * São poucas consultas, todas por índice (`lancamentos_pago_em_idx`).
+   */
+  const evolucao: MesDoPainel[] = [];
+
+  for (let i = quantosMeses - 1; i >= 0; i -= 1) {
+    evolucao.push(await caixaDoMes(somarCompetencia(competencia, -i)));
+  }
+
+  const doMes = evolucao[evolucao.length - 1]!;
+  const anterior =
+    evolucao.length > 1
+      ? evolucao[evolucao.length - 2]!
+      : await caixaDoMes(competenciaAnterior);
+
+  // --- por categoria, no mês escolhido ---------------------------------------
+  const { de, ate } = limitesDoMes(competencia);
+
+  const doMesComCategoria = await prisma.lancamento.findMany({
+    where: { pagoEm: { gte: paraData(de), lte: paraData(ate) } },
+    select: {
+      valor: true,
+      categoria: { select: { nome: true, tipo: true } },
+    },
+  });
+
+  const entradasPorCategoria = new Map<string, FatiaDoPainel>();
+  const saidasPorCategoria = new Map<string, FatiaDoPainel>();
+
+  for (const linha of doMesComCategoria) {
+    const alvo =
+      linha.categoria.tipo === TipoDeLancamento.ENTRADA
+        ? entradasPorCategoria
+        : saidasPorCategoria;
+
+    const atual = alvo.get(linha.categoria.nome) ?? {
+      categoria: linha.categoria.nome,
+      centavos: 0,
+      quantas: 0,
+    };
+
+    atual.centavos += centavosDe(comoTexto(linha.valor)) ?? 0;
+    atual.quantas += 1;
+    alvo.set(linha.categoria.nome, atual);
+  }
+
+  const porValor = (a: FatiaDoPainel, b: FatiaDoPainel): number =>
+    b.centavos - a.centavos;
+
+  /*
+   * A INADIMPLÊNCIA OLHA TODO O PASSADO, não só o mês escolhido.
+   *
+   * Uma conta de agosto que ninguém pagou continua em atraso em dezembro, e
+   * limitá-la ao mês faria a dívida "desaparecer" sozinha com o tempo — o
+   * número mais perigoso de se errar nesta tela.
+   */
+  const atrasadas = await prisma.lancamento.findMany({
+    where: { pagoEm: null, vencimento: { lt: paraData(hoje) } },
+    select: { valor: true, categoria: { select: { tipo: true } } },
+  });
+
+  let atrasadoAReceber = 0;
+  let atrasadoAPagar = 0;
+  let quantasAReceber = 0;
+  let quantasAPagar = 0;
+
+  for (const linha of atrasadas) {
+    const centavos = centavosDe(comoTexto(linha.valor)) ?? 0;
+
+    if (linha.categoria.tipo === TipoDeLancamento.ENTRADA) {
+      atrasadoAReceber += centavos;
+      quantasAReceber += 1;
+    } else {
+      atrasadoAPagar += centavos;
+      quantasAPagar += 1;
+    }
+  }
+
+  // --- a projeção: o que VENCE à frente e não foi pago -----------------------
+  const projecao: PainelFinanceiro["projecao"] = [];
+
+  for (let i = 1; i <= mesesDeProjecao; i += 1) {
+    const mes = somarCompetencia(competencia, i);
+    const limites = limitesDoMes(mes);
+
+    const pendentes = await prisma.lancamento.findMany({
+      where: {
+        pagoEm: null,
+        vencimento: { gte: paraData(limites.de), lte: paraData(limites.ate) },
+      },
+      select: { valor: true, categoria: { select: { tipo: true } } },
+    });
+
+    let aReceber = 0;
+    let aPagar = 0;
+
+    for (const linha of pendentes) {
+      const centavos = centavosDe(comoTexto(linha.valor)) ?? 0;
+
+      if (linha.categoria.tipo === TipoDeLancamento.ENTRADA) {
+        aReceber += centavos;
+      } else {
+        aPagar += centavos;
+      }
+    }
+
+    projecao.push({ competencia: mes, aReceberCentavos: aReceber, aPagarCentavos: aPagar });
+  }
+
+  return {
+    ok: true,
+    dados: {
+      competencia,
+      competenciaAnterior,
+      entradasCentavos: doMes.entradasCentavos,
+      saidasCentavos: doMes.saidasCentavos,
+      resultadoCentavos: doMes.resultadoCentavos,
+      /*
+       * A MARGEM É NULA quando não entrou nada, e não zero.
+       *
+       * "Margem de 0%" é uma informação diferente de "não há o que dividir", e
+       * dividir por zero daria Infinity na tela. Arredondada a uma casa: a
+       * terceira casa de uma porcentagem não ajuda ninguém a decidir nada.
+       */
+      margem:
+        doMes.entradasCentavos > 0
+          ? Math.round((doMes.resultadoCentavos / doMes.entradasCentavos) * 1000) / 10
+          : null,
+      anterior: {
+        entradasCentavos: anterior.entradasCentavos,
+        saidasCentavos: anterior.saidasCentavos,
+        resultadoCentavos: anterior.resultadoCentavos,
+      },
+      atrasadoAReceberCentavos: atrasadoAReceber,
+      atrasadoAPagarCentavos: atrasadoAPagar,
+      quantasAtrasadasAReceber: quantasAReceber,
+      quantasAtrasadasAPagar: quantasAPagar,
+      entradasPorCategoria: [...entradasPorCategoria.values()].sort(porValor),
+      saidasPorCategoria: [...saidasPorCategoria.values()].sort(porValor),
+      evolucao,
+      projecao,
+    },
+  };
+}
