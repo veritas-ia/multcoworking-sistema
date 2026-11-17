@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 import {
   buscarLancamentos,
+  desvincular,
   editarLancamento,
   excluirLancamento,
   lancar,
@@ -671,6 +672,16 @@ function Linha({
               situacao={lancamento.situacao}
               diasDeAtraso={lancamento.diasDeAtraso}
             />
+            {/*
+              A ETIQUETA DE ORIGEM existe para a equipe saber onde corrigir.
+              Sem ela, a pessoa tentaria editar uma linha que e espelho da
+              reserva — e a correcao sumiria na proxima vez, sem explicacao.
+            */}
+            {lancamento.origem !== "MANUAL" ? (
+              <span className="inline-flex items-center rounded-full border border-border bg-bg-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">
+                {lancamento.origem === "RESERVA" ? "da agenda" : "do empório"}
+              </span>
+            ) : null}
           </p>
 
           <p className="mt-0.5 text-sm text-text-secondary">
@@ -725,12 +736,64 @@ function Linha({
             disabled={ocupado}
             onClick={() => setAberta((atual) => !atual)}
           >
-            {aberta ? "Fechar" : "Corrigir"}
+            {aberta ? "Fechar" : lancamento.origem === "MANUAL" ? "Corrigir" : "Ver"}
           </Botao>
         </div>
       </div>
 
-      {aberta ? (
+      {aberta && lancamento.origem !== "MANUAL" ? (
+        /*
+         * A LINHA AUTOMATICA NAO SE EDITA AQUI, e a tela diz onde se corrige.
+         *
+         * Ela e ESPELHO da origem: editar o espelho faria o financeiro mostrar
+         * um valor e o relatorio outro, que e a doenca da planilha da Toca —
+         * o total digitado dizia R$ 3.033 e as linhas somavam R$ 3.023.
+         */
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-bg-secondary p-4">
+          {lancamento.origem === "RESERVA" ? (
+            <>
+              <p className="text-sm leading-relaxed text-text-primary">
+                <strong>Esta linha é espelho de uma reserva.</strong> Para
+                mudar o valor, corrija a reserva na agenda — a linha acompanha.
+                Para desfazer o recebimento, use “Desfazer recebimento” no
+                painel dela.
+              </p>
+
+              <p className="text-sm leading-relaxed text-text-secondary">
+                Se precisar mesmo mexer só aqui, desvincule: a linha solta da
+                reserva e vira manual, editável à vontade. Ela para de
+                acompanhar a reserva a partir daí.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                <Botao
+                  aparencia="secundario"
+                  largura="conteudo"
+                  disabled={ocupado}
+                  onClick={() => void comErro(() => desvincular(lancamento.id))}
+                >
+                  Desvincular da reserva
+                </Botao>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm leading-relaxed text-text-primary">
+              <strong>Esta linha resume o empório de um dia</strong> — o
+              consumo pago na hora, por forma de pagamento. Ela é{" "}
+              <strong>recalculada</strong> a cada consumo lançado naquele dia,
+              então corrigir aqui não pararia de pé. Para mudar o valor,
+              corrija o consumo em Empório → Lançar consumo; para um acerto
+              fora disso, lance uma linha à mão explicando.
+            </p>
+          )}
+
+          <p className="text-sm text-text-secondary">
+            Lançada em {diaCompleto(lancamento.criadoEm.slice(0, 10))}
+          </p>
+        </div>
+      ) : null}
+
+      {aberta && lancamento.origem === "MANUAL" ? (
         <div className="mt-4 flex flex-col gap-4 rounded-lg border border-border bg-bg-secondary p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Campo

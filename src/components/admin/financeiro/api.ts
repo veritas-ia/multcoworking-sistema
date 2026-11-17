@@ -251,3 +251,18 @@ export function editarFornecedor(
     body: JSON.stringify(mudanca),
   });
 }
+
+/**
+ * DESVINCULA a linha da origem: ela vira manual e fica editável.
+ *
+ * É a saída de emergência — nada fica trancado para sempre; só não se solta
+ * sem perceber. SÓ VALE PARA A LINHA DE RESERVA: a do empório é recalculada a
+ * cada consumo do dia, e soltá-la faria o dinheiro do dia aparecer duas vezes.
+ */
+export function desvincular(
+  id: string,
+): Promise<{ lancamento: LancamentoNaTela }> {
+  return pedir(`/api/admin/financeiro/lancamentos/${id}/desvincular`, {
+    method: "POST",
+  });
+}

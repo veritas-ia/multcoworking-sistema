@@ -5,6 +5,7 @@ import { z } from "zod";
 import { editarCadastro, excluirReserva, reservaCompleta } from "@/lib/agenda-admin";
 import { lerCorpo, respostaErro } from "@/lib/api";
 import { lerHistorico } from "@/lib/historico-reserva";
+import { prisma } from "@/lib/prisma";
 import { normalizarTelefone } from "@/lib/telefone";
 import { dataLocalDe, horaLocalDe, minutosEntre } from "@/lib/tempo";
 
@@ -58,6 +59,17 @@ export async function GET(
      * tela so lê isto para saber quais botoes de status mostrar.
      */
     jaTerminou: reserva.fim <= new Date(),
+    /**
+     * O RECEBIMENTO NO BALCAO, quando houve (Fase 16, Parte B).
+     *
+     * NULO e o normal, e nao falta de informacao: a maioria das reservas e de
+     * mensalista, que paga no fim do mes pelo demonstrativo. Marcar aqui
+     * TAMBEM contaria o mesmo dinheiro duas vezes.
+     *
+     * Sai da linha do caixa ligada a esta reserva — nao de um campo da
+     * reserva. O dinheiro vive no financeiro; aqui e so a leitura dele.
+     */
+    recebimento: await recebimentoDaReserva(reserva.id),
     historico: lerHistorico(reserva.historicoAlteracoes),
   });
 }
@@ -166,4 +178,38 @@ export async function DELETE(
         feito.falha.motivo,
         feito.falha.codigo,
       );
+}
+
+/**
+ * O recebimento desta reserva, lido do financeiro.
+ *
+ * Consulta propria, e nao um campo gravado na reserva: o lancamento e que
+ * manda, e duplicar o valor aqui criaria dois numeros para o mesmo dinheiro.
+ */
+async function recebimentoDaReserva(reservaId: string): Promise<{
+  lancamentoId: string;
+  valor: string;
+  pagoEm: string | null;
+  formaPagamento: string | null;
+} | null> {
+  const linha = await prisma.lancamento.findUnique({
+    where: { reservaId },
+    select: {
+      id: true,
+      valor: true,
+      pagoEm: true,
+      formaPagamento: { select: { nome: true } },
+    },
+  });
+
+  return linha
+    ? {
+        lancamentoId: linha.id,
+        valor: linha.valor.toFixed(2),
+        // A coluna e DATE: o Prisma a entrega como meia-noite UTC, e ler com
+        // a regra de fuso daqui voltaria um dia.
+        pagoEm: linha.pagoEm ? linha.pagoEm.toISOString().slice(0, 10) : null,
+        formaPagamento: linha.formaPagamento?.nome ?? null,
+      }
+    : null;
 }

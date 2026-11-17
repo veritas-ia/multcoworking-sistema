@@ -37,6 +37,7 @@ import {
   TAMANHO_MAXIMO_BYTES,
   TIPOS_ACEITOS,
 } from "./cloudinary";
+import { sincronizarEmporioDoDia } from "./financeiro";
 import { prisma } from "./prisma";
 import { dataLocalDe, horaLocalDe, instanteDe, type DataLocal } from "./tempo";
 
@@ -1359,6 +1360,44 @@ export async function lancarConsumo(entrada: {
 
     return consumo;
   });
+
+  /*
+   * O CAIXA DO DIA SE REFAZ, fora da transacao e de proposito.
+   *
+   * O consumo pago na hora e dinheiro que JA entrou, e por isso ele vira uma
+   * linha no financeiro — uma por dia e por forma de pagamento, nao uma por
+   * barrinha. Ver "sincronizarEmporioDoDia".
+   *
+   * POR QUE FORA DA TRANSACAO, E POR QUE A FALHA E ENGOLIDA: o consumo e a
+   * verdade (esta escrito na ficha da parede) e a linha do caixa e derivada
+   * dele. Derrubar o lancamento do consumo porque a linha derivada falhou
+   * faria a recepcionista perder o que digitou, com a ficha na mao.
+   *
+   * O DESENHO SE AUTOCORRIGE: a sincronizacao RECALCULA o dia inteiro, entao o
+   * proximo consumo daquele dia refaz a linha que faltou. O risco que sobra e
+   * o dia com UM consumo so cuja sincronizacao falhou — ele fica fora do caixa
+   * ate alguem lancar outro consumo no mesmo dia. Em troca, nenhum consumo e
+   * perdido, que e o lado certo de errar.
+   *
+   * NA_MENSALIDADE NAO ENTRA: ele vai no demonstrativo, e cobrar no caixa
+   * tambem seria cobrar duas vezes pela mesma barrinha. Quem filtra e a
+   * propria sincronizacao.
+   */
+  if (entrada.momento === MomentoDoPagamento.NA_HORA) {
+    try {
+      /*
+       * SEM OPERADOR, de proposito: a linha do caixa nao foi lancada por uma
+       * pessoa, foi derivada do consumo. Quem digitou esta gravado no CONSUMO,
+       * que e onde a pergunta "quem lancou isso?" tem resposta. Pôr um nome
+       * aqui faria parecer que alguem lancou a linha a mao — e ela diria uma
+       * coisa que a tela do financeiro usa para decidir se da para corrigir.
+       */
+      await sincronizarEmporioDoDia(entrada.dia, null);
+    } catch {
+      // Ver o comentario acima: o consumo esta salvo, e o dia se refaz no
+      // proximo lancamento.
+    }
+  }
 
   return { ok: true, dados: paraTelaOConsumo(gravado) };
 }

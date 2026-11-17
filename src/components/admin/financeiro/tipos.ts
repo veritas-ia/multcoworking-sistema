@@ -57,6 +57,19 @@ export type LancamentoNaTela = {
   observacao: string | null;
   lancadoPor: string | null;
   criadoEm: string;
+  /**
+   * DE ONDE A LINHA VEIO.
+   *
+   * MANUAL  — alguém digitou. Editável à vontade.
+   * RESERVA — nasceu do "Recebi no balcão", na agenda.
+   * EMPORIO — resume o consumo pago na hora de um dia.
+   *
+   * A tela usa isto para NÃO oferecer "Corrigir" numa linha automática: ela é
+   * espelho da origem, e editar o espelho faria o financeiro mostrar um valor e
+   * o relatório outro — a doença da planilha, onde o total digitado dizia
+   * R$ 3.033 e as linhas somavam R$ 3.023.
+   */
+  origem: "MANUAL" | "RESERVA" | "EMPORIO";
 };
 
 /** Somado no SERVIDOR, em centavos. A tela só formata. */

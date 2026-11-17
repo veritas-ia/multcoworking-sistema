@@ -30,6 +30,7 @@ import {
 import { rotuloDoStatus } from "./cores";
 import { Historico } from "./historico";
 import { PainelDoBloqueio } from "./painel-do-bloqueio";
+import { desfazerRecebimento, registrarRecebimento } from "./api";
 import type { ItemDaAgenda, ReservaDetalhada, ResumoDaSerie } from "./tipos";
 
 /** Blocos oferecidos no reagendamento pela recepcao. Faixa larga de proposito:
@@ -201,6 +202,41 @@ function DetalheDaReserva({
     }
   }
 
+  /**
+   * A RECEPCAO RECEBEU NO BALCAO.
+   *
+   * Vira uma entrada JA PAGA no caixa, ligada a esta reserva. O valor e o
+   * CONGELADO na reserva — nunca um recalculo pelo preco de hoje.
+   *
+   * O MENSALISTA NAO E MARCADO AQUI: ele paga no fim do mes pelo
+   * demonstrativo, e marcar os dois contaria o mesmo dinheiro duas vezes.
+   */
+  async function receber(): Promise<void> {
+    setEnviando(true);
+    setErroDaAcao(null);
+    try {
+      await registrarRecebimento(reservaId);
+      recarregar();
+    } catch (problema: unknown) {
+      setErroDaAcao(mensagemDoErro(problema));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function desfazerORecebimento(): Promise<void> {
+    setEnviando(true);
+    setErroDaAcao(null);
+    try {
+      await desfazerRecebimento(reservaId);
+      recarregar();
+    } catch (problema: unknown) {
+      setErroDaAcao(mensagemDoErro(problema));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function excluir(): Promise<void> {
     setEnviando(true);
     setErroDaAcao(null);
@@ -274,6 +310,26 @@ function DetalheDaReserva({
                 rotulo="Valor"
                 valor={emReais(Math.round(Number(reserva.valor) * 100))}
               />
+              {/*
+                O RECEBIMENTO so aparece quando houve. Uma linha dizendo "nao
+                recebido" em toda reserva de mensalista pareceria cobranca
+                atrasada — e ele paga no fim do mes, em dia.
+              */}
+              {reserva.recebimento ? (
+                <Linha
+                  rotulo="Recebido"
+                  valor={`${emReais(Math.round(Number(reserva.recebimento.valor) * 100))}${
+                    reserva.recebimento.formaPagamento
+                      ? ` · ${reserva.recebimento.formaPagamento}`
+                      : ""
+                  }${
+                    reserva.recebimento.pagoEm
+                      ? ` · ${reserva.recebimento.pagoEm.split("-").reverse().join("/")}`
+                      : ""
+                  }`}
+                  destaque
+                />
+              ) : null}
             </dl>
 
             {erroDaAcao ? <AvisoDeErro mensagem={erroDaAcao} /> : null}
@@ -387,6 +443,32 @@ function DetalheDaReserva({
                       Marcar como concluída
                     </Botao>
                   ) : null}
+                  {/*
+                    O RECEBIMENTO NO BALCAO. Nao e automatico: o sistema nao
+                    tem como saber que alguem pagou R$ 40 na recepcao. E o
+                    mensalista nao se marca aqui — ele paga no fim do mes pelo
+                    demonstrativo, e marcar os dois contaria o mesmo dinheiro
+                    duas vezes.
+                  */}
+                  {reserva.recebimento ? (
+                    <Botao
+                      aparencia="secundario"
+                      largura="conteudo"
+                      disabled={enviando}
+                      onClick={() => void desfazerORecebimento()}
+                    >
+                      Desfazer recebimento
+                    </Botao>
+                  ) : (
+                    <Botao
+                      aparencia="secundario"
+                      largura="conteudo"
+                      disabled={enviando}
+                      onClick={() => void receber()}
+                    >
+                      Recebi no balcão
+                    </Botao>
+                  )}
                   <Botao
                     aparencia="secundario"
                     largura="conteudo"

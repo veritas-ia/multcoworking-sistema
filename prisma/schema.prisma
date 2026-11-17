@@ -661,7 +661,9 @@ model Reserva {
   atualizadoEm DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(3)
   canceladoEm  DateTime? @map("cancelado_em") @db.Timestamptz(3)
 
-  mensagens LogMensagem[]
+  mensagens  LogMensagem[]
+  /// O lancamento do caixa, quando a recepcao marcou "Recebi".
+  lancamento Lancamento?
 
   @@index([salaId, inicio])
   @@index([telefone, status])
@@ -1278,6 +1280,27 @@ model Lancamento {
   pagoEm DateTime? @map("pago_em") @db.Date
 
   observacao String?
+
+  /// A RESERVA que este lancamento espelha, quando ele nasceu do "Recebi" da
+  /// agenda. NULO e o normal: lancamento digitado a mao.
+  ///
+  /// A chave e ON DELETE SET NULL, e nao RESTRICT: a reserva pode ser
+  /// excluida (com evidencia). Levando o lancamento junto, o dinheiro que
+  /// entrou no caixa desapareceria dele e o caixa de um mes fechado mudaria
+  /// sozinho. Solto, o lancamento fica de pe e vira manual.
+  reservaId String?  @unique @map("reserva_id")
+  reserva   Reserva? @relation(fields: [reservaId], references: [id])
+
+  /// O DIA do emporio que este lancamento resume, quando ele nasceu do
+  /// consumo pago na hora.
+  ///
+  /// E UM POR DIA E POR FORMA DE PAGAMENTO, nao um por consumo: uma barrinha
+  /// de R$ 6,50 por linha daria ~150 linhas de emporio por mes afogando as
+  /// ~20 contas de verdade — e o dinheiro tambem nao chega assim, chega como
+  /// UM comprovante de Pix do dia. O detalhe item a item fica na tela do
+  /// emporio. A unicidade esta no indice da migracao, com COALESCE na forma:
+  /// dois NULOs nao colidem num indice unico do Postgres.
+  emporioDia DateTime? @map("emporio_dia") @db.Date
 
   /// O nome vai GRAVADO junto com a chave: o usuario pode ser desligado, e
   /// "alguem lancou isso" nao serve de explicacao seis meses depois.

@@ -1948,6 +1948,107 @@ refaz-se.**
   voltar, é vitrine no site público ou tela do cliente? Registrado para não virar
   tarefa órfã que alguém "conserta" sem saber para quê.
 
+### Fase 16, Parte B — o lançamento espelha a origem (17/11/2026)
+
+#### A PERGUNTA DO DONO QUE MUDOU O DESENHO
+Eu propus três caminhos para a reserva virar entrada no caixa. Ele respondeu:
+*"seria interessante a primeira opção, mas como que o sistema iria saber que tá
+pago? Aí seria fácil colocar um botão ali que é colocado manualmente quando
+recebeu, é isso?"*
+
+**Ele estava certo, e as duas primeiras opções não eram rivais — eram dois
+dinheiros diferentes:**
+
+| Quem | Como paga | Onde fica o botão |
+|---|---|---|
+| **Mensalista** | um Pix por mês, pelo demonstrativo | na mensalidade/demonstrativo (Parte C/D) |
+| **Cliente de passagem** | no balcão, na hora | na **reserva**, na agenda — "Recebi no balcão" |
+| **Empório pago na hora** | na hora, com forma de pagamento | **nenhum** — o sistema já sabe |
+
+#### O QUE ESTA PARTE RECUSA FAZER, e é o ponto mais importante dela
+- **A reserva NÃO vira lançamento por existir.** O mensalista paga as horas dele
+  no demonstrativo, no fim do ciclo. Se cada reserva virasse entrada, as mesmas
+  horas entrariam **duas vezes** no caixa — uma como reserva, outra como
+  mensalidade — e **cada linha continuaria parecendo certa**. Ninguém descobriria
+  olhando a tela. Há teste: criar reserva não cria linha nenhuma.
+- **O consumo `NA_MENSALIDADE` não vira lançamento:** ele vai no demonstrativo.
+  Cobrar no caixa também seria cobrar duas vezes pela mesma barrinha.
+- **Nada no sistema registra que uma reserva foi paga** — conferido: não há esse
+  campo na reserva nem no demonstrativo (ele só sabe que foi *enviado*). Então
+  qualquer automatismo aqui seria suposição minha, não informação.
+- O que entra sozinho é só o que o sistema **sabe** que foi pago: o consumo
+  `NA_HORA`, onde a própria recepcionista informou a forma de pagamento. Isso é
+  confirmação, não suposição.
+
+#### O EMPÓRIO É UMA LINHA POR DIA E POR FORMA, não uma por barrinha
+- Uma linha por consumo daria **~150 linhas de empório por mês**, afogando as ~20
+  contas de verdade. E o dinheiro não chega assim: chega como **um comprovante de
+  Pix do dia**. O detalhe item a item fica na tela do empório.
+- **Formas diferentes, linhas diferentes:** o Pix do dia é um comprovante, o
+  dinheiro da gaveta é outro, e juntar os dois esconderia de onde veio. A
+  unicidade é do índice, com `COALESCE` na forma — no Postgres dois NULOs não
+  colidem num índice único, e sem isso cada sincronização criaria mais uma linha
+  "sem forma".
+- **A sincronização RECALCULA o dia, não soma o que chegou agora.** Rodar duas
+  vezes não dobra nada, e lançar o quinto consumo dá o mesmo resultado que lançar
+  os cinco de uma vez. É a mesma escolha da contagem do estoque e pela mesma
+  razão: um acumulador erra para sempre se rodar duas vezes; um recálculo se
+  autocorrige. Há teste sincronizando duas vezes.
+- **Cortesia não gera linha** (os doze cafés de graça): uma linha de R$ 0,00 só
+  sujaria o caixa, e o banco recusaria pela trava de valor positivo.
+
+#### A FALHA DA SINCRONIZAÇÃO NÃO DERRUBA O CONSUMO
+- Ela roda **fora** da transação do consumo e a falha é **engolida**. O consumo é
+  a verdade (está escrito na ficha da parede) e a linha do caixa é derivada dele:
+  derrubar o lançamento porque a linha derivada falhou faria a recepcionista
+  perder o que digitou, com a ficha na mão.
+- **O risco que sobra, dito por inteiro:** um dia com UM consumo só cuja
+  sincronização falhou fica fora do caixa até alguém lançar outro consumo no
+  mesmo dia. Em troca, nenhum consumo é perdido — que é o lado certo de errar.
+  **Há dois testes:** um prova que o consumo sobrevive à falha; o outro prova que
+  o dia volta **inteiro** no próximo lançamento (os três consumos, não só o
+  último).
+
+#### As outras decisões
+- **Dois cliques em "Recebi" não dobram o dinheiro:** o índice único do banco
+  recusaria, mas a segunda chamada **devolve a linha que existe** — a
+  recepcionista clicou duas vezes e não precisa ver erro nenhum.
+- **Reserva cancelada é recusada:** o caixa passaria a mostrar dinheiro de algo
+  que não aconteceu. Se o cliente pagou e desmarcou, a equipe lança à mão
+  explicando o caso — a mensagem diz isso.
+- **O valor é o CONGELADO na reserva**, nunca um recálculo: o preço da sala pode
+  ter mudado, e o cliente pagou o que estava gravado.
+- **Vence no dia da reserva, pago no dia do recebimento.** É a verdade das duas
+  datas, e é o que faz a visão de caixa bater com o extrato.
+- **A chave da reserva é `ON DELETE SET NULL`, não RESTRICT.** A reserva pode ser
+  excluída (com evidência, desde 13/11); levando o lançamento junto, o dinheiro
+  que entrou no caixa desapareceria dele e **o caixa de um mês fechado mudaria
+  sozinho**. Solto, o lançamento fica de pé e vira manual. Há teste.
+- **A categoria automática é usada MESMO DESLIGADA.** "Desligar" é decisão sobre o
+  que a equipe *escolhe* num lançamento manual; a automática não é escolha.
+  Recusar o recebimento porque alguém desligou a categoria perderia o registro de
+  dinheiro que entrou — e o erro apareceria como "categoria desligada" na agenda,
+  onde ninguém ligaria uma coisa à outra.
+- **Desfazer o recebimento apaga a linha e REGISTRA a ação**, com motivo escrito
+  pelo próprio sistema ("recebimento desfeito na agenda"): aqui o "por quê" é a
+  ação em si, e pedir texto a cada clique faria a equipe escrever "a" para passar
+  da tela. A evidência continua existindo, que é o que importa.
+- **A tela não deixa editar linha automática**, e explica onde se corrige. Editar
+  o espelho faria o financeiro mostrar um valor e o relatório outro — a doença da
+  planilha da Toca. A etiqueta "da agenda" / "do empório" existe para a pessoa
+  não tentar.
+- **"Desvincular" existe só para a linha de RESERVA**, e isso não é preguiça: a do
+  empório é **recalculada** a cada consumo do dia, então soltá-la não a tornaria
+  editável de verdade — o próximo consumo criaria outra linha ao lado e **o
+  dinheiro do dia apareceria duas vezes**. A recusa explica isso. Há teste.
+- O lançamento espelha **uma origem, ou nenhuma**: trava no banco
+  (`lancamento_uma_origem_so`). As duas preenchidas não significam nada, e a tela
+  não saberia o que mostrar.
+- **18 testes**, e o último é o cenário completo de um dia: reserva recebida
+  (R$ 40) + empório na hora (R$ 13) + empório na mensalidade (R$ 20, fora) +
+  reserva de mensalista sem recebimento (R$ 40, fora). O caixa tem de dar
+  **R$ 53, e não R$ 113**.
+
 ### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
 > **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
 > "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem

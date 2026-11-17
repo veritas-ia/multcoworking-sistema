@@ -35,7 +35,12 @@ import { TipoDeLancamento } from "@/generated/prisma/enums";
 
 import { registrarAcao, TipoDeAcao } from "./acoes";
 import { prisma } from "./prisma";
-import { dataLocalDe, type DataLocal } from "./tempo";
+import {
+  dataLocalDe,
+  horaLocalDe,
+  instanteDe,
+  type DataLocal,
+} from "./tempo";
 
 export { TipoDeLancamento };
 
@@ -96,6 +101,17 @@ export type LancamentoNaTela = {
   observacao: string | null;
   lancadoPor: string | null;
   criadoEm: Date;
+  /**
+   * DE ONDE A LINHA VEIO.
+   *
+   * MANUAL  — alguem digitou. Editavel a vontade.
+   * RESERVA — nasceu do "Recebi" da agenda. Corrige-se na reserva, ou
+   *           desvincula-se para virar manual.
+   * EMPORIO — resume o consumo pago na hora de um dia. NAO tem desvincular:
+   *           ela e RECALCULADA a cada lancamento do dia, e soltar seria
+   *           desfeito no proximo consumo — ver "desvincular".
+   */
+  origem: "MANUAL" | "RESERVA" | "EMPORIO";
 };
 
 // -----------------------------------------------------------------------------
@@ -639,6 +655,11 @@ function paraTela(linha: LinhaDoBanco, hoje: string): LancamentoNaTela {
     observacao: linha.observacao,
     lancadoPor: linha.criadoPorNome,
     criadoEm: linha.criadoEm,
+    origem: linha.reservaId
+      ? "RESERVA"
+      : linha.emporioDia
+        ? "EMPORIO"
+        : "MANUAL",
   };
 }
 
@@ -1222,4 +1243,437 @@ export function resumir(lancamentos: readonly LancamentoNaTela[]): ResumoDoPerio
 /** O dia de hoje no relógio de São Paulo, para a tela não calcular por conta. */
 export function hojeLocal(agora?: Date): DataLocal {
   return dataLocalDe(agora ?? new Date());
+}
+
+// -----------------------------------------------------------------------------
+// FASE 16, PARTE B — O LANÇAMENTO ESPELHA A ORIGEM
+// -----------------------------------------------------------------------------
+
+/**
+ * O PROBLEMA QUE ESTA PARTE RESOLVE, e o que ela recusa resolver.
+ *
+ * A receita de reserva e de empório existe no relatório e NÃO existia no
+ * caixa. Digitar de novo no financeiro criaria dois números para o mesmo
+ * dinheiro — a doença da planilha da Toca, onde o total digitado dizia
+ * R$ 3.033 e as linhas somavam R$ 3.023. Então o lançamento APONTA para a
+ * origem em vez de ser redigitado.
+ *
+ * O QUE NÃO ENTRA NO CAIXA AUTOMATICAMENTE, e isto é o ponto mais importante
+ * daqui:
+ *
+ *  - **a reserva, por existir.** O mensalista paga as horas dele no
+ *    demonstrativo, no fim do ciclo. Se cada reserva virasse entrada, as
+ *    mesmas horas entrariam DUAS VEZES — uma como reserva, outra como
+ *    mensalidade — e cada linha continuaria parecendo certa. A reserva só vira
+ *    entrada quando alguém diz que recebeu, no balcão;
+ *  - **o consumo NA_MENSALIDADE.** Ele vai no demonstrativo. Cobrar no caixa
+ *    também seria cobrar duas vezes pela mesma barrinha.
+ *
+ * O que entra sozinho é só o que o sistema SABE que foi pago: o consumo
+ * NA_HORA, onde a própria recepcionista informou a forma de pagamento.
+ */
+
+/** O nome interno da categoria onde cada origem entra. */
+const CATEGORIA_DE_RESERVA = "reservas";
+const CATEGORIA_DE_EMPORIO = "emporio";
+
+/**
+ * Acha a categoria de uma origem automática.
+ *
+ * ELA É USADA MESMO DESLIGADA, de propósito. "Desligar" é decisão sobre o que
+ * a equipe ESCOLHE num lançamento manual; a automática não é escolha. Recusar
+ * o recebimento porque alguém desligou a categoria perderia o registro de
+ * dinheiro que entrou de verdade — e o erro apareceria como "categoria
+ * desligada" na agenda, onde ninguém ligaria uma coisa à outra.
+ */
+async function categoriaDaOrigem(slug: string): Promise<string | null> {
+  const categoria = await prisma.categoriaFinanceira.findUnique({
+    where: { slug },
+    select: { id: true },
+  });
+
+  return categoria?.id ?? null;
+}
+
+/** "2026-11-17" e "09:00"–"10:00" -> "Sala CI · 17/11 09:00–10:00 · Maria". */
+function descricaoDaReserva(reserva: {
+  sala: { nome: string };
+  inicio: Date;
+  fim: Date;
+  nomeCliente: string;
+}): string {
+  const dia = dataLocalDe(reserva.inicio).split("-").reverse().slice(0, 2).join("/");
+
+  return `${reserva.sala.nome} · ${dia} ${horaLocalDe(reserva.inicio)}–${horaLocalDe(reserva.fim)} · ${reserva.nomeCliente}`;
+}
+
+/**
+ * A RECEPÇÃO RECEBEU O PAGAMENTO DE UMA RESERVA.
+ *
+ * É ação de uma PESSOA, nunca automática: o sistema não tem como saber que
+ * alguém pagou R$ 40 no balcão. O botão existe na agenda porque é ali que a
+ * recepção está quando o cliente paga.
+ *
+ * O MENSALISTA NÃO É MARCADO AQUI — ele paga no fim do mês, pelo
+ * demonstrativo. Marcar os dois contaria o mesmo dinheiro duas vezes.
+ */
+export async function registrarRecebimentoDaReserva(entrada: {
+  reservaId: string;
+  /** "AAAA-MM-DD". Padrão: hoje. */
+  pagoEm?: string;
+  formaPagamentoId?: string | null;
+  operador?: Operador | null;
+  agora?: Date;
+}): Promise<Resultado<LancamentoNaTela>> {
+  const reserva = await prisma.reserva.findUnique({
+    where: { id: entrada.reservaId },
+    select: {
+      id: true,
+      valor: true,
+      inicio: true,
+      fim: true,
+      nomeCliente: true,
+      status: true,
+      clienteId: true,
+      empresaId: true,
+      sala: { select: { nome: true } },
+      lancamento: { select: { id: true } },
+    },
+  });
+
+  if (!reserva) {
+    return {
+      ok: false,
+      falha: { motivo: "Reserva não encontrada.", codigo: "NAO_ENCONTRADA" },
+    };
+  }
+
+  /*
+   * RESERVA CANCELADA NÃO GERA RECEITA.
+   *
+   * O caixa passaria a mostrar dinheiro de algo que não aconteceu. Se o
+   * cliente pagou e desmarcou depois, e o coworking ficou com o valor, isso é
+   * outra coisa — a equipe lança à mão, com a descrição dizendo o que foi.
+   */
+  if (reserva.status === "CANCELADA") {
+    return {
+      ok: false,
+      falha: {
+        motivo:
+          "Esta reserva está cancelada. Se o cliente pagou e não usou, lance à mão explicando o caso.",
+        codigo: "RESERVA_CANCELADA",
+      },
+    };
+  }
+
+  // JÁ RECEBIDA: devolve o que existe, em vez de criar a segunda linha. Dois
+  // cliques no botão criariam duas entradas do mesmo dinheiro — o índice
+  // único do banco também recusa, mas aqui a resposta é útil em vez de erro.
+  if (reserva.lancamento) {
+    const atual = await prisma.lancamento.findUniqueOrThrow({
+      where: { id: reserva.lancamento.id },
+      include: COM_OS_LIGADOS,
+    });
+
+    return {
+      ok: true,
+      dados: paraTela(atual, dataLocalDe(entrada.agora ?? new Date())),
+    };
+  }
+
+  const categoriaId = await categoriaDaOrigem(CATEGORIA_DE_RESERVA);
+
+  if (!categoriaId) {
+    return {
+      ok: false,
+      falha: {
+        motivo:
+          "A categoria “Reservas de sala” não existe. Cadastre-a em Financeiro → Categorias.",
+        codigo: "CATEGORIA_INVALIDA",
+      },
+    };
+  }
+
+  const hoje = dataLocalDe(entrada.agora ?? new Date());
+  const pagoEm = entrada.pagoEm ?? hoje;
+
+  if (!DIA.test(pagoEm)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe a data do recebimento.", codigo: "PAGAMENTO_INVALIDO" },
+    };
+  }
+
+  const criado = await prisma.lancamento.create({
+    data: {
+      descricao: descricaoDaReserva(reserva),
+      // O VALOR É O CONGELADO NA RESERVA, nunca um recálculo: o preço da sala
+      // pode ter mudado desde então, e o cliente pagou o que estava gravado.
+      valor: comoTexto(reserva.valor),
+      categoriaId,
+      clienteId: reserva.clienteId,
+      empresaId: reserva.empresaId,
+      formaPagamentoId: entrada.formaPagamentoId ?? null,
+      // Vence no dia da reserva e foi pago no dia do recebimento: é a verdade
+      // das duas datas, e é o que faz a visão de caixa bater com o extrato.
+      vencimento: paraData(dataLocalDe(reserva.inicio)),
+      pagoEm: paraData(pagoEm),
+      reservaId: reserva.id,
+      criadoPorId: entrada.operador?.id ?? null,
+      criadoPorNome: entrada.operador?.nome ?? null,
+    },
+    include: COM_OS_LIGADOS,
+  });
+
+  return { ok: true, dados: paraTela(criado, hoje) };
+}
+
+/**
+ * DESFAZ o recebimento de uma reserva.
+ *
+ * Apaga a linha do caixa e REGISTRA a ação, com um motivo descrito pelo
+ * próprio sistema: aqui o "por quê" é a ação em si ("a recepção desfez o
+ * recebimento"), e pedir texto a cada clique faria a equipe escrever "a" para
+ * passar da tela. A evidência continua existindo, que é o que importa.
+ */
+export async function desfazerRecebimentoDaReserva(entrada: {
+  reservaId: string;
+  operador: Operador;
+}): Promise<Resultado<null>> {
+  const alvo = await prisma.lancamento.findUnique({
+    where: { reservaId: entrada.reservaId },
+    include: COM_OS_LIGADOS,
+  });
+
+  if (!alvo) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Esta reserva não tem recebimento registrado.",
+        codigo: "NAO_ENCONTRADO",
+      },
+    };
+  }
+
+  const resumo = `Recebimento desfeito · ${alvo.descricao} · R$ ${comoTexto(alvo.valor).replace(".", ",")}`;
+
+  await prisma.$transaction(async (tx) => {
+    await registrarAcao(tx, {
+      tipo: TipoDeAcao.LANCAMENTO_EXCLUIDO,
+      resumo,
+      dados: {
+        id: alvo.id,
+        descricao: alvo.descricao,
+        valor: comoTexto(alvo.valor),
+        categoria: alvo.categoria.nome,
+        reservaId: entrada.reservaId,
+        pagoEm: alvo.pagoEm ? diaDe(alvo.pagoEm) : null,
+        origem: "RESERVA",
+      },
+      usuario: entrada.operador,
+      motivo: "recebimento desfeito na agenda",
+    });
+
+    await tx.lancamento.delete({ where: { id: alvo.id } });
+  });
+
+  return { ok: true, dados: null };
+}
+
+/**
+ * SINCRONIZA O EMPÓRIO DE UM DIA com o caixa.
+ *
+ * UMA LINHA POR DIA E POR FORMA DE PAGAMENTO, e não uma por consumo: uma
+ * barrinha de R$ 6,50 por linha daria ~150 linhas de empório por mês afogando
+ * as ~20 contas de verdade. O dinheiro também não chega assim — chega como UM
+ * comprovante de Pix do dia. O detalhe item a item fica na tela do empório.
+ *
+ * ELA RECALCULA, em vez de somar o que chegou agora. Assim lançar o quinto
+ * consumo do dia dá o mesmo resultado que lançar os cinco de uma vez, e rodar
+ * duas vezes não dobra nada. É a mesma escolha da contagem do estoque, e pela
+ * mesma razão: um acumulador erra para sempre se rodar duas vezes; um
+ * recálculo se autocorrige.
+ *
+ * SÓ O NA_HORA ENTRA. O NA_MENSALIDADE vai no demonstrativo, e cobrar no
+ * caixa também seria cobrar duas vezes pela mesma barrinha.
+ */
+export async function sincronizarEmporioDoDia(
+  dia: string,
+  operador?: Operador | null,
+): Promise<Resultado<{ linhas: number }>> {
+  if (!DIA.test(dia)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe o dia.", codigo: "DIA_INVALIDO" },
+    };
+  }
+
+  const categoriaId = await categoriaDaOrigem(CATEGORIA_DE_EMPORIO);
+
+  if (!categoriaId) {
+    return {
+      ok: false,
+      falha: {
+        motivo:
+          "A categoria “Empório” não existe. Cadastre-a em Financeiro → Categorias.",
+        codigo: "CATEGORIA_INVALIDA",
+      },
+    };
+  }
+
+  const inicio = instanteDe(dia as DataLocal, "00:00");
+  const fim = instanteDe(somarUmDia(dia) as DataLocal, "00:00");
+
+  const consumos = await prisma.consumoDoEmporio.findMany({
+    where: {
+      momento: "NA_HORA",
+      consumidoEm: { gte: inicio, lt: fim },
+    },
+    select: { valor: true, quantidade: true, formaPagamentoId: true },
+  });
+
+  /*
+   * A SOMA É EM CENTAVOS, por forma de pagamento. Somar reais em ponto
+   * flutuante acumula diferença, e aqui são dezenas de linhas por dia.
+   */
+  const porForma = new Map<
+    string,
+    { formaPagamentoId: string | null; centavos: number; itens: number }
+  >();
+
+  for (const consumo of consumos) {
+    const chave = consumo.formaPagamentoId ?? "";
+    const atual = porForma.get(chave) ?? {
+      formaPagamentoId: consumo.formaPagamentoId,
+      centavos: 0,
+      itens: 0,
+    };
+
+    atual.centavos += centavosDe(comoTexto(consumo.valor)) ?? 0;
+    atual.itens += consumo.quantidade;
+    porForma.set(chave, atual);
+  }
+
+  const formas = await prisma.formaDePagamento.findMany({
+    select: { id: true, nome: true },
+  });
+  const nomeDaForma = new Map(formas.map((forma) => [forma.id, forma.nome]));
+
+  let linhas = 0;
+
+  for (const grupo of porForma.values()) {
+    if (grupo.centavos <= 0) {
+      // Dia só com cortesia (café de graça): não há dinheiro para registrar,
+      // e uma linha de R$ 0,00 só sujaria o caixa. O banco também recusaria.
+      continue;
+    }
+
+    const nome = grupo.formaPagamentoId
+      ? (nomeDaForma.get(grupo.formaPagamentoId) ?? "sem forma")
+      : "sem forma anotada";
+
+    const descricao = `Empório · ${dia.split("-").reverse().slice(0, 2).join("/")} · ${grupo.itens} ${grupo.itens === 1 ? "item" : "itens"} · ${nome}`;
+
+    const existente = await prisma.lancamento.findFirst({
+      where: {
+        emporioDia: paraData(dia),
+        formaPagamentoId: grupo.formaPagamentoId,
+      },
+      select: { id: true },
+    });
+
+    if (existente) {
+      await prisma.lancamento.update({
+        where: { id: existente.id },
+        data: { descricao, valor: reaisDe(grupo.centavos) },
+      });
+    } else {
+      await prisma.lancamento.create({
+        data: {
+          descricao,
+          valor: reaisDe(grupo.centavos),
+          categoriaId,
+          formaPagamentoId: grupo.formaPagamentoId,
+          // O consumo pago na hora JÁ ENTROU: vence e é pago no mesmo dia, o
+          // do consumo. Deixá-lo pendente poria na lista de trabalho um
+          // dinheiro que já está na gaveta.
+          vencimento: paraData(dia),
+          pagoEm: paraData(dia),
+          emporioDia: paraData(dia),
+          criadoPorId: operador?.id ?? null,
+          criadoPorNome: operador?.nome ?? null,
+        },
+      });
+    }
+
+    linhas += 1;
+  }
+
+  return { ok: true, dados: { linhas } };
+}
+
+/** "2026-11-17" -> "2026-11-18". */
+function somarUmDia(dia: string): string {
+  const data = new Date(`${dia}T12:00:00.000Z`);
+  data.setUTCDate(data.getUTCDate() + 1);
+  return data.toISOString().slice(0, 10);
+}
+
+/**
+ * DESVINCULA um lançamento da origem: ele vira manual e fica editável.
+ *
+ * É a saída de emergência que o dono pediu quando perguntou se tudo seria
+ * editável — nada fica trancado para sempre; só não se solta sem perceber.
+ *
+ * SÓ VALE PARA A LINHA DE RESERVA, e isso não é limitação por preguiça: a
+ * linha do EMPÓRIO é RECALCULADA a cada consumo lançado naquele dia. Soltá-la
+ * não a tornaria editável de verdade — o próximo consumo do mesmo dia criaria
+ * outra linha ao lado, e o dinheiro do dia apareceria DUAS VEZES no caixa.
+ * Para corrigir o empório, corrige-se o consumo na tela dele, e a linha se
+ * refaz; para um acerto fora disso, lança-se uma linha manual explicando.
+ */
+export async function desvincular(
+  id: string,
+  agora?: Date,
+): Promise<Resultado<LancamentoNaTela>> {
+  const alvo = await prisma.lancamento.findUnique({
+    where: { id },
+    select: { id: true, reservaId: true, emporioDia: true },
+  });
+
+  if (!alvo) {
+    return {
+      ok: false,
+      falha: { motivo: "Lançamento não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  if (alvo.emporioDia) {
+    return {
+      ok: false,
+      falha: {
+        motivo:
+          "A linha do empório é recalculada a cada consumo do dia — soltá-la faria o dinheiro do dia aparecer duas vezes. Corrija o consumo na tela do empório, ou lance uma linha à mão explicando o acerto.",
+        codigo: "EMPORIO_NAO_DESVINCULA",
+      },
+    };
+  }
+
+  if (!alvo.reservaId) {
+    return {
+      ok: false,
+      falha: {
+        motivo: "Este lançamento já é manual.",
+        codigo: "JA_MANUAL",
+      },
+    };
+  }
+
+  const salvo = await prisma.lancamento.update({
+    where: { id },
+    data: { reservaId: null },
+    include: COM_OS_LIGADOS,
+  });
+
+  return { ok: true, dados: paraTela(salvo, dataLocalDe(agora ?? new Date())) };
 }
