@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 
 import { AbaDeCategorias } from "./aba-categorias";
 import { AbaDeContas } from "./aba-contas";
+import { AbaDeEspacos } from "./aba-espacos";
 import { AbaDeFornecedores } from "./aba-fornecedores";
+import { AbaDeMensalidades } from "./aba-mensalidades";
 
 type Aba = {
   id: AbaDoFinanceiro;
@@ -26,6 +28,8 @@ type Aba = {
  */
 const CONTEUDOS: Record<AbaDoFinanceiro, (hoje: string) => ReactNode> = {
   contas: (hoje) => <AbaDeContas hoje={hoje} />,
+  mensalidades: (hoje) => <AbaDeMensalidades hoje={hoje} />,
+  espacos: () => <AbaDeEspacos />,
   categorias: () => <AbaDeCategorias />,
   fornecedores: () => <AbaDeFornecedores />,
 };

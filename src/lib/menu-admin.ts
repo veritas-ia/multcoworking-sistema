@@ -50,7 +50,9 @@ export type NomeDoIcone =
   | "ArrowLeftRight"
   | "Wallet"
   | "Tags"
-  | "Truck";
+  | "Truck"
+  | "Landmark"
+  | "DoorClosed";
 
 /**
  * As abas de Configuracoes, como TIPO.
@@ -77,7 +79,12 @@ export type AbaDeConfiguracao =
 export type AbaDoEmporio = "lancar" | "produtos" | "contagem" | "movimentos";
 
 /** As abas do Financeiro, idem. */
-export type AbaDoFinanceiro = "contas" | "categorias" | "fornecedores";
+export type AbaDoFinanceiro =
+  | "contas"
+  | "mensalidades"
+  | "espacos"
+  | "categorias"
+  | "fornecedores";
 
 /** As telas que guardam a aba escolhida no endereco. */
 export const TELA_CONFIGURACOES = "/admin/configuracoes";
@@ -224,6 +231,7 @@ export const MENU: readonly GrupoDoMenu[] = [
       // "Contas" primeiro: e a tela do dia a dia. Categoria e fornecedor sao
       // cadastro, mexidos quase nunca.
       financeiro("Contas", "contas", "Wallet"),
+      financeiro("Mensalidades", "mensalidades", "Landmark"),
       financeiro("Categorias", "categorias", "Tags"),
       financeiro("Fornecedores", "fornecedores", "Truck"),
     ],
@@ -253,6 +261,10 @@ export const MENU: readonly GrupoDoMenu[] = [
       configuracao("Clientes", "clientes", "Users"),
       configuracao("Empresas", "empresas", "Building2"),
       configuracao("Salas", "salas", "DoorOpen"),
+      // ESPACOS abre a tela do Financeiro, mas mora aqui de proposito: e ao
+      // lado de Salas que a equipe procura por "onde cadastro as privativas?".
+      // O grupo e leitura visual; quem manda e a tela que o item carrega.
+      financeiro("Espaços mensais", "espacos", "DoorClosed"),
       configuracao("Áreas de atuação", "profissoes", "Briefcase"),
       configuracao("Telefones do balcão", "telefones-balcao", "Phone"),
     ],

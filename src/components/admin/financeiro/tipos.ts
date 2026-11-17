@@ -85,3 +85,52 @@ export type ResumoDoPeriodo = {
 };
 
 export type FormaDePagamento = { id: string; nome: string; ativa: boolean };
+
+export type EspacoNaTela = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  ordem: number;
+  observacao: string | null;
+  /** Quantos contratos apontam para ele. A tela avisa antes de desligar. */
+  contratos: number;
+  /**
+   * Se há contrato VIGENTE nele, HOJE.
+   *
+   * Decidido pelo servidor, no relógio de São Paulo: um espaço cujo contrato
+   * terminou em março está LIVRE, e mostrá-lo como ocupado faria a equipe
+   * deixar de alugá-lo.
+   */
+  ocupado: boolean;
+};
+
+export type ContratoNaTela = {
+  id: string;
+  /** Quem paga. Exatamente um dos dois, nunca os dois. */
+  cliente: { id: string; nome: string } | null;
+  empresa: { id: string; nome: string } | null;
+  espaco: { id: string; nome: string } | null;
+  valorMensal: string;
+  diaVencimento: number;
+  /** Horas de sala inclusas. NULO = sem cota, toda hora é cobrada. */
+  cotaHoras: number | null;
+  inicio: string;
+  fim: string | null;
+  ativo: boolean;
+  observacao: string | null;
+  /** Se gera cobrança hoje. Vem do SERVIDOR — a tela não refaz conta de fuso. */
+  vigente: boolean;
+  cobrancas: number;
+};
+
+/** O que a geração do mês devolve. A equipe precisa saber o que NÃO entrou. */
+export type RelatorioDaGeracao = {
+  competencia: string;
+  criadas: number;
+  /** Já existiam — gerar de novo não cobra em dobro. */
+  jaExistiam: number;
+  pulados: { contratoId: string; quem: string; motivo: string }[];
+  totalCentavos: number;
+};
+
+export type EmpresaParaEscolher = { id: string; nome: string; ativa: boolean };

@@ -2049,6 +2049,118 @@ dinheiros diferentes:**
   reserva de mensalista sem recebimento (R$ 40, fora). O caixa tem de dar
   **R$ 53, e não R$ 113**.
 
+### Fase 16, Parte C — espaços mensais e mensalidades (17/11/2026)
+
+#### O QUE ELA TRAZ PARA DENTRO DO SISTEMA
+As **salas privativas alugadas por MÊS** — de onde vem a maior parte do dinheiro
+do coworking, e que o sistema nunca viu: ele cuidava das 3 salas alugadas por
+HORA. É a diferença de tamanho que eu só notei relendo o chat original com o
+dono (*16 salas, ~R$ 400 mil/ano*).
+
+E ela responde a pergunta dele — *"como que o sistema iria saber que tá
+pago?"* — do jeito que o dinheiro chega: **o contrato diz QUANTO e QUANDO, a
+cobrança do mês nasce dele PENDENTE, e alguém marca "Recebi" quando o Pix
+cai.** Um Pix por mês, uma linha por mês.
+
+#### OS ESPAÇOS NÃO ENTRAM NA TABELA `salas`, e isto é o ponto
+`salas` é a tabela da **AGENDA**. Uma linha ali aparece no site público para
+qualquer um reservar por hora, entra na grade de disponibilidade, nos
+relatórios de reserva e nas travas de sobreposição. Pondo as privativas lá,
+**um cliente poderia reservar por hora a sala que outro aluga por mês** — a
+Fase 16 estragaria o que já funciona. Há teste: criar espaço não cria sala, e
+as três salas continuam idênticas.
+
+- **"Ocupado" é sobre HOJE**, não sobre existir contrato: um espaço cujo
+  contrato terminou em março está **livre**, e mostrá-lo ocupado faria a equipe
+  deixar de alugá-lo. Quem decide é o servidor, no relógio de São Paulo.
+- **Espaço com contrato vigente não se desliga.** Desligado, ele sai da lista
+  de escolha — mas o contrato continuaria cobrando, e a equipe veria um espaço
+  "fora do ar" gerando dinheiro todo mês. Primeiro encerra-se o contrato.
+- **Excluir não existe**: desliga-se, mesma regra de salas, empresas, áreas de
+  atuação, clientes, categorias e fornecedores.
+- Na barra lateral, **"Espaços mensais" fica no grupo Cadastros** embora abra a
+  tela do Financeiro: é ao lado de Salas que a equipe procura por "onde cadastro
+  as privativas?". O grupo é leitura visual; quem manda é a tela que o item
+  carrega — mesmo padrão das abas de Configurações, que aparecem em grupos
+  diferentes.
+
+#### O CONTRATO
+- **UM pagador, e exatamente um** — pessoa ou empresa, com trava no banco.
+  Nenhum deixaria a cobrança sem dono (ela nasceria no caixa sem dizer de quem
+  é, e o relatório por cliente não a veria); os dois deixariam a tela sem saber
+  para quem emitir. Na **empresa**, as horas de todos os funcionários caem na
+  conta dela — é o caso da Toca, e a razão pela qual o demonstrativo aceita os
+  dois desde 11/11.
+- **O mesmo espaço não tem dois contratos ao mesmo tempo.** Dois mensalistas na
+  mesma privativa é problema **físico**, e ninguém descobriria pelo sistema: as
+  duas cobranças sairiam certas, todo mês, e o conflito apareceria na porta da
+  sala. A conferência é **por período** — contrato que terminou em março não
+  atrapalha outro que começa em abril —, e a recusa **diz de quem é o espaço**,
+  senão a equipe não sabe o que fazer.
+- **COTA DE HORAS ZERO É RECUSADA**, e não tratada como "sem cota". Quem não tem
+  horas inclusas deixa em **branco**. Um zero gravado diria "tem plano com zero
+  hora" — a mesma coisa, dita de um jeito que a tela leria como "tem plano" e
+  mostraria "0 de 0 usadas". Quem usa a cota para descontar é a **Parte D**;
+  aqui ela é só o dado do contrato.
+- **Encerrar é pôr data de fim**, não apagar: para de gerar cobrança, libera o
+  espaço, e as cobranças já geradas ficam no caixa.
+
+#### A GERAÇÃO DAS COBRANÇAS
+- **É AÇÃO DA EQUIPE (botão), e não rotina automática.** Razão prática: a prévia
+  roda com `CRON_ATIVO="false"` e uma rotina simplesmente **não aconteceria**
+  lá — pior, ninguém veria que não aconteceu. Um botão acontece quando a pessoa
+  clica, na frente dela, com o resultado na tela.
+- **GERAR DUAS VEZES NÃO COBRA EM DOBRO**, e esta é a trava mais importante da
+  parte: o índice único (`contrato_id`, `competencia`). Sem ele, dois cliques em
+  "gerar dezembro" dobrariam a receita do mês e **cada linha continuaria
+  parecendo certa** — o erro só apareceria no extrato do cliente, meses depois.
+  Há teste na aplicação **e** um que tenta inserir direto no banco.
+- **A COMPETÊNCIA NÃO É O VENCIMENTO.** O contrato que vence dia 10 cobra
+  dezembro em 10/12 e o que vence dia 5 cobra dezembro em 05/12 — os dois são a
+  mensalidade **de** dezembro. É a competência que forma a trava de "uma por
+  mês".
+- **A COBRANÇA NASCE PENDENTE**, nunca paga. O sistema não tem como saber que o
+  Pix caiu — quem sabe é quem olhou a conta. Mesmo princípio do "Recebi no
+  balcão".
+- **O VALOR CONGELA NA COBRANÇA.** Reajustar a mensalidade depois **não muda** o
+  que já foi gerado: mesma regra do valor da reserva e do preço do empório. Se
+  retroagisse, o faturamento de um mês fechado mudaria sozinho quando a equipe
+  reajustasse. Há teste comparando **a linha inteira** antes e depois, e outro
+  conferindo que o mês seguinte sai pelo valor novo.
+- **O CONTRATO PRECISA ESTAR VIGENTE DENTRO DAQUELE MÊS, e não hoje.** É isto
+  que permite **gerar um mês passado esquecido** e o que impede gerar dezembro
+  para um contrato que terminou em março. Comparar com "hoje" faria as duas
+  coisas erradas ao mesmo tempo. Há teste para os dois lados.
+- **O relatório diz o que NÃO entrou**, com o motivo — mesmo desenho do
+  relatório da série recorrente. Sem ele, um contrato pulado sumiria em silêncio
+  e a equipe só descobriria no fim do mês, ao faltar o dinheiro.
+- **Contrato desligado não entra nem na lista de pulados:** a equipe desligou de
+  propósito, não é um caso a explicar.
+- **Dia 31 em fevereiro cai no ÚLTIMO dia do mês** — não no 1º de março (que
+  mudaria a competência) nem no dia 28 fixo (que atrasaria o vencimento nos
+  meses de 30 e 31 dias). `vencimentoDaCompetencia` tem teste próprio, incluindo
+  ano bissexto.
+
+#### A TRAVA QUE EU ESCREVI ERRADO, e que o teste pegou
+- Eu pus um CHECK exigindo **contrato e competência juntos ou nenhum dos dois**.
+  A chave do contrato é `ON DELETE SET NULL`, e **o banco zera `contrato_id` sem
+  ter como zerar outra coluna junto** — então apagar um contrato virou
+  **impossível**, e o jeito de "consertar" seria apagar a cobrança junto,
+  **fazendo o dinheiro recebido desaparecer do caixa**.
+- A trava correta é de **uma direção**: contrato exige competência, o contrário
+  não. Competência sozinha não é lixo — ela guarda qual mês aquela linha cobriu,
+  que continua sendo verdade depois do contrato sumir.
+- A migração **ainda não estava publicada em lugar nenhum**, então ela foi
+  corrigida no lugar, com o banco de desenvolvimento e o de teste realinhados.
+  Produção vai receber **uma migração só, já correta**.
+- **Desvincular também vale para a mensalidade** (a cobrança é criada uma vez,
+  não recalculada como a do empório): é a renegociação de um mês específico —
+  solta, vira manual e editável, e o contrato segue intacto para os meses
+  seguintes. A competência sai junto, obrigatoriamente, pela trava acima.
+- **31 testes.** Entre eles: apagar o contrato deixa as cobranças de pé como
+  manuais, e a mensalidade vencida e não paga aparece com os dias de atraso
+  certos.
+
 ### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
 > **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
 > "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem

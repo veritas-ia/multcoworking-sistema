@@ -23,10 +23,12 @@ import {
   precoVisivel,
   totalVisivel,
 } from "./pecas";
-import { EscolherCliente } from "./escolher-cliente";
+import {
+  EscolherCliente,
+  type ClienteParaEscolher,
+} from "../escolher-cliente";
 import type {
   CategoriaDoProduto,
-  ClienteParaEscolher,
   ConsumoLancado,
   FormaDePagamento,
   MomentoDoPagamento,

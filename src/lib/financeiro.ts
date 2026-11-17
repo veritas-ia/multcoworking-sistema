@@ -111,7 +111,7 @@ export type LancamentoNaTela = {
    *           ela e RECALCULADA a cada lancamento do dia, e soltar seria
    *           desfeito no proximo consumo — ver "desvincular".
    */
-  origem: "MANUAL" | "RESERVA" | "EMPORIO";
+  origem: "MANUAL" | "RESERVA" | "EMPORIO" | "MENSALIDADE";
 };
 
 // -----------------------------------------------------------------------------
@@ -659,7 +659,9 @@ function paraTela(linha: LinhaDoBanco, hoje: string): LancamentoNaTela {
       ? "RESERVA"
       : linha.emporioDia
         ? "EMPORIO"
-        : "MANUAL",
+        : linha.contratoId
+          ? "MENSALIDADE"
+          : "MANUAL",
   };
 }
 
@@ -1638,7 +1640,7 @@ export async function desvincular(
 ): Promise<Resultado<LancamentoNaTela>> {
   const alvo = await prisma.lancamento.findUnique({
     where: { id },
-    select: { id: true, reservaId: true, emporioDia: true },
+    select: { id: true, reservaId: true, emporioDia: true, contratoId: true },
   });
 
   if (!alvo) {
@@ -1659,7 +1661,7 @@ export async function desvincular(
     };
   }
 
-  if (!alvo.reservaId) {
+  if (!alvo.reservaId && !alvo.contratoId) {
     return {
       ok: false,
       falha: {
@@ -1669,11 +1671,938 @@ export async function desvincular(
     };
   }
 
+  /*
+   * A COBRANÇA DE MENSALIDADE TAMBÉM SE DESVINCULA, e pela mesma razão da
+   * reserva: ela é criada UMA vez, não recalculada. Soltá-la é assumir o
+   * controle daquela linha — e o mês dela volta a poder ser gerado, porque o
+   * índice único só olha as linhas ainda ligadas ao contrato.
+   *
+   * O caso de uso é a renegociação de um mês específico: solta, muda o valor,
+   * e o contrato segue intacto para os meses seguintes.
+   *
+   * A COMPETÊNCIA SAI JUNTO, obrigatoriamente: a trava do banco
+   * ("lancamento_competencia_com_contrato") recusa competência sem contrato —
+   * e com razão, porque ela sozinha deixaria a linha dizendo que cobre um mês
+   * de um contrato que ela não tem mais.
+   */
   const salvo = await prisma.lancamento.update({
     where: { id },
-    data: { reservaId: null },
+    data: { reservaId: null, contratoId: null, competencia: null },
     include: COM_OS_LIGADOS,
   });
 
   return { ok: true, dados: paraTela(salvo, dataLocalDe(agora ?? new Date())) };
+}
+
+// -----------------------------------------------------------------------------
+// FASE 16, PARTE C — OS ESPAÇOS MENSAIS E AS MENSALIDADES
+// -----------------------------------------------------------------------------
+
+/**
+ * O QUE ESTA PARTE TRAZ PARA DENTRO DO SISTEMA.
+ *
+ * As salas privativas alugadas por MÊS — de onde vem a maior parte do dinheiro
+ * do coworking, e que o sistema nunca viu. Ele cuidava das 3 salas alugadas
+ * por HORA.
+ *
+ * E ela responde a pergunta do dono — *"como que o sistema iria saber que tá
+ * pago?"* — do jeito que o dinheiro realmente chega: o contrato diz QUANTO e
+ * QUANDO, a cobrança do mês nasce dele, e alguém marca que recebeu. **Um Pix
+ * por mês, uma linha por mês.**
+ */
+
+export type EspacoNaTela = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  ordem: number;
+  observacao: string | null;
+  /** Quantos contratos apontam para ele. A tela avisa antes de desligar. */
+  contratos: number;
+  /** Se há contrato VIGENTE nele. É isto que diz se o espaço está ocupado. */
+  ocupado: boolean;
+};
+
+export type ContratoNaTela = {
+  id: string;
+  /** Quem paga. Exatamente um dos dois, nunca os dois. */
+  cliente: { id: string; nome: string } | null;
+  empresa: { id: string; nome: string } | null;
+  espaco: { id: string; nome: string } | null;
+  /** Em reais, com duas casas. */
+  valorMensal: string;
+  diaVencimento: number;
+  /** Horas de sala inclusas. NULO = sem cota, toda hora é cobrada. */
+  cotaHoras: number | null;
+  inicio: string;
+  fim: string | null;
+  ativo: boolean;
+  observacao: string | null;
+  /** Se ele gera cobrança hoje: ativo, já começou e ainda não terminou. */
+  vigente: boolean;
+  /** Quantas cobranças já foram geradas. */
+  cobrancas: number;
+};
+
+// -----------------------------------------------------------------------------
+// Os espaços
+// -----------------------------------------------------------------------------
+
+export async function listarEspacos(opcoes?: {
+  somenteAtivos?: boolean;
+  agora?: Date;
+}): Promise<EspacoNaTela[]> {
+  const espacos = await prisma.espaco.findMany({
+    where: opcoes?.somenteAtivos ? { ativo: true } : {},
+    orderBy: [{ ordem: "asc" }, { nome: "asc" }],
+    include: {
+      contratos: {
+        select: { id: true, ativo: true, inicio: true, fim: true },
+      },
+    },
+  });
+
+  const hoje = paraData(dataLocalDe(opcoes?.agora ?? new Date()));
+
+  return espacos.map((espaco) => ({
+    id: espaco.id,
+    nome: espaco.nome,
+    ativo: espaco.ativo,
+    ordem: espaco.ordem,
+    observacao: espaco.observacao,
+    contratos: espaco.contratos.length,
+    /*
+     * OCUPADO É SOBRE HOJE, não sobre existir contrato.
+     *
+     * Um espaço com contrato que terminou em março está LIVRE, e mostrá-lo
+     * como ocupado faria a equipe deixar de alugá-lo. Quem decide é o
+     * servidor, no relógio de São Paulo.
+     */
+    ocupado: espaco.contratos.some(
+      (contrato) =>
+        contrato.ativo &&
+        contrato.inicio <= hoje &&
+        (contrato.fim === null || contrato.fim >= hoje),
+    ),
+  }));
+}
+
+export async function criarEspaco(entrada: {
+  nome: string;
+  observacao?: string | null;
+}): Promise<Resultado<EspacoNaTela>> {
+  const nome = entrada.nome.trim();
+
+  if (nome.length < 1) {
+    return {
+      ok: false,
+      falha: { motivo: "Escreva o nome do espaço.", codigo: "NOME_INVALIDO" },
+    };
+  }
+
+  const repetido = await prisma.espaco.findUnique({
+    where: { nome },
+    select: { id: true },
+  });
+
+  if (repetido) {
+    return {
+      ok: false,
+      falha: { motivo: "Já existe um espaço com esse nome.", codigo: "REPETIDO" },
+    };
+  }
+
+  const ultimo = await prisma.espaco.findFirst({
+    orderBy: { ordem: "desc" },
+    select: { ordem: true },
+  });
+
+  const criado = await prisma.espaco.create({
+    data: {
+      nome,
+      observacao: entrada.observacao?.trim() || null,
+      ordem: (ultimo?.ordem ?? 0) + 1,
+    },
+  });
+
+  return {
+    ok: true,
+    dados: {
+      id: criado.id,
+      nome: criado.nome,
+      ativo: criado.ativo,
+      ordem: criado.ordem,
+      observacao: criado.observacao,
+      contratos: 0,
+      ocupado: false,
+    },
+  };
+}
+
+/**
+ * Renomeia, anota ou desliga um espaço.
+ *
+ * EXCLUIR NÃO EXISTE: desliga-se, mesma regra de salas, empresas, áreas de
+ * atuação, clientes, categorias e fornecedores. A chave é RESTRICT.
+ */
+export async function editarEspaco(
+  id: string,
+  mudanca: { nome?: string; observacao?: string | null; ativo?: boolean },
+  agora?: Date,
+): Promise<Resultado<EspacoNaTela>> {
+  const atual = await prisma.espaco.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!atual) {
+    return {
+      ok: false,
+      falha: { motivo: "Espaço não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  const nome = mudanca.nome?.trim();
+
+  if (nome !== undefined) {
+    if (nome.length < 1) {
+      return {
+        ok: false,
+        falha: { motivo: "Escreva o nome do espaço.", codigo: "NOME_INVALIDO" },
+      };
+    }
+
+    const repetido = await prisma.espaco.findFirst({
+      where: { nome, id: { not: id } },
+      select: { id: true },
+    });
+
+    if (repetido) {
+      return {
+        ok: false,
+        falha: { motivo: "Já existe um espaço com esse nome.", codigo: "REPETIDO" },
+      };
+    }
+  }
+
+  /*
+   * ESPAÇO OCUPADO NÃO SE DESLIGA.
+   *
+   * Desligado, ele sai da lista de escolha de contrato novo — mas o contrato
+   * VIGENTE dele continuaria cobrando, e a equipe veria um espaço "fora do
+   * ar" gerando dinheiro todo mês. Primeiro encerra-se o contrato.
+   */
+  if (mudanca.ativo === false) {
+    const hoje = paraData(dataLocalDe(agora ?? new Date()));
+
+    const vigente = await prisma.contratoMensal.count({
+      where: {
+        espacoId: id,
+        ativo: true,
+        inicio: { lte: hoje },
+        OR: [{ fim: null }, { fim: { gte: hoje } }],
+      },
+    });
+
+    if (vigente > 0) {
+      return {
+        ok: false,
+        falha: {
+          motivo:
+            "Este espaço tem contrato vigente. Encerre o contrato antes de desligar o espaço.",
+          codigo: "ESPACO_OCUPADO",
+        },
+      };
+    }
+  }
+
+  await prisma.espaco.update({
+    where: { id },
+    data: {
+      ...(nome !== undefined ? { nome } : {}),
+      ...(mudanca.observacao !== undefined
+        ? { observacao: mudanca.observacao?.trim() || null }
+        : {}),
+      ...(mudanca.ativo !== undefined ? { ativo: mudanca.ativo } : {}),
+    },
+  });
+
+  const lista = await listarEspacos({ agora });
+  const salvo = lista.find((espaco) => espaco.id === id);
+
+  return salvo
+    ? { ok: true, dados: salvo }
+    : {
+        ok: false,
+        falha: { motivo: "Espaço não encontrado.", codigo: "NAO_ENCONTRADO" },
+      };
+}
+
+/** Grava a ordem da lista inteira, para nunca haver duas posições iguais. */
+export async function reordenarEspacos(ids: string[]): Promise<Resultado<null>> {
+  if (ids.length === 0) {
+    return { ok: false, falha: { motivo: "Informe a ordem.", codigo: "SEM_IDS" } };
+  }
+
+  const quantos = await prisma.espaco.count({ where: { id: { in: ids } } });
+
+  if (quantos !== ids.length) {
+    return {
+      ok: false,
+      falha: { motivo: "Espaço não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  await prisma.$transaction(
+    ids.map((id, indice) =>
+      prisma.espaco.update({ where: { id }, data: { ordem: indice + 1 } }),
+    ),
+  );
+
+  return { ok: true, dados: null };
+}
+
+// -----------------------------------------------------------------------------
+// Os contratos
+// -----------------------------------------------------------------------------
+
+/** "2026-12" — o mês cobrado. */
+const COMPETENCIA = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * O DIA DO VENCIMENTO DENTRO DE UM MÊS.
+ *
+ * O contrato que vence dia 31 não tem onde cair em fevereiro. Cai no ÚLTIMO
+ * dia do mês — e não no dia 1º do mês seguinte, que mudaria a competência da
+ * cobrança, nem no dia 28 fixo, que atrasaria o vencimento nos meses de 30 e
+ * 31 dias.
+ */
+export function vencimentoDaCompetencia(
+  competencia: string,
+  diaVencimento: number,
+): string {
+  const [ano, mes] = competencia.split("-").map(Number);
+  // O dia 0 do mês seguinte é o último do mês atual: funciona em fevereiro e
+  // em ano bissexto sem nenhuma tabela de dias.
+  const ultimo = new Date(Date.UTC(ano!, mes!, 0)).getUTCDate();
+  const dia = Math.min(diaVencimento, ultimo);
+
+  return `${competencia}-${String(dia).padStart(2, "0")}`;
+}
+
+const COM_O_CONTRATO = {
+  cliente: { select: { id: true, nome: true } },
+  empresa: { select: { id: true, nome: true } },
+  espaco: { select: { id: true, nome: true } },
+  _count: { select: { cobrancas: true } },
+} as const;
+
+type LinhaDoContrato = Prisma.ContratoMensalGetPayload<{
+  include: typeof COM_O_CONTRATO;
+}>;
+
+function contratoParaTela(linha: LinhaDoContrato, hoje: string): ContratoNaTela {
+  const inicio = diaDe(linha.inicio);
+  const fim = linha.fim ? diaDe(linha.fim) : null;
+
+  return {
+    id: linha.id,
+    cliente: linha.cliente,
+    empresa: linha.empresa,
+    espaco: linha.espaco,
+    valorMensal: comoTexto(linha.valorMensal),
+    diaVencimento: linha.diaVencimento,
+    cotaHoras: linha.cotaHoras,
+    inicio,
+    fim,
+    ativo: linha.ativo,
+    observacao: linha.observacao,
+    /*
+     * VIGENTE é "gera cobrança hoje": ativo, já começou e ainda não terminou.
+     *
+     * Quem decide é o SERVIDOR, no relógio de São Paulo — refazer a conta no
+     * navegador poria a regra de fuso em dois lugares, e o do operador pode
+     * estar em outro.
+     */
+    vigente: linha.ativo && inicio <= hoje && (fim === null || fim >= hoje),
+    cobrancas: linha._count.cobrancas,
+  };
+}
+
+export async function listarContratos(opcoes?: {
+  somenteVigentes?: boolean;
+  agora?: Date;
+}): Promise<ContratoNaTela[]> {
+  const contratos = await prisma.contratoMensal.findMany({
+    orderBy: [{ ativo: "desc" }, { criadoEm: "asc" }],
+    include: COM_O_CONTRATO,
+  });
+
+  const hoje = dataLocalDe(opcoes?.agora ?? new Date());
+  const naTela = contratos.map((linha) => contratoParaTela(linha, hoje));
+
+  return opcoes?.somenteVigentes
+    ? naTela.filter((contrato) => contrato.vigente)
+    : naTela;
+}
+
+export type EntradaDeContrato = {
+  clienteId?: string | null;
+  empresaId?: string | null;
+  espacoId?: string | null;
+  /** Em reais, como a tela digita. */
+  valorMensal: string;
+  diaVencimento: number;
+  cotaHoras?: number | null;
+  inicio: string;
+  fim?: string | null;
+  observacao?: string | null;
+};
+
+/** Confere o que não depende do banco. */
+function conferirContrato(entrada: EntradaDeContrato): Falha | null {
+  const temCliente = Boolean(entrada.clienteId);
+  const temEmpresa = Boolean(entrada.empresaId);
+
+  /*
+   * UM PAGADOR, E EXATAMENTE UM (trava também no banco).
+   *
+   * Nenhum deixaria a cobrança sem dono — ela nasceria no caixa sem dizer de
+   * quem é, e o relatório por cliente não a veria. Os dois deixariam a tela
+   * sem saber para quem emitir.
+   */
+  if (temCliente === temEmpresa) {
+    return {
+      motivo: "Escolha quem paga: uma pessoa ou uma empresa.",
+      codigo: "PAGADOR_INVALIDO",
+    };
+  }
+
+  const centavos = centavosDe(entrada.valorMensal);
+
+  if (centavos === null || centavos <= 0) {
+    return {
+      motivo: "Escreva o valor da mensalidade, como 2400,00.",
+      codigo: "VALOR_INVALIDO",
+    };
+  }
+
+  if (
+    !Number.isInteger(entrada.diaVencimento) ||
+    entrada.diaVencimento < 1 ||
+    entrada.diaVencimento > 31
+  ) {
+    return {
+      motivo: "O dia do vencimento precisa ser de 1 a 31.",
+      codigo: "DIA_INVALIDO",
+    };
+  }
+
+  /*
+   * COTA ZERO É RECUSADA, e não tratada como "sem cota".
+   *
+   * Quem não tem horas inclusas deixa o campo em BRANCO. Um zero gravado diria
+   * "tem plano com zero hora" — a mesma coisa, dita de um jeito que a tela
+   * leria como "tem plano com horas" e mostraria "0 de 0 usadas".
+   */
+  if (entrada.cotaHoras !== undefined && entrada.cotaHoras !== null) {
+    if (!Number.isInteger(entrada.cotaHoras) || entrada.cotaHoras <= 0) {
+      return {
+        motivo:
+          "A cota de horas precisa ser um número maior que zero. Deixe em branco se não há horas inclusas.",
+        codigo: "COTA_INVALIDA",
+      };
+    }
+  }
+
+  if (!DIA.test(entrada.inicio)) {
+    return { motivo: "Informe o início do contrato.", codigo: "INICIO_INVALIDO" };
+  }
+
+  if (entrada.fim) {
+    if (!DIA.test(entrada.fim)) {
+      return { motivo: "Informe o fim do contrato.", codigo: "FIM_INVALIDO" };
+    }
+
+    if (entrada.fim < entrada.inicio) {
+      return {
+        motivo: "O fim do contrato não pode ser antes do início.",
+        codigo: "FIM_INVALIDO",
+      };
+    }
+  }
+
+  return null;
+}
+
+/** Confere o que existe e está ligado. */
+async function conferirLigadosDoContrato(
+  entrada: EntradaDeContrato,
+): Promise<Falha | null> {
+  if (entrada.clienteId) {
+    const cliente = await prisma.cliente.findUnique({
+      where: { id: entrada.clienteId },
+      select: { ativo: true },
+    });
+
+    if (!cliente) {
+      return { motivo: "Cliente não encontrado.", codigo: "CLIENTE_INVALIDO" };
+    }
+  }
+
+  if (entrada.empresaId) {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: entrada.empresaId },
+      select: { ativa: true },
+    });
+
+    if (!empresa) {
+      return { motivo: "Empresa não encontrada.", codigo: "EMPRESA_INVALIDA" };
+    }
+
+    /*
+     * EMPRESA DESLIGADA É RECUSADA, mesma regra do vínculo de cliente de
+     * 11/11: fazer um contrato para uma empresa que saiu do coworking poria
+     * cobrança no nome de quem ninguém vai cobrar.
+     */
+    if (!empresa.ativa) {
+      return {
+        motivo: "Essa empresa está desligada. Religue-a antes de fazer o contrato.",
+        codigo: "EMPRESA_DESLIGADA",
+      };
+    }
+  }
+
+  if (entrada.espacoId) {
+    const espaco = await prisma.espaco.findUnique({
+      where: { id: entrada.espacoId },
+      select: { ativo: true },
+    });
+
+    if (!espaco) {
+      return { motivo: "Espaço não encontrado.", codigo: "ESPACO_INVALIDO" };
+    }
+
+    if (!espaco.ativo) {
+      return {
+        motivo: "Esse espaço está desligado. Religue-o ou escolha outro.",
+        codigo: "ESPACO_DESLIGADO",
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * O MESMO ESPAÇO NÃO PODE TER DOIS CONTRATOS AO MESMO TEMPO.
+ *
+ * Dois mensalistas na mesma sala privativa é um problema físico, não de
+ * cadastro — e ninguém descobriria pelo sistema: as duas cobranças sairiam
+ * certas, todo mês, e o conflito apareceria na porta da sala.
+ *
+ * A conferência é por PERÍODO: um contrato que terminou em março não atrapalha
+ * outro que começa em abril. Contrato sem fim ocupa dali para frente.
+ */
+async function espacoLivreNoPeriodo(entrada: {
+  espacoId: string;
+  inicio: string;
+  fim: string | null;
+  exceto?: string;
+}): Promise<{ id: string; nome: string } | null> {
+  const concorrentes = await prisma.contratoMensal.findMany({
+    where: {
+      espacoId: entrada.espacoId,
+      ativo: true,
+      ...(entrada.exceto ? { id: { not: entrada.exceto } } : {}),
+    },
+    select: {
+      id: true,
+      inicio: true,
+      fim: true,
+      cliente: { select: { nome: true } },
+      empresa: { select: { nome: true } },
+    },
+  });
+
+  for (const outro of concorrentes) {
+    const comecaOutro = diaDe(outro.inicio);
+    const terminaOutro = outro.fim ? diaDe(outro.fim) : null;
+
+    // Dois períodos se cruzam quando cada um começa antes do outro acabar.
+    // Período sem fim é tratado como "até sempre".
+    const cruzam =
+      (terminaOutro === null || entrada.inicio <= terminaOutro) &&
+      (entrada.fim === null || comecaOutro <= entrada.fim);
+
+    if (cruzam) {
+      return {
+        id: outro.id,
+        nome: outro.cliente?.nome ?? outro.empresa?.nome ?? "outro contrato",
+      };
+    }
+  }
+
+  return null;
+}
+
+export async function criarContrato(
+  entrada: EntradaDeContrato,
+  agora?: Date,
+): Promise<Resultado<ContratoNaTela>> {
+  const erroDeCampo = conferirContrato(entrada);
+
+  if (erroDeCampo) {
+    return { ok: false, falha: erroDeCampo };
+  }
+
+  const erroDeLigado = await conferirLigadosDoContrato(entrada);
+
+  if (erroDeLigado) {
+    return { ok: false, falha: erroDeLigado };
+  }
+
+  if (entrada.espacoId) {
+    const ocupante = await espacoLivreNoPeriodo({
+      espacoId: entrada.espacoId,
+      inicio: entrada.inicio,
+      fim: entrada.fim ?? null,
+    });
+
+    if (ocupante) {
+      return {
+        ok: false,
+        falha: {
+          motivo: `Este espaço já tem contrato de ${ocupante.nome} nesse período. Encerre o contrato dele antes, ou escolha outro espaço.`,
+          codigo: "ESPACO_OCUPADO",
+        },
+      };
+    }
+  }
+
+  const criado = await prisma.contratoMensal.create({
+    data: {
+      clienteId: entrada.clienteId ?? null,
+      empresaId: entrada.empresaId ?? null,
+      espacoId: entrada.espacoId ?? null,
+      valorMensal: reaisDe(centavosDe(entrada.valorMensal)!),
+      diaVencimento: entrada.diaVencimento,
+      cotaHoras: entrada.cotaHoras ?? null,
+      inicio: paraData(entrada.inicio),
+      fim: entrada.fim ? paraData(entrada.fim) : null,
+      observacao: entrada.observacao?.trim() || null,
+    },
+    include: COM_O_CONTRATO,
+  });
+
+  return {
+    ok: true,
+    dados: contratoParaTela(criado, dataLocalDe(agora ?? new Date())),
+  };
+}
+
+/**
+ * EDITA o contrato.
+ *
+ * **AUMENTAR O VALOR NÃO RETROAGE**, e isto é regra registrada: as cobranças
+ * já geradas ficam com o valor que era. O valor viaja para o lançamento no
+ * momento da geração e fica congelado lá — mesma regra do valor da reserva e
+ * do preço do empório. Se retroagisse, o faturamento de um mês fechado mudaria
+ * sozinho quando a equipe reajustasse a mensalidade, e nenhum relatório antigo
+ * seria confiável.
+ */
+export async function editarContrato(
+  id: string,
+  mudanca: Partial<EntradaDeContrato> & { ativo?: boolean },
+  agora?: Date,
+): Promise<Resultado<ContratoNaTela>> {
+  const atual = await prisma.contratoMensal.findUnique({
+    where: { id },
+    include: COM_O_CONTRATO,
+  });
+
+  if (!atual) {
+    return {
+      ok: false,
+      falha: { motivo: "Contrato não encontrado.", codigo: "NAO_ENCONTRADO" },
+    };
+  }
+
+  // A conferência roda sobre o contrato COMO ELE FICARIA, e não só sobre o que
+  // veio na mudança: trocar só o pagador, num contrato que já tem empresa,
+  // continua sendo cliente e empresa juntos.
+  const depois: EntradaDeContrato = {
+    clienteId:
+      mudanca.clienteId !== undefined ? mudanca.clienteId : atual.clienteId,
+    empresaId:
+      mudanca.empresaId !== undefined ? mudanca.empresaId : atual.empresaId,
+    espacoId: mudanca.espacoId !== undefined ? mudanca.espacoId : atual.espacoId,
+    valorMensal: mudanca.valorMensal ?? comoTexto(atual.valorMensal),
+    diaVencimento: mudanca.diaVencimento ?? atual.diaVencimento,
+    cotaHoras:
+      mudanca.cotaHoras !== undefined ? mudanca.cotaHoras : atual.cotaHoras,
+    inicio: mudanca.inicio ?? diaDe(atual.inicio),
+    fim:
+      mudanca.fim !== undefined
+        ? mudanca.fim
+        : atual.fim
+          ? diaDe(atual.fim)
+          : null,
+    observacao:
+      mudanca.observacao !== undefined ? mudanca.observacao : atual.observacao,
+  };
+
+  const erroDeCampo = conferirContrato(depois);
+
+  if (erroDeCampo) {
+    return { ok: false, falha: erroDeCampo };
+  }
+
+  const erroDeLigado = await conferirLigadosDoContrato(depois);
+
+  if (erroDeLigado) {
+    return { ok: false, falha: erroDeLigado };
+  }
+
+  if (depois.espacoId) {
+    const ocupante = await espacoLivreNoPeriodo({
+      espacoId: depois.espacoId,
+      inicio: depois.inicio,
+      fim: depois.fim ?? null,
+      exceto: id,
+    });
+
+    if (ocupante) {
+      return {
+        ok: false,
+        falha: {
+          motivo: `Este espaço já tem contrato de ${ocupante.nome} nesse período.`,
+          codigo: "ESPACO_OCUPADO",
+        },
+      };
+    }
+  }
+
+  const salvo = await prisma.contratoMensal.update({
+    where: { id },
+    data: {
+      clienteId: depois.clienteId ?? null,
+      empresaId: depois.empresaId ?? null,
+      espacoId: depois.espacoId ?? null,
+      valorMensal: reaisDe(centavosDe(depois.valorMensal)!),
+      diaVencimento: depois.diaVencimento,
+      cotaHoras: depois.cotaHoras ?? null,
+      inicio: paraData(depois.inicio),
+      fim: depois.fim ? paraData(depois.fim) : null,
+      observacao: depois.observacao?.trim() || null,
+      ...(mudanca.ativo !== undefined ? { ativo: mudanca.ativo } : {}),
+    },
+    include: COM_O_CONTRATO,
+  });
+
+  return {
+    ok: true,
+    dados: contratoParaTela(salvo, dataLocalDe(agora ?? new Date())),
+  };
+}
+
+// -----------------------------------------------------------------------------
+// A geração das mensalidades
+// -----------------------------------------------------------------------------
+
+export type RelatorioDaGeracao = {
+  competencia: string;
+  /** Quantas cobranças nasceram agora. */
+  criadas: number;
+  /** Quantas já existiam — gerar de novo não cobra em dobro. */
+  jaExistiam: number;
+  /** Os contratos que não entraram, com o motivo. */
+  pulados: { contratoId: string; quem: string; motivo: string }[];
+  /** O total gerado, em centavos. */
+  totalCentavos: number;
+};
+
+/**
+ * GERA AS COBRANÇAS DE UM MÊS.
+ *
+ * É AÇÃO DA EQUIPE, e não rotina automática — por uma razão prática: a prévia
+ * roda com `CRON_ATIVO="false"`, e uma rotina simplesmente não aconteceria
+ * lá. Pior: ninguém veria que não aconteceu. Um botão acontece quando a pessoa
+ * clica, na frente dela, com o resultado na tela.
+ *
+ * É IDEMPOTENTE, e isto não é detalhe: o índice único
+ * (`contrato_id`, `competencia`) é o que faz clicar duas vezes em "gerar
+ * dezembro" não cobrar em dobro. Sem ele, dois cliques dobrariam a receita do
+ * mês e **cada linha continuaria parecendo certa** — o erro só apareceria no
+ * extrato do cliente.
+ *
+ * O VALOR É CONGELADO NA COBRANÇA. Reajustar a mensalidade depois não muda o
+ * que já foi gerado: mesma regra do valor da reserva e do preço do empório. Se
+ * retroagisse, o faturamento de um mês fechado mudaria sozinho.
+ *
+ * ELA NASCE **PENDENTE**, nunca paga. O sistema não tem como saber que o Pix
+ * caiu — quem sabe é quem olhou a conta. É o mesmo princípio do "Recebi no
+ * balcão": o dinheiro entra no caixa quando uma pessoa diz que entrou.
+ */
+export async function gerarMensalidades(entrada: {
+  /** "2026-12". */
+  competencia: string;
+  operador?: Operador | null;
+  agora?: Date;
+}): Promise<Resultado<RelatorioDaGeracao>> {
+  if (!COMPETENCIA.test(entrada.competencia)) {
+    return {
+      ok: false,
+      falha: { motivo: "Informe o mês como 2026-12.", codigo: "COMPETENCIA_INVALIDA" },
+    };
+  }
+
+  const categoriaId = await categoriaDaOrigem("mensalidades");
+
+  if (!categoriaId) {
+    return {
+      ok: false,
+      falha: {
+        motivo:
+          "A categoria “Mensalidades” não existe. Cadastre-a em Financeiro → Categorias.",
+        codigo: "CATEGORIA_INVALIDA",
+      },
+    };
+  }
+
+  const contratos = await prisma.contratoMensal.findMany({
+    where: { ativo: true },
+    include: {
+      cliente: { select: { id: true, nome: true } },
+      empresa: { select: { id: true, nome: true } },
+      espaco: { select: { nome: true } },
+    },
+  });
+
+  const primeiroDoMes = `${entrada.competencia}-01`;
+  const ultimoDoMes = vencimentoDaCompetencia(entrada.competencia, 31);
+
+  const relatorio: RelatorioDaGeracao = {
+    competencia: entrada.competencia,
+    criadas: 0,
+    jaExistiam: 0,
+    pulados: [],
+    totalCentavos: 0,
+  };
+
+  for (const contrato of contratos) {
+    const quem = contrato.cliente?.nome ?? contrato.empresa?.nome ?? "sem nome";
+    const comeca = diaDe(contrato.inicio);
+    const termina = contrato.fim ? diaDe(contrato.fim) : null;
+
+    /*
+     * O CONTRATO PRECISA ESTAR VIGENTE **DENTRO DAQUELE MÊS**, e não hoje.
+     *
+     * Isto é o que permite gerar um mês passado que ficou esquecido, e o que
+     * impede gerar dezembro para um contrato que terminou em março. Comparar
+     * com "hoje" faria as duas coisas erradas ao mesmo tempo.
+     */
+    if (comeca > ultimoDoMes) {
+      relatorio.pulados.push({
+        contratoId: contrato.id,
+        quem,
+        motivo: `o contrato começa em ${comeca.split("-").reverse().join("/")}, depois deste mês`,
+      });
+      continue;
+    }
+
+    if (termina !== null && termina < primeiroDoMes) {
+      relatorio.pulados.push({
+        contratoId: contrato.id,
+        quem,
+        motivo: `o contrato terminou em ${termina.split("-").reverse().join("/")}, antes deste mês`,
+      });
+      continue;
+    }
+
+    const jaExiste = await prisma.lancamento.findFirst({
+      where: { contratoId: contrato.id, competencia: entrada.competencia },
+      select: { id: true },
+    });
+
+    if (jaExiste) {
+      relatorio.jaExistiam += 1;
+      continue;
+    }
+
+    const vencimento = vencimentoDaCompetencia(
+      entrada.competencia,
+      contrato.diaVencimento,
+    );
+
+    const mesPorExtenso = new Date(
+      Date.UTC(
+        Number(entrada.competencia.slice(0, 4)),
+        Number(entrada.competencia.slice(5, 7)) - 1,
+        1,
+      ),
+    ).toLocaleDateString("pt-BR", {
+      timeZone: "UTC",
+      month: "long",
+      year: "numeric",
+    });
+
+    const descricao = contrato.espaco
+      ? `Mensalidade ${mesPorExtenso} · ${contrato.espaco.nome} · ${quem}`
+      : `Mensalidade ${mesPorExtenso} · ${quem}`;
+
+    try {
+      await prisma.lancamento.create({
+        data: {
+          descricao,
+          // O VALOR DO CONTRATO, congelado aqui. Reajuste depois não mexe.
+          valor: comoTexto(contrato.valorMensal),
+          categoriaId,
+          clienteId: contrato.clienteId,
+          empresaId: contrato.empresaId,
+          vencimento: paraData(vencimento),
+          // NASCE PENDENTE: o sistema não sabe que o Pix caiu.
+          pagoEm: null,
+          contratoId: contrato.id,
+          competencia: entrada.competencia,
+          criadoPorId: entrada.operador?.id ?? null,
+          criadoPorNome: entrada.operador?.nome ?? null,
+        },
+      });
+
+      relatorio.criadas += 1;
+      relatorio.totalCentavos += centavosDe(comoTexto(contrato.valorMensal)) ?? 0;
+    } catch {
+      /*
+       * O ÍNDICE ÚNICO BARROU: outra pessoa clicou em "gerar" no mesmo
+       * instante. Isto conta como "já existia", e não como erro — o resultado
+       * para a equipe é o mesmo, e derrubar a geração inteira por causa de uma
+       * linha faria as outras deixarem de nascer.
+       */
+      relatorio.jaExistiam += 1;
+    }
+  }
+
+  return { ok: true, dados: relatorio };
+}
+
+/**
+ * As cobranças de um contrato, da mais recente para a mais antiga.
+ *
+ * É o extrato do mensalista: o que já foi cobrado, o que ele pagou e o que
+ * está em atraso.
+ */
+export async function cobrancasDoContrato(
+  contratoId: string,
+  agora?: Date,
+): Promise<LancamentoNaTela[]> {
+  const linhas = await prisma.lancamento.findMany({
+    where: { contratoId },
+    orderBy: [{ competencia: "desc" }],
+    include: COM_OS_LIGADOS,
+  });
+
+  const hoje = dataLocalDe(agora ?? new Date());
+
+  return linhas.map((linha) => paraTela(linha, hoje));
 }

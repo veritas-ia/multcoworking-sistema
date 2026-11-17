@@ -3,6 +3,10 @@ import { ErroDaApi } from "@/components/reserva/api";
 
 import type {
   CategoriaNaTela,
+  ContratoNaTela,
+  EmpresaParaEscolher,
+  EspacoNaTela,
+  RelatorioDaGeracao,
   FormaDePagamento,
   FornecedorNaTela,
   LancamentoNaTela,
@@ -265,4 +269,140 @@ export function desvincular(
   return pedir(`/api/admin/financeiro/lancamentos/${id}/desvincular`, {
     method: "POST",
   });
+}
+
+// -----------------------------------------------------------------------------
+// Espaços mensais (Fase 16, Parte C)
+// -----------------------------------------------------------------------------
+
+export function buscarEspacos(opcoes?: {
+  somenteAtivos?: boolean;
+}): Promise<{ espacos: EspacoNaTela[] }> {
+  return pedir(
+    `/api/admin/financeiro/espacos${opcoes?.somenteAtivos ? "?ativos=1" : ""}`,
+  );
+}
+
+export function criarEspaco(entrada: {
+  nome: string;
+  observacao?: string | null;
+}): Promise<{ espaco: EspacoNaTela }> {
+  return pedir("/api/admin/financeiro/espacos", {
+    method: "POST",
+    body: JSON.stringify(entrada),
+  });
+}
+
+/**
+ * Renomeia, anota ou desliga.
+ *
+ * EXCLUIR NÃO EXISTE. E espaço com contrato VIGENTE não se desliga: o contrato
+ * continuaria cobrando, e a equipe veria um espaço "fora do ar" gerando
+ * dinheiro todo mês. A recusa vem do servidor e explica isso.
+ */
+export function editarEspaco(
+  id: string,
+  mudanca: { nome?: string; observacao?: string | null; ativo?: boolean },
+): Promise<{ espaco: EspacoNaTela }> {
+  return pedir(`/api/admin/financeiro/espacos/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(mudanca),
+  });
+}
+
+export function reordenarEspacos(
+  ids: string[],
+): Promise<{ espacos: EspacoNaTela[] }> {
+  return pedir("/api/admin/financeiro/espacos", {
+    method: "PUT",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// -----------------------------------------------------------------------------
+// Contratos e mensalidades
+// -----------------------------------------------------------------------------
+
+export type RespostaDeContratos = {
+  contratos: ContratoNaTela[];
+  /** Só os ativos: espaço desligado não se escolhe num contrato novo. */
+  espacos: EspacoNaTela[];
+  hoje: string;
+};
+
+export function buscarContratos(opcoes?: {
+  somenteVigentes?: boolean;
+}): Promise<RespostaDeContratos> {
+  return pedir(
+    `/api/admin/financeiro/contratos${opcoes?.somenteVigentes ? "?vigentes=1" : ""}`,
+  );
+}
+
+export type EntradaDeContrato = {
+  clienteId?: string | null;
+  empresaId?: string | null;
+  espacoId?: string | null;
+  valorMensal: string;
+  diaVencimento: number;
+  /** NULO = sem horas inclusas. Zero é recusado pelo servidor. */
+  cotaHoras?: number | null;
+  inicio: string;
+  fim?: string | null;
+  observacao?: string | null;
+};
+
+export function criarContrato(
+  entrada: EntradaDeContrato,
+): Promise<{ contrato: ContratoNaTela }> {
+  return pedir("/api/admin/financeiro/contratos", {
+    method: "POST",
+    body: JSON.stringify(entrada),
+  });
+}
+
+/**
+ * Edita o contrato.
+ *
+ * AUMENTAR O VALOR NÃO RETROAGE: as cobranças já geradas ficam com o valor que
+ * era, porque ele viajou para o lançamento e congelou lá. Mesma regra do valor
+ * da reserva e do preço do empório.
+ */
+export function editarContrato(
+  id: string,
+  mudanca: Partial<EntradaDeContrato> & { ativo?: boolean },
+): Promise<{ contrato: ContratoNaTela }> {
+  return pedir(`/api/admin/financeiro/contratos/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(mudanca),
+  });
+}
+
+/** O extrato do mensalista: o que foi cobrado, pago e o que está em atraso. */
+export function buscarCobrancas(
+  contratoId: string,
+): Promise<{ cobrancas: LancamentoNaTela[] }> {
+  return pedir(`/api/admin/financeiro/contratos/${contratoId}/cobrancas`);
+}
+
+/**
+ * GERA as cobranças de um mês.
+ *
+ * É IDEMPOTENTE: clicar duas vezes em "gerar dezembro" não cobra em dobro — a
+ * trava é o índice único (contrato, mês) no banco. A resposta traz o relatório
+ * do que nasceu, do que já existia e do que ficou de fora, com o motivo.
+ */
+export function gerarMensalidades(
+  competencia: string,
+): Promise<{ relatorio: RelatorioDaGeracao }> {
+  return pedir("/api/admin/financeiro/mensalidades/gerar", {
+    method: "POST",
+    body: JSON.stringify({ competencia }),
+  });
+}
+
+/** As empresas, para escolher quem paga o contrato. */
+export function buscarEmpresas(): Promise<{
+  empresas: EmpresaParaEscolher[];
+}> {
+  return pedir("/api/admin/empresas");
 }

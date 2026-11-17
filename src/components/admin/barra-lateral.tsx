@@ -8,9 +8,11 @@ import {
   ChartColumn,
   ClipboardList,
   Clock,
+  DoorClosed,
   DoorOpen,
   FileText,
   History,
+  Landmark,
   Menu,
   MessageSquare,
   Package,
@@ -61,6 +63,8 @@ const DESENHOS: Record<NomeDoIcone, typeof CalendarDays> = {
   Wallet,
   Tags,
   Truck,
+  Landmark,
+  DoorClosed,
 };
 
 /**

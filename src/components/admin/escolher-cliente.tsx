@@ -5,8 +5,48 @@ import { useEffect, useState } from "react";
 import { Campo } from "@/components/ui/campo";
 import { telefoneVisivel } from "@/lib/telefone";
 
-import { procurarClientes } from "./api";
-import type { ClienteParaEscolher } from "./tipos";
+import { ErroDaApi } from "@/components/reserva/api";
+
+/** O cliente CADASTRADO, como a busca devolve. */
+export type ClienteParaEscolher = {
+  id: string;
+  nome: string;
+  /**
+   * PODE SER VAZIO: é o cliente que só tem reserva lançada no telefone do
+   * balcão e nunca deixou o número dele.
+   */
+  telefones: string[];
+  outrosNomes: string[];
+  reservas: number;
+  ultimaReserva: string | null;
+  empresa: { id: string; nome: string } | null;
+};
+
+/**
+ * A BUSCA MORA AQUI, e não na camada de rede de uma tela.
+ *
+ * Este seletor é usado pelo empório e pelo contrato de mensalidade, e a rota
+ * `/api/admin/clientes` é genérica — não é de nenhum dos dois. Deixando a
+ * busca em cada tela, cada uma teria a própria cópia, e corrigir a busca num
+ * lugar deixaria o outro para trás.
+ */
+async function procurarClientes(
+  termo: string,
+  sinal?: AbortSignal,
+): Promise<{ clientes: ClienteParaEscolher[] }> {
+  const resposta = await fetch(
+    `/api/admin/clientes?q=${encodeURIComponent(termo)}`,
+    { signal: sinal, cache: "no-store" },
+  );
+
+  const corpo: unknown = await resposta.json().catch(() => null);
+
+  if (!resposta.ok) {
+    throw new ErroDaApi(resposta.status, "Não conseguimos procurar o cliente.");
+  }
+
+  return corpo as { clientes: ClienteParaEscolher[] };
+}
 
 /**
  * ESCOLHER O CLIENTE DO CADASTRO, nunca digitar o nome.

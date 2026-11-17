@@ -358,6 +358,7 @@ model Empresa {
   clientes       Cliente[]
   demonstrativos Demonstrativo[]
   lancamentos    Lancamento[]
+  contratos      ContratoMensal[]
 
   @@map("empresas")
 }
@@ -429,6 +430,7 @@ model Cliente {
   demonstrativos  Demonstrativo[]
   consumosEmporio ConsumoDoEmporio[]
   lancamentos     Lancamento[]
+  contratos       ContratoMensal[]
 
   @@index([nome])
   @@index([empresaId])
@@ -1302,6 +1304,20 @@ model Lancamento {
   /// dois NULOs nao colidem num indice unico do Postgres.
   emporioDia DateTime? @map("emporio_dia") @db.Date
 
+  /// O CONTRATO de mensalidade que esta cobranca atende, quando ela nasceu de
+  /// "gerar as mensalidades do mes". NULO e o normal.
+  contratoId String?         @map("contrato_id")
+  contrato   ContratoMensal? @relation(fields: [contratoId], references: [id])
+
+  /// O MES COBRADO, como "2026-12". Nao e o vencimento: o contrato que vence
+  /// dia 10 cobra dezembro em 10/12 e o que vence dia 5 cobra dezembro em
+  /// 05/12 — os dois sao a mensalidade DE dezembro.
+  ///
+  /// E ela, junto com o contrato, que forma a trava de "uma cobranca por mes":
+  /// sem isso, dois cliques em "gerar" dobrariam a receita do mes e cada linha
+  /// continuaria parecendo certa.
+  competencia String?
+
   /// O nome vai GRAVADO junto com a chave: o usuario pode ser desligado, e
   /// "alguem lancou isso" nao serve de explicacao seis meses depois.
   criadoPorId   String?  @map("criado_por_id")
@@ -1320,4 +1336,93 @@ model Lancamento {
   @@index([empresaId])
   @@index([fornecedorId])
   @@map("lancamentos")
+}
+
+// -----------------------------------------------------------------------------
+// FASE 16, PARTE C — os espacos de locacao mensal e as mensalidades
+// -----------------------------------------------------------------------------
+
+/// Um espaco alugado por MES — as salas privativas do coworking.
+///
+/// POR QUE NAO ENTRA EM "Sala", e isto e o ponto: "salas" e a tabela da
+/// AGENDA. Uma linha ali aparece no site publico para qualquer um reservar,
+/// entra na grade de disponibilidade, nos relatorios de reserva e nas travas
+/// de sobreposicao. Pondo os espacos mensais la, um cliente poderia reservar
+/// por hora a sala que outro aluga por mes.
+///
+/// Nao se exclui, desliga-se — mesma regra de salas, empresas, areas de
+/// atuacao, clientes, categorias e fornecedores.
+model Espaco {
+  id    String  @id @default(uuid(7))
+  nome  String  @unique
+  ativo Boolean @default(true)
+  ordem Int
+
+  /// Metragem, andar, o que a equipe quiser anotar. Texto livre: aqui nao ha
+  /// regra de negocio nenhuma pendurada.
+  observacao String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  contratos ContratoMensal[]
+
+  @@index([ativo, ordem])
+  @@map("espacos")
+}
+
+/// O CONTRATO de um mensalista.
+///
+/// Ele e a resposta para a pergunta que o dono fez: *"como que o sistema iria
+/// saber que ta pago?"*. O contrato diz QUANTO e QUANDO; a cobranca do mes
+/// nasce dele, e alguem marca que recebeu — exatamente como o dinheiro chega,
+/// um Pix por mes.
+model ContratoMensal {
+  id String @id @default(uuid(7))
+
+  /// QUEM PAGA: uma pessoa ou uma empresa, nunca as duas (trava no banco). O
+  /// demonstrativo ja aceita os dois desde 11/11, e pela mesma razao: "Para:
+  /// Toca Imobiliaria" no cabecalho e a empresa, nao uma pessoa.
+  clienteId String?  @map("cliente_id")
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  /// O espaco ocupado. NULO e legitimo: ha mensalista que paga pelo acesso e
+  /// pelas horas inclusas, sem sala propria.
+  espacoId String? @map("espaco_id")
+  espaco   Espaco? @relation(fields: [espacoId], references: [id])
+
+  valorMensal Decimal @map("valor_mensal") @db.Decimal(10, 2)
+
+  /// O dia do mes, de 1 a 31. Mes que nao tem aquele dia (31 em fevereiro) cai
+  /// no ULTIMO dele, e quem faz essa conta e a aplicacao.
+  diaVencimento Int @map("dia_vencimento")
+
+  /// HORAS DE SALA INCLUSAS na mensalidade. NULO = sem cota, toda hora e
+  /// cobrada. Zero e recusado pelo banco: seria "tem plano com zero hora", que
+  /// e a mesma coisa que nao ter cota dita de um jeito que a tela leria
+  /// diferente.
+  cotaHoras Int? @map("cota_horas")
+
+  inicio DateTime  @db.Date
+  /// NULO = vigente. Preenchido = o contrato terminou naquele dia.
+  fim    DateTime? @db.Date
+
+  /// Desligado para de gerar cobranca; o historico fica inteiro.
+  ativo      Boolean @default(true)
+  observacao String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  /// As cobrancas geradas. A trava de "uma por mes" esta no indice da migracao.
+  cobrancas Lancamento[]
+
+  @@index([clienteId])
+  @@index([empresaId])
+  @@index([espacoId])
+  @@index([ativo])
+  @@map("contratos_mensais")
 }
