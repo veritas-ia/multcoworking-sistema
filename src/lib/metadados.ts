@@ -13,6 +13,10 @@ import type { Metadata } from "next";
 
 import { ehPrevia } from "@/lib/ambiente";
 import { NOME_DA_MARCA, urlDoSite } from "@/lib/marca";
+import {
+  CAMINHO_DO_MANIFESTO_DO_PAINEL,
+  nomeNoCelular,
+} from "@/lib/manifesto";
 
 /**
  * O titulo que aparece na ABA do navegador.
@@ -25,9 +29,6 @@ function tituloDaPagina(titulo: string): string {
   const completo = `${titulo} | ${NOME_DA_MARCA}`;
   return ehPrevia() ? `PRÉVIA · ${completo}` : completo;
 }
-
-export const DESCRICAO_DO_SITE =
-  "Reserve a Sala CI, a Sala de Reunião ou a Sala Container em poucos toques.";
 
 /**
  * Pagina que o cliente ve.
@@ -70,6 +71,24 @@ export function metadadosPublicos(entrada: {
       title: titulo,
       description: entrada.descricao,
     },
+    /**
+     * A PARTE QUE SO O IPHONE LE.
+     *
+     * O iPhone nao usa a ficha do aplicativo para decidir duas coisas:
+     *
+     *   - "capable" e o que faz o site abrir SEM a barra de endereco depois
+     *     de salvo na tela de inicio. Sem isso, o iPhone antigo abre o site
+     *     dentro do Safari de sempre, e o ganho desaparece;
+     *   - "title" e o nome que ele escreve embaixo do icone. Sem isso ele usa
+     *     o titulo da pagina do momento, cortado — o icone nasceria chamado
+     *     "Agenda | Mult Cowo...", conforme a tela em que a pessoa estava
+     *     quando salvou.
+     */
+    appleWebApp: {
+      capable: true,
+      title: nomeNoCelular("site"),
+      statusBarStyle: "default",
+    },
   };
 }
 
@@ -79,5 +98,34 @@ export function metadadosDoPainel(titulo: string): Metadata {
     metadataBase: urlDoSite(),
     title: tituloDaPagina(titulo),
     robots: { index: false, follow: false },
+    // A FICHA DO APLICATIVO DA EQUIPE, e nao a do site.
+    //
+    // E o que faz o icone da recepcionista abrir o PAINEL. Sem esta linha
+    // valeria a ficha do site publico, que o Next amarra em todas as paginas,
+    // e o icone dela abriria a tela de reservar do cliente — ela teria de
+    // navegar ate o painel toda vez, o contrario do ganho.
+    //
+    // Fica AQUI, e nao em cada pagina, pelo mesmo motivo do "nao me indexe"
+    // logo acima: escrito a mao pagina por pagina, a proxima tela nova nasce
+    // sem ele e ninguem percebe.
+    manifest: CAMINHO_DO_MANIFESTO_DO_PAINEL,
+    /**
+     * A PARTE QUE SO O IPHONE LE.
+     *
+     * O iPhone nao usa a ficha do aplicativo para decidir duas coisas:
+     *
+     *   - "capable" e o que faz o site abrir SEM a barra de endereco depois
+     *     de salvo na tela de inicio. Sem isso, o iPhone antigo abre o site
+     *     dentro do Safari de sempre, e o ganho desaparece;
+     *   - "title" e o nome que ele escreve embaixo do icone. Sem isso ele usa
+     *     o titulo da pagina do momento, cortado — o icone nasceria chamado
+     *     "Agenda | Mult Cowo...", conforme a tela em que a pessoa estava
+     *     quando salvou.
+     */
+    appleWebApp: {
+      capable: true,
+      title: nomeNoCelular("painel"),
+      statusBarStyle: "default",
+    },
   };
 }

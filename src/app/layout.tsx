@@ -2,7 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { FaixaDePrevia } from "@/components/ui/faixa-de-previa";
-import { DESCRICAO_DO_SITE, metadadosPublicos } from "@/lib/metadados";
+import { DESCRICAO_DO_SITE } from "@/lib/marca";
+import { metadadosPublicos } from "@/lib/metadados";
 
 import "./globals.css";
 

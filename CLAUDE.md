@@ -2421,3 +2421,81 @@ linha vem da categoria, nunca do sinal do valor.
   junta de volta**, e tem um efeito ruim: o número volta a aceitar vínculo, e a próxima
   reserva lançada nele cria mais um cadastro e prende o número a ele. Para um número que
   é da casa mesmo, **a marcação deve ficar**.
+
+### O ícone na tela de início do celular (17/11/2026) — último item da Fase 16
+- **Pedido do dono**, depois de descobrir que dá para fazer sem loja de aplicativos:
+  *"Cara, nem sabia que dava para fazer isso sem precisar virar um app oficial da App
+  Store. Tem como fazer isso também para Android ou não? De qualquer forma, eu também
+  quero que você faça isso depois sim!"*
+- **O que é:** o próprio site, com uma ficha (`manifest`) que diz ao celular como ele se
+  chama, de que cor é e qual tela abrir. Salvo na tela de início, abre **em tela cheia,
+  sem a barra de endereço**. Não é aplicativo de loja e não precisa de nenhuma.
+- **Serve iPhone E Android.** No Android o Chrome **oferece a instalação sozinho** por
+  causa da ficha; no iPhone é "Compartilhar → Adicionar à Tela de Início", que já
+  funcionava, mas abria **com** a barra de endereço e com o nome da página do momento
+  embaixo do ícone.
+
+#### SÃO DUAS FICHAS, e esse é o ponto
+- A **pública** abre o site (`/`); a **do painel** abre o painel (`/admin`).
+- Com uma ficha só, o ícone da recepcionista abriria **a tela de reservar do cliente**, e
+  ela teria de navegar até o painel toda vez — o contrário do ganho. É no painel que está
+  o uso real: a recepção no tablet e o dono conferindo relatório no celular.
+- A do painel é amarrada em **`metadadosDoPainel`**, e não em cada página: assim a
+  próxima tela nova do painel já nasce com ela. Mesma razão do "não me indexe" que já
+  morava ali.
+- Ela é servida **fora de `/admin`** (`/manifest-painel.webmanifest`): o middleware exige
+  login em tudo que começa com `/admin`, e o navegador lê a ficha **antes** de alguém
+  entrar. Lá dentro ela viraria um redirecionamento para o login, e o celular diria
+  apenas que não conseguiu instalar — sem explicar por quê. Não há nada sigiloso nela.
+- `start_url` do painel é **`/admin`**, e não `/admin/agenda`: aquela página é a porta de
+  entrada feita para o celular, que cumprimenta e mostra os quatro atalhos mais usados
+  justamente porque ali o menu fica escondido atrás do botão.
+
+#### SEM FUNCIONAMENTO OFFLINE, de propósito
+Um sistema que guardasse a agenda no aparelho mostraria uma agenda **velha**, e alguém
+lançaria reserva em cima de horário que acabou de ser ocupado. Risco grande para ganho
+nenhum. **Não existe service worker neste projeto, e não deve existir** sem que esse
+problema seja resolvido antes.
+
+#### A PRÉVIA PRECISOU APARECER AQUI TAMBÉM
+Com os dois sistemas salvos no mesmo celular, a lista de aplicativos é **outra moldura
+onde a faixa preta não aparece** — como a barra de abas. Então: o nome curto da prévia é
+**"PRÉVIA"** sozinho (em vez de "Mult"/"Painel"), o nome completo leva **"PRÉVIA ·"** na
+frente, e a **cor da barra de cima é PRETA**, igual à faixa — a de verdade abre amarela.
+Dois ícones com o mesmo nome na mesma tela seria o acidente das duas abas, de novo.
+
+As duas fichas são geradas **a cada pedido** (`dynamic = "force-dynamic"`), pelo mesmo
+motivo do `robots.txt`: a variável `AMBIENTE` só existe quando o container **sobe**, e
+congelada na construção da imagem a ficha da prévia sairia com o nome e a cor do sistema
+de verdade.
+
+#### TODA FALHA AQUI É SILENCIOSA — por isso tem 22 testes
+- **Faltando o ícone de 192 pixels, o Android simplesmente nunca OFERECE a instalação.**
+  Não dá erro, não escreve nada: o convite só não aparece. Os ícones de 64 (abinha) e 180
+  (iPhone) que já existiam não atendem — por isso a rota nova `/icone/[tamanho]`.
+- **A ficha e a rota do ícone leem a MESMA lista** (`TAMANHOS_DE_ICONE`). Escritos em dois
+  lugares, bastaria a ficha pedir um tamanho que a rota não desenha para o ícone sumir,
+  calado. Há teste conferindo que todo tamanho pedido é um que a rota desenha.
+- **A lista é fechada**: sem isso, um estranho pediria `/icone/20000` e ocuparia o
+  servidor desenhando a imagem.
+- **`display: "standalone"`** é o que tira a barra de endereço; com `"browser"` o
+  aplicativo abre igual a uma aba comum e o ganho desaparece sem erro.
+- **No iPhone, duas etiquetas próprias** (`appleWebApp`): `capable` é o que faz abrir sem
+  a barra de endereço no iOS antigo, e `title` é o nome embaixo do ícone — sem ele o
+  iPhone usa o título da página do momento, cortado ("Agenda | Mult Cowo..."). Há teste de
+  que esse nome é **o mesmo** que a ficha do Android usa: aparelhos diferentes mostrando
+  nomes diferentes para o mesmo ícone seria defeito que só aparece na mão de quem usa.
+- **Cada tamanho aparece duas vezes na ficha**, como `any` e como `maskable`: o Android
+  recorta o ícone em círculo ou em quadrado arredondado conforme o aparelho, e sem o aviso
+  ele desenha o nosso quadrado amarelo **dentro** de outro quadrado branco, com moldura em
+  volta. A letra ocupa **metade** do quadrado justamente para nenhum recorte comê-la — ao
+  contrário do ícone da abinha, que ninguém recorta.
+- A regra do tamanho mora em **`src/lib/manifesto.ts`**, e não dentro da rota: a rota
+  desenha imagem e por isso é `.tsx`, que **o Vitest não consegue abrir** (o Next exige
+  `jsx: "preserve"`). Mesma razão de `metadados.ts` existir.
+
+#### Efeito colateral arrumado no caminho
+`DESCRICAO_DO_SITE` **mudou de `metadados.ts` para `marca.ts`**. A ficha precisa dela e os
+metadados precisam da ficha: deixada onde estava, as duas peças se importariam **em
+círculo**, que é justamente o jeito de uma delas chegar vazia na hora de rodar. Ela é
+texto de marca e o lugar certo sempre foi `marca.ts`.

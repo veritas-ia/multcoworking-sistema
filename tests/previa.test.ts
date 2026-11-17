@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import robots from "@/app/robots";
 import { ehPrevia } from "@/lib/ambiente";
+import { manifestoDoPainel, manifestoPublico } from "@/lib/manifesto";
 import { metadadosDoPainel, metadadosPublicos } from "@/lib/metadados";
 
 const AMBIENTE_ORIGINAL = process.env.AMBIENTE;
@@ -66,6 +67,21 @@ describe("quando a previa esta ligada", () => {
     expect(String(metadadosDoPainel("Agenda").title)).toMatch(/^PRÉVIA · /);
   });
 
+  it("avisa NO ICONE do celular, que e a outra moldura sem faixa", () => {
+    // Com os dois sistemas salvos na tela de inicio do mesmo celular, nao ha
+    // faixa nenhuma na lista de aplicativos: so o nome embaixo do icone e a
+    // cor da barra de cima distinguem um do outro. Dois icones com o mesmo
+    // nome seria o acidente das duas abas, de novo.
+    ligarPrevia();
+
+    for (const ficha of [manifestoPublico(), manifestoDoPainel()]) {
+      expect(ficha.short_name).toBe("PRÉVIA");
+      expect(String(ficha.name)).toMatch(/^PRÉVIA · /);
+      // Preta, igual a faixa. A de verdade abre amarela.
+      expect(ficha.theme_color).toBe("#000000");
+    }
+  });
+
   it("some do Google mesmo nas paginas publicas", () => {
     // Sao duas copias do mesmo site. Indexadas as duas, o cliente abriria
     // pela busca a que nao vale e reservaria nela.
@@ -99,6 +115,14 @@ describe("em producao, nada disso existe", () => {
   it("o titulo da aba continua o de sempre", () => {
     expect(String(metadadosPublicos(PUBLICA).title)).not.toContain("PRÉVIA");
     expect(String(metadadosDoPainel("Agenda").title)).not.toContain("PRÉVIA");
+  });
+
+  it("o icone do celular continua com o nome e a cor da marca", () => {
+    for (const ficha of [manifestoPublico(), manifestoDoPainel()]) {
+      expect(ficha.short_name).not.toContain("PRÉVIA");
+      expect(String(ficha.name)).not.toContain("PRÉVIA");
+      expect(ficha.theme_color).toBe("#FFC700");
+    }
   });
 
   it("a pagina publica continua indexada, e o painel continua fora", () => {

@@ -12,12 +12,13 @@
 import { describe, expect, it } from "vitest";
 
 import robots from "@/app/robots";
-import { NOME_DA_MARCA, enderecoDoSite, urlDoSite } from "@/lib/marca";
 import {
   DESCRICAO_DO_SITE,
-  metadadosDoPainel,
-  metadadosPublicos,
-} from "@/lib/metadados";
+  NOME_DA_MARCA,
+  enderecoDoSite,
+  urlDoSite,
+} from "@/lib/marca";
+import { metadadosDoPainel, metadadosPublicos } from "@/lib/metadados";
 
 const metadataDaRaiz = metadadosPublicos({
   titulo: "Reservar sala",
