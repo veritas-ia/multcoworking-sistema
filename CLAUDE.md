@@ -1655,13 +1655,202 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
 - **O que fecha o ciclo:** o consumo acumulado do mensalista entra sozinho no controle
   de horas, em vez de alguém somar a ficha e digitar um valor.
 
-### Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)
+### Fase 15, Parte D — as telas do empório (17/11/2026)
+- **O motor estava pronto desde 16/11 e invisível.** Quem abrisse a prévia não via
+  empório nenhum: tudo existia por dentro, com rota e teste, e sem tela não existe para
+  quem precisa aprovar.
+- **Quatro telas, e cada uma é um item da barra lateral** (`/admin/emporio?aba=…`),
+  na ordem da frequência de uso: **Lançar consumo** (várias vezes por dia), **Contagem
+  do dia** (uma vez por dia), **Produtos** (quase nunca) e **Movimentos** (quando um
+  número não bate). Mesma decisão da Fase 17: o dono quis tudo visível na lateral, e
+  esconder quatro destinos atrás de um cartão foi exatamente o que ele reclamou.
+- **A garantia do compilador foi copiada de Configurações:** `Record<AbaDoEmporio, …>`.
+  **Conferido removendo a aba "contagem" de propósito:** `tsc` recusa com "Property
+  'contagem' is missing". Item de menu que leva a tela em branco não dá erro nenhum em
+  tempo de execução.
+
+#### A regra de "qual item acende" deixou de citar a tela por escrito
+- Até aqui `estaAceso` comparava com `"/admin/configuracoes"` escrito no código. Com a
+  **segunda** tela de abas, isso quebra de um jeito silencioso: nada impede duas abas
+  de telas diferentes de terem o mesmo nome, e a comparação por nome de aba acenderia
+  **duas** linhas do menu ao mesmo tempo.
+- Agora o endereço sai do **próprio item** (`item.tela`), e `ItemDoMenu` virou uma
+  **união de três formatos** — item simples, de Configurações, do Empório. Isso preserva
+  o tipo da aba de cada tela: com um `aba: string` genérico, a tela de Configurações
+  voltaria a aceitar uma aba que não existe nela.
+- **O teste que existia pegou a mudança na hora** (ele comparava com o endereço escrito
+  à mão) — foi por isso que ele existia. Três testes novos: aba do Empório não acende
+  item de Configurações e vice-versa, a aba padrão de cada tela, e o teto de um item
+  aceso por tela.
+
+#### As decisões de tela, e o motivo de cada uma
+- **O produto é escolhido numa grade com FOTO**, não num seletor de texto: foi pedido do
+  dono (*"tem ali a imagem do produto existente hoje aqui de cada produto"*), e a
+  recepcionista reconhece a embalagem mais rápido do que lê trinta nomes numa lista.
+  Produto sem foto mostra a inicial, nunca um buraco.
+- **Preço zero aparece como "cortesia"**, e não como "R$ 0,00": os doze botões da máquina
+  de café são de graça e existem porque a máquina conta o consumo. "R$ 0,00" pareceria
+  cadastro pela metade.
+- **A tela mostra a PRÉVIA do total (`3× Kit Kat = R$ 19,50`), e só prévia.** Quem
+  multiplica é o servidor — a rota não aceita total. A prévia existe para a
+  recepcionista comparar com o papel **antes** de salvar, que é justamente a conferência
+  que não existia quando alguém somava a ficha de cabeça.
+- **Toda conta de dinheiro na tela passa por CENTAVOS** (`centavosDe`, `totalVisivel`).
+  O total do dia soma dezenas de linhas; em ponto flutuante acumularia diferença, e a
+  tela discordaria do servidor, que já soma em centavos.
+- **Depois de lançar, o cliente e o dia FICAM; produto, hora e quantidade voltam ao
+  início.** A ficha costuma ter várias linhas da mesma pessoa no mesmo dia, e limpar
+  tudo obrigaria a procurar o cliente de novo a cada linha.
+- **A lista do dia fica embaixo do formulário**, com o total. É a conferência contra a
+  parede: o que está no papel e não está ali, falta lançar. A ficha de papel **não tem
+  total** — este é o número que ninguém calculava.
+- **O estoque é recarregado do servidor depois de cada lançamento**, em vez de recalculado
+  na tela. Dois lugares fazendo a mesma conta é como começam dois números que discordam.
+- **"hoje" VEM DO SERVIDOR** (`dataLocalDe` na página), nunca de `new Date()` no
+  navegador. É o valor inicial e o teto dos campos de data; com o navegador do operador
+  em outro fuso, a tela ofereceria um dia que o servidor recusa por estar no futuro — e
+  a pessoa não teria como entender o erro.
+- **Na contagem, a diferença aparece AO LADO do campo enquanto a pessoa digita**, e não
+  só depois de gravar: ela vê o "faltaram 3" com a ficha ainda na mão. Depois de fechar
+  a tela não há mais como conferir de onde veio.
+- **Leitura de contador menor que a anterior é avisada na TELA, antes de gravar.** O
+  servidor recusa de todo jeito, mas levar a recusa depois de preencher trinta linhas
+  faria a equipe perder o trabalho. A mensagem diz qual foi a leitura anterior.
+- **Campo em branco na contagem não é zero, é "não contei"** — e a tela diz isso por
+  escrito. Tratar branco como zero geraria um ajuste enorme e falso.
+- **Em Movimentos só entram REPOSIÇÃO e PERDA.** VENDA não tem botão: ela nasce do
+  lançamento do consumo, que grava de quem foi. Vender por ali criaria saída de estoque
+  sem dono, e o empório pararia de bater com o que foi cobrado.
+- **Estoque negativo é explicado na tela** ("falta lançar reposição"), não escondido.
+  Sem a explicação a equipe acharia que o número quebrou e pararia de confiar nele.
+- **Reordenar produto é por BOTÃO, não arrastando** — a recepção mexe no tablet, e
+  arrastar não funciona pelo teclado. Mesma decisão das fotos das salas.
+
+#### O defeito de teste que apareceu ao rodar a suíte (17/11/2026)
+- Dez testes de `tests/consumo-emporio.test.ts` ficaram vermelhos **sem ninguém ter
+  mexido neles**. A causa: eles lançavam consumo **"hoje às 10:00"**, e o motor recusa
+  consumo no futuro. Às **9h06 de São Paulo**, 10:00 de hoje É futuro.
+- **A suíte passava de tarde e falhava de manhã.** É a mesma família do defeito já
+  registrado aqui ("teste com data: nunca fixa no futuro"), um nível mais fino: não é a
+  data que fica no futuro, é a **hora dentro do dia de hoje**.
+- **A regra:** em teste de consumo e de reserva lançada pelo balcão, o dia de referência
+  é **ontem** — que é também a verdade do negócio (a ficha é lida no dia seguinte).
+  Nenhum teste deve depender da hora em que a suíte roda.
+- A contagem diária **não tem esse problema**: ali a conferência é por dia, não por
+  hora, e o horário é só texto guardado como está no papel.
+
+### Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO (17/11/2026)
+
+> **Isto substitui a decisão de 12/11/2026** ("só entradas, despesa depois"). O dono
+> reabriu de propósito, depois de eu reler com ele o chat que originou a versão 2.0.
+> Fica registrado como mudança de regra, e não como exceção aberta por engano.
+
+#### O que o chat original pedia, e o que dele se aproveita
+- O chat era sobre **onde hospedar** um sistema preso noutra plataforma: Google Drive,
+  Cloudflare, Supabase, VPS, Docker, "sem login". **Quase nada disso se aplica** — aqui
+  o código é do dono no GitHub, roda no VPS dele com Docker, e o painel **tem login**,
+  que é o certo para uma tela que a equipe toda usa.
+- **O que importa são os cinco módulos financeiros**: lançamentos, fluxo de caixa, DRE,
+  painel e relatórios. E a observação que o próprio dono fez naquele chat, que virou a
+  Fase 15: *"a parte financeira tem que ter, mas também o controle de bebidas e
+  comidas… quem pediu, quanto pagou, a forma de pagamento e o controle de estoque"*.
+- **A DIFERENÇA DE TAMANHO que ninguém tinha notado:** aquele chat falava de **16 salas
+  com mensalidade** e ~R$ 400 mil/ano. O sistema cuida de **3 salas por hora**. Os
+  espaços de locação mensal — de onde vem a maior parte do dinheiro — **o sistema nunca
+  viu**. É isso que muda o tamanho desta fase.
+
+#### As cinco decisões do dono (17/11/2026)
+| Pergunta | Resposta |
+|---|---|
+| Tamanho do financeiro | **o caixa INTEIRO** do coworking: entradas e saídas |
+| Mensalidades | **entram, com controle de atraso** (inadimplência) |
+| DRE | **fica para depois** — sem meses de despesa lançada sairia vazia |
+| Espaços mensais | **cadastrados um por um**, para ver receita e ocupação de cada |
+| Cota de horas do plano | **o sistema passa a controlar e avisar quando passar** |
+
+**Três decisões antigas caem com isso, e ficam registradas como substituídas:**
+- "Fase 16 = só entradas, despesa fica para depois" → **entra despesa agora**;
+- "a mensalidade fica fora do sistema, nem valor nem dia de vencimento" (motivo da
+  recepcionista: *"eles pagam automático, não precisa de cobrança"*) → **entra com
+  valor, vencimento e atraso**;
+- "o demonstrativo NÃO trata horas incluídas no plano" → **passa a descontar a cota e
+  cobrar só o excedente**, que é o que a gestão faz hoje de cabeça.
+
+#### O PRINCÍPIO DA EDIÇÃO MANUAL (pergunta do dono, vale para o sistema todo)
+> *"entrada e saída vão poder ser editáveis manualmente, né? Tudo vai poder ser
+> editável? Porque seria ideal."*
+
+**A regra, em uma linha: tudo que a equipe digita, a equipe corrige. O que o sistema
+calcula, corrige-se na origem. O que já foi entregue ao cliente, não se reescreve —
+refaz-se.**
+
+- **Livremente editável e apagável** (com motivo obrigatório e registro em Histórico de
+  ações, igual à exclusão de reserva): lançamento feito à mão, categorias, fornecedores,
+  espaços, contrato do mensalista, saldo inicial. Erro de digitação é normal, e travar
+  a correção só faria a equipe parar de usar.
+- **O que vem automático (reserva, consumo do empório) edita-se NA ORIGEM.** O
+  lançamento é um **espelho** da reserva; editar o espelho faria o financeiro mostrar um
+  valor e o relatório outro — exatamente a doença da planilha da Toca, onde o total
+  digitado dizia R$ 3.033 e as linhas somavam R$ 3.023. **Saída de emergência:
+  "desvincular"** — o lançamento solta da reserva, vira manual e fica editável, com
+  registro de quem desvinculou. Nada fica trancado para sempre; só não se solta sem
+  perceber.
+- **As duas exceções de verdade:** demonstrativo já **enviado** (pedido do dono, regra
+  de 12/11) e **valor congelado** em reserva antiga. Reajuste de preço vale para o
+  futuro; se retroagisse, o faturamento do mês passado mudaria sozinho e nenhum
+  relatório fechado seria confiável. **Vale igual para a mensalidade:** aumentar o
+  contrato vale do próximo mês; as cobranças já geradas ficam com o valor que era.
+
+#### O plano aprovado, em cinco partes
+- **A — a fundação do lançamento.** Categorias de receita e despesa (nascem pela
+  migração com as 13 que o chat listou: aluguel, energia, água, internet, limpeza,
+  manutenção, funcionários, contabilidade, impostos, marketing, material, taxa de
+  cartão), fornecedores, e o lançamento com data, descrição, quem, categoria, forma de
+  pagamento, valor, vencimento e status.
+  - **"ATRASADO" NÃO É GRAVADO, É CALCULADO** — é pendente cujo vencimento já passou.
+    Gravado, dependeria de uma rotina rodar, e na prévia `CRON_ATIVO="false"`: nada
+    ficaria atrasado e pareceria defeito.
+  - Valor em **centavos**, como em todo o resto.
+- **B — as entradas que o sistema já sabe.** Reserva e consumo do empório viram
+  lançamento sozinhos, apontando para a origem em vez de serem digitados de novo.
+- **C — espaços e mensalidades.** Os espaços mensais vão numa **lista própria, separada
+  da tabela `salas`**: entrando ali, apareceriam no site público para qualquer um
+  reservar, na agenda e nos relatórios de reserva — a Fase 16 estragaria o que já
+  funciona. Contrato com valor, dia de vencimento, cota de horas, início e fim. A
+  geração da cobrança do mês é **idempotente** (marcar primeiro, igual aos lembretes):
+  gerar duas vezes criaria cobrança dobrada.
+- **D — a cota de horas no demonstrativo.** Separa o que está dentro da mensalidade do
+  que é hora extra. Os documentos **já emitidos não mudam** — já são congelados.
+- **E — fluxo de caixa e painel.** Saldo inicial, realizado, saldo do mês, contas a
+  receber e a pagar, projeção, lucro, margem, inadimplência e comparação com o mês
+  anterior.
+
+#### O que fica FORA, de propósito
+- **DRE** — decisão do dono de 17/11.
+- **Documentos por cliente** (contrato, comprovante, nota fiscal) — o chat pedia, no
+  Google Drive. Não foi pedido agora; dá para fazer depois no Cloudinary que já existe.
+- **Backup automático em nuvem** — é configuração do EasyPanel, não código. Hoje está
+  documentado como passo manual em `docs/deploy.md`.
+- **Ícone na tela de início do celular** (abrir em tela cheia, sem barra de endereço).
+  O dono quis: *"eu também quero que você faça isso depois sim"*. **Fica para o fim da
+  Fase 16.** Serve iPhone **e Android** — no Android o Chrome oferece sozinho e a
+  notificação funciona, no iPhone não. **Sem funcionamento offline, de propósito:** o
+  sistema mostraria uma agenda velha guardada no aparelho e alguém reservaria em cima de
+  horário ocupado. Risco grande para ganho nenhum.
+
+### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
+> **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
+> "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem
+> procurar por que o escopo cresceu, e para ninguém "restaurar" o escopo menor achando
+> que a ampliação foi descuido.
+
 - Reservas, empório e o que mais entrar, por período e por forma de pagamento.
 - **Despesas ficam para depois**, mas o banco já nasce com elas previstas — lançamentos
   com tipo (entrada/saída), só sem a tela de saída. Sem isso a fase seguinte obrigaria
-  a refazer.
+  a refazer. → **MUDOU: a despesa entra agora.**
 - **DRE não entra**, e o motivo é de escopo: *"DRE é balanço, é parte de contábeis"*. A
-  decisão de ir até lá é do dono do coworking, depois de ver a prévia.
+  decisão de ir até lá é do dono do coworking, depois de ver a prévia. → **CONTINUA
+  valendo:** o dono manteve a DRE fora em 17/11.
 
 ### O cliente pertence a uma EMPRESA (11/11/2026)
 - **O que o dono viu, depois do deploy:** procurou "Toca" no controle de horas e achou

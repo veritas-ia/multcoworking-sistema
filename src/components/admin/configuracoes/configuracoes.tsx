@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { todosOsItens, type AbaDeConfiguracao } from "@/lib/menu-admin";
+import { itensDeConfiguracao, type AbaDeConfiguracao } from "@/lib/menu-admin";
 import { cn } from "@/lib/utils";
 
 import { AbaDeAcoes } from "./aba-acoes";
@@ -54,13 +54,11 @@ const CONTEUDOS: Record<AbaDeConfiguracao, () => ReactNode> = {
  * tela: assim recarregar a pagina, ou mandar o link para uma colega, cai no
  * mesmo lugar.
  */
-const ABAS: readonly Aba[] = todosOsItens()
-  .filter((item) => item.aba !== null)
-  .map((item) => ({
-    id: item.aba!,
-    rotulo: item.rotulo,
-    conteudo: CONTEUDOS[item.aba!],
-  }));
+const ABAS: readonly Aba[] = itensDeConfiguracao().map((item) => ({
+  id: item.aba,
+  rotulo: item.rotulo,
+  conteudo: CONTEUDOS[item.aba],
+}));
 
 export function Configuracoes() {
   const navegador = useRouter();

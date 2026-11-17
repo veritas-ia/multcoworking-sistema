@@ -16,8 +16,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   ABA_PADRAO,
+  ABA_PADRAO_EMPORIO,
   estaAceso,
+  itensDeConfiguracao,
+  itensDoEmporio,
   MENU,
+  TELA_CONFIGURACOES,
+  TELA_EMPORIO,
   telaAberta,
   todosOsItens,
 } from "@/lib/menu-admin";
@@ -40,10 +45,33 @@ describe("o menu tem tudo que existe no painel", () => {
    * lugar nenhum, vira erro de compilacao — que aparece antes do commit, e
    * nao num teste que alguem pode marcar como pendente.
    */
-  it("todos os itens de Configurações apontam para a tela dela", () => {
+  /**
+   * Cada item com aba aponta para a tela DELE.
+   *
+   * Antes isto comparava com "/admin/configuracoes" escrito por extenso, e
+   * quando o emporio entrou — a segunda tela com abas — o teste acusou os
+   * itens dele como se fossem de configuracoes. O endereco tem de sair do
+   * proprio item: senao, um item do emporio apontando para configuracoes
+   * passaria batido e levaria a recepcao para uma aba que nao existe la.
+   */
+  it("todo item com aba aponta para a tela dele", () => {
     for (const item of todosOsItens()) {
-      if (item.aba !== null) {
-        expect(item.href).toBe(`/admin/configuracoes?aba=${item.aba}`);
+      if (item.tela !== null) {
+        expect(item.href).toBe(`${item.tela}?aba=${item.aba}`);
+      }
+    }
+  });
+
+  it("as duas telas com abas têm itens, e nenhum item solto", () => {
+    expect(itensDeConfiguracao().length).toBeGreaterThan(0);
+    expect(itensDoEmporio().length).toBeGreaterThan(0);
+
+    // Todo item ou é de uma das duas telas com abas, ou é um link direto.
+    for (const item of todosOsItens()) {
+      if (item.tela !== null) {
+        expect([TELA_CONFIGURACOES, TELA_EMPORIO]).toContain(item.tela);
+      } else {
+        expect(item.href.startsWith("/admin/")).toBe(true);
       }
     }
   });
@@ -93,6 +121,38 @@ describe("qual item fica aceso", () => {
     expect(estaAceso(item("Clientes"), "/admin/agenda", "clientes")).toBe(false);
   });
 
+  /**
+   * A ARMADILHA NOVA, trazida pelo emporio: duas telas com abas.
+   *
+   * Nada impede duas abas de telas diferentes de se chamarem igual. Se a regra
+   * comparasse so o nome da aba, abrir "/admin/emporio?aba=produtos" acenderia
+   * tambem um item de configuracoes com a mesma aba — e a pessoa veria dois
+   * lugares acesos, sem saber em qual esta.
+   */
+  it("aba do Empório não acende item de Configurações, e vice-versa", () => {
+    const acesosNoEmporio = todosOsItens().filter((i) =>
+      estaAceso(i, TELA_EMPORIO, "produtos"),
+    );
+
+    expect(acesosNoEmporio.map((i) => i.rotulo)).toEqual(["Produtos"]);
+
+    // E o caminho inverso: na tela de configuracoes, item de emporio apagado.
+    for (const doEmporio of itensDoEmporio()) {
+      expect(estaAceso(doEmporio, TELA_CONFIGURACOES, doEmporio.aba)).toBe(false);
+    }
+  });
+
+  it("sem aba, o Empório acende a mesma que a tela dele abre", () => {
+    const acesos = todosOsItens().filter((i) =>
+      estaAceso(i, TELA_EMPORIO, null),
+    );
+
+    expect(acesos).toHaveLength(1);
+    expect(acesos[0]?.aba).toBe(ABA_PADRAO_EMPORIO);
+    // E a padrao de uma tela nao pode ser a da outra.
+    expect(ABA_PADRAO_EMPORIO).not.toBe(ABA_PADRAO);
+  });
+
   it("em qualquer tela do painel, no máximo UM item acende", () => {
     const telas: [string, string | null][] = [
       ["/admin", null],
@@ -100,9 +160,11 @@ describe("qual item fica aceso", () => {
       ["/admin/relatorios", null],
       ["/admin/demonstrativos", null],
       ["/admin/configuracoes", null],
+      ["/admin/emporio", null],
+      // Cada aba na tela DELA: é assim que a pessoa realmente navega.
       ...todosOsItens()
-        .filter((i) => i.aba)
-        .map((i): [string, string | null] => ["/admin/configuracoes", i.aba]),
+        .filter((i) => i.tela !== null)
+        .map((i): [string, string | null] => [i.tela!, i.aba]),
     ];
 
     for (const [caminho, aba] of telas) {

@@ -18,6 +18,14 @@
  * Agora tudo que existe aparece na lateral. Isso e possivel de graca porque
  * as abas de Configuracoes JA funcionam por endereco ("?aba=clientes"): cada
  * item e so um link diferente, sem refazer nada por dentro.
+ *
+ * O QUE MUDOU EM 17/11/2026
+ *
+ * O emporio entrou, e ele tambem e uma tela com abas. A regra de "qual acende"
+ * deixou de citar "/admin/configuracoes" por escrito e passou a sair do
+ * proprio item — senao a primeira aba do emporio acenderia junto com a de
+ * configuracoes, ou nenhuma acenderia, dependendo de qual nome estivesse
+ * escrito na comparacao.
  */
 
 /** Os icones usados, pelo nome do lucide. A tela traduz para o desenho. */
@@ -35,7 +43,11 @@ export type NomeDoIcone =
   | "ScrollText"
   | "MessageSquare"
   | "UserCog"
-  | "History";
+  | "History"
+  | "ShoppingBasket"
+  | "ClipboardList"
+  | "Package"
+  | "ArrowLeftRight";
 
 /**
  * As abas de Configuracoes, como TIPO.
@@ -58,29 +70,84 @@ export type AbaDeConfiguracao =
   | "usuarios"
   | "acoes";
 
-export type ItemDoMenu = {
-  rotulo: string;
-  href: string;
-  icone: NomeDoIcone;
-  /**
-   * Para os itens de Configuracoes: qual aba eles abrem. Nulo nos demais.
-   *
-   * Existe porque todos eles apontam para o MESMO caminho
-   * ("/admin/configuracoes") e so o parametro muda — sem isto, os onze
-   * acenderiam juntos.
-   */
-  aba: AbaDeConfiguracao | null;
+/** As abas do Emporio, pela mesma razao: o compilador cobra o conteudo. */
+export type AbaDoEmporio = "lancar" | "produtos" | "contagem" | "movimentos";
+
+/** As telas que guardam a aba escolhida no endereco. */
+export const TELA_CONFIGURACOES = "/admin/configuracoes";
+export const TELA_EMPORIO = "/admin/emporio";
+
+type Comum = { rotulo: string; href: string; icone: NomeDoIcone };
+
+/**
+ * Um item do menu.
+ *
+ * E uma UNIAO de tres formatos, e nao um tipo com campos soltos, de proposito:
+ * assim o `aba` de um item de configuracoes tem o tipo das abas DELA, e o do
+ * emporio o das abas DELE. Com um `aba: string` generico, a tela de
+ * configuracoes voltaria a aceitar uma aba que nao existe nela e o erro so
+ * apareceria no navegador, numa tela em branco.
+ */
+export type ItemSimples = Comum & { tela: null; aba: null };
+export type ItemDeConfiguracao = Comum & {
+  tela: typeof TELA_CONFIGURACOES;
+  aba: AbaDeConfiguracao;
 };
+export type ItemDoEmporio = Comum & {
+  tela: typeof TELA_EMPORIO;
+  aba: AbaDoEmporio;
+};
+
+export type ItemDoMenu = ItemSimples | ItemDeConfiguracao | ItemDoEmporio;
 
 export type GrupoDoMenu = { titulo: string; itens: ItemDoMenu[] };
 
 /**
- * A aba que Configuracoes abre quando o endereco nao diz qual.
+ * A aba que cada tela abre quando o endereco nao diz qual.
  *
- * A tela de configuracoes cai na primeira da lista nesse caso; a barra
- * precisa concordar, senao o item aceso e a aba aberta ficam diferentes.
+ * A tela cai na primeira da lista nesse caso; a barra precisa concordar com
+ * ela, senao o item aceso e a aba aberta ficam diferentes.
  */
 export const ABA_PADRAO: AbaDeConfiguracao = "salas";
+export const ABA_PADRAO_EMPORIO: AbaDoEmporio = "lancar";
+
+const PADRAO_DA_TELA: Record<
+  typeof TELA_CONFIGURACOES | typeof TELA_EMPORIO,
+  string
+> = {
+  [TELA_CONFIGURACOES]: ABA_PADRAO,
+  [TELA_EMPORIO]: ABA_PADRAO_EMPORIO,
+};
+
+/** Atalho para montar um item de Configuracoes sem repetir o endereco. */
+function configuracao(
+  rotulo: string,
+  aba: AbaDeConfiguracao,
+  icone: NomeDoIcone,
+): ItemDeConfiguracao {
+  return {
+    rotulo,
+    href: `${TELA_CONFIGURACOES}?aba=${aba}`,
+    icone,
+    tela: TELA_CONFIGURACOES,
+    aba,
+  };
+}
+
+/** O mesmo para o Emporio. */
+function emporio(
+  rotulo: string,
+  aba: AbaDoEmporio,
+  icone: NomeDoIcone,
+): ItemDoEmporio {
+  return {
+    rotulo,
+    href: `${TELA_EMPORIO}?aba=${aba}`,
+    icone,
+    tela: TELA_EMPORIO,
+    aba,
+  };
+}
 
 /**
  * O menu, agrupado.
@@ -89,12 +156,34 @@ export const ABA_PADRAO: AbaDeConfiguracao = "salas";
  * e aberta dezenas de vezes por dia, e "Histórico de ações" talvez uma vez
  * por mes. Quem usa o painel inteiro todo dia nao procura no menu — vai
  * direto, pela posicao.
+ *
+ * O EMPORIO tem grupo PROPRIO, e nao uma linha dentro de "Dia a dia": sao
+ * quatro destinos de uma rotina so (ler a ficha, contar a prateleira), e
+ * misturados com a agenda a pessoa teria de ler o menu inteiro para achar
+ * qual e qual.
  */
 export const MENU: readonly GrupoDoMenu[] = [
   {
     titulo: "Dia a dia",
     itens: [
-      { rotulo: "Agenda", href: "/admin/agenda", icone: "CalendarDays", aba: null },
+      {
+        rotulo: "Agenda",
+        href: "/admin/agenda",
+        icone: "CalendarDays",
+        tela: null,
+        aba: null,
+      },
+    ],
+  },
+  {
+    titulo: "Empório",
+    itens: [
+      // Dentro do grupo, a ordem tambem e de frequencia: a recepcionista
+      // lanca a ficha varias vezes por dia e mexe no catalogo quase nunca.
+      emporio("Lançar consumo", "lancar", "ShoppingBasket"),
+      emporio("Contagem do dia", "contagem", "ClipboardList"),
+      emporio("Produtos", "produtos", "Package"),
+      emporio("Movimentos", "movimentos", "ArrowLeftRight"),
     ],
   },
   {
@@ -104,12 +193,14 @@ export const MENU: readonly GrupoDoMenu[] = [
         rotulo: "Controle de horas",
         href: "/admin/demonstrativos",
         icone: "FileText",
+        tela: null,
         aba: null,
       },
       {
         rotulo: "Relatórios",
         href: "/admin/relatorios",
         icone: "ChartColumn",
+        tela: null,
         aba: null,
       },
     ],
@@ -117,83 +208,26 @@ export const MENU: readonly GrupoDoMenu[] = [
   {
     titulo: "Cadastros",
     itens: [
-      {
-        rotulo: "Clientes",
-        href: "/admin/configuracoes?aba=clientes",
-        icone: "Users",
-        aba: "clientes",
-      },
-      {
-        rotulo: "Empresas",
-        href: "/admin/configuracoes?aba=empresas",
-        icone: "Building2",
-        aba: "empresas",
-      },
-      {
-        rotulo: "Salas",
-        href: "/admin/configuracoes?aba=salas",
-        icone: "DoorOpen",
-        aba: "salas",
-      },
-      {
-        rotulo: "Áreas de atuação",
-        href: "/admin/configuracoes?aba=profissoes",
-        icone: "Briefcase",
-        aba: "profissoes",
-      },
-      {
-        rotulo: "Telefones do balcão",
-        href: "/admin/configuracoes?aba=telefones-balcao",
-        icone: "Phone",
-        aba: "telefones-balcao",
-      },
+      configuracao("Clientes", "clientes", "Users"),
+      configuracao("Empresas", "empresas", "Building2"),
+      configuracao("Salas", "salas", "DoorOpen"),
+      configuracao("Áreas de atuação", "profissoes", "Briefcase"),
+      configuracao("Telefones do balcão", "telefones-balcao", "Phone"),
     ],
   },
   {
     titulo: "Ajustes",
     itens: [
-      {
-        rotulo: "Horários",
-        href: "/admin/configuracoes?aba=horarios",
-        icone: "Clock",
-        aba: "horarios",
-      },
-      {
-        rotulo: "Parâmetros",
-        href: "/admin/configuracoes?aba=parametros",
-        icone: "SlidersHorizontal",
-        aba: "parametros",
-      },
-      {
-        rotulo: "Políticas",
-        href: "/admin/configuracoes?aba=politicas",
-        icone: "ScrollText",
-        aba: "politicas",
-      },
-      {
-        rotulo: "Mensagens",
-        href: "/admin/configuracoes?aba=mensagens",
-        icone: "MessageSquare",
-        aba: "mensagens",
-      },
-      {
-        rotulo: "Usuários",
-        href: "/admin/configuracoes?aba=usuarios",
-        icone: "UserCog",
-        aba: "usuarios",
-      },
+      configuracao("Horários", "horarios", "Clock"),
+      configuracao("Parâmetros", "parametros", "SlidersHorizontal"),
+      configuracao("Políticas", "politicas", "ScrollText"),
+      configuracao("Mensagens", "mensagens", "MessageSquare"),
+      configuracao("Usuários", "usuarios", "UserCog"),
     ],
   },
   {
     titulo: "Sistema",
-    itens: [
-      {
-        rotulo: "Histórico de ações",
-        href: "/admin/configuracoes?aba=acoes",
-        icone: "History",
-        aba: "acoes",
-      },
-    ],
+    itens: [configuracao("Histórico de ações", "acoes", "History")],
   },
 ];
 
@@ -203,32 +237,52 @@ export function todosOsItens(): ItemDoMenu[] {
 }
 
 /**
+ * Os itens de Configuracoes, com o tipo da aba PRESERVADO.
+ *
+ * Um `.filter()` comum devolveria `ItemDoMenu[]`, e o `aba` voltaria a ser
+ * "AbaDeConfiguracao | AbaDoEmporio | null" — perdendo justamente a garantia
+ * que a uniao existe para dar. Por isso a funcao declara o que devolve.
+ */
+export function itensDeConfiguracao(): ItemDeConfiguracao[] {
+  return todosOsItens().filter(
+    (item): item is ItemDeConfiguracao => item.tela === TELA_CONFIGURACOES,
+  );
+}
+
+/** Os itens do Emporio, pelo mesmo motivo. */
+export function itensDoEmporio(): ItemDoEmporio[] {
+  return todosOsItens().filter(
+    (item): item is ItemDoEmporio => item.tela === TELA_EMPORIO,
+  );
+}
+
+/**
  * Este item esta aceso?
  *
  * DUAS REGRAS, e a segunda e a que ninguem lembra:
  *
  *  1. item comum acende quando o caminho e o dele;
- *  2. item de CONFIGURACOES acende quando o caminho e o das configuracoes E a
+ *  2. item de uma tela com ABAS acende quando o caminho e o DAQUELA tela E a
  *     aba bate. Sem a segunda metade, os onze itens de configuracoes
  *     acenderiam todos ao mesmo tempo — e a pessoa nao saberia em qual esta.
  *
- * Sem aba no endereco, a tela de configuracoes abre a primeira da lista. A
- * barra precisa concordar com ela.
+ * Sem aba no endereco, a tela abre a primeira da lista dela. A barra precisa
+ * concordar com isso.
  */
 export function estaAceso(
   item: ItemDoMenu,
   caminho: string,
   aba: string | null,
 ): boolean {
-  if (item.aba === null) {
+  if (item.tela === null) {
     return caminho === item.href;
   }
 
-  if (caminho !== "/admin/configuracoes") {
+  if (caminho !== item.tela) {
     return false;
   }
 
-  return aba ? aba === item.aba : item.aba === ABA_PADRAO;
+  return aba ? aba === item.aba : item.aba === PADRAO_DA_TELA[item.tela];
 }
 
 /**

@@ -1,18 +1,22 @@
 "use client";
 
 import {
+  ArrowLeftRight,
   Briefcase,
   Building2,
   CalendarDays,
   ChartColumn,
+  ClipboardList,
   Clock,
   DoorOpen,
   FileText,
   History,
   Menu,
   MessageSquare,
+  Package,
   Phone,
   ScrollText,
+  ShoppingBasket,
   SlidersHorizontal,
   UserCog,
   Users,
@@ -47,6 +51,10 @@ const DESENHOS: Record<NomeDoIcone, typeof CalendarDays> = {
   MessageSquare,
   UserCog,
   History,
+  ShoppingBasket,
+  ClipboardList,
+  Package,
+  ArrowLeftRight,
 };
 
 /**
