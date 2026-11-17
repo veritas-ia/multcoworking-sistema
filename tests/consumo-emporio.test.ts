@@ -49,9 +49,33 @@ const TELEFONE = "+5511900006001";
 let operador: string;
 let clienteId: string;
 
-const hoje = (): string => dataLocalDe(new Date());
-const ontem = (): string => dataLocalDe(new Date(Date.now() - 24 * 60 * 60 * 1000));
-const amanha = (): string => dataLocalDe(new Date(Date.now() + 24 * 60 * 60 * 1000));
+/**
+ * O DIA DA FICHA E SEMPRE DO PASSADO — e o teste precisa respeitar isso.
+ *
+ * O DEFEITO QUE ISTO CONSERTA: estes ajudantes eram "hoje" e "ontem", e o dia
+ * de referencia era HOJE. Mas o motor recusa consumo no futuro, e "hoje as
+ * 10:00" E futuro quando o teste roda de manha. Resultado: a suite passava de
+ * tarde e falhava de manha, com dez testes vermelhos e nenhuma mensagem
+ * apontando a causa — ninguem tinha mexido em nada.
+ *
+ * E a mesma familia do defeito ja registrado no CLAUDE.md ("teste com data:
+ * nunca fixa no futuro"), um nivel mais fino: nao e a data que fica no futuro,
+ * e a HORA dentro do dia de hoje.
+ *
+ * Agora o dia de referencia e ONTEM e o anterior e ANTEONTEM. Qualquer hora
+ * do dia cabe no passado, e o teste da o mesmo resultado as 9h e as 21h — que
+ * e tambem o que acontece de verdade: a recepcionista le o papel no dia
+ * seguinte.
+ */
+const diasAtras = (quantos: number): string =>
+  dataLocalDe(new Date(Date.now() - quantos * 24 * 60 * 60 * 1000));
+
+/** O dia escrito na ficha. */
+const diaDaFicha = (): string => diasAtras(1);
+/** O dia anterior ao da ficha, para os testes de periodo de dois dias. */
+const diaAnterior = (): string => diasAtras(2);
+/** Continua sendo futuro de verdade: e a recusa que o motor precisa dar. */
+const amanha = (): string => diasAtras(-1);
 
 beforeAll(async () => {
   await aquecerConexao();
@@ -139,7 +163,7 @@ describe("quem soma é o sistema", () => {
       clienteId,
       produtoId: id,
       quantidade: 7,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:30",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -157,7 +181,7 @@ describe("quem soma é o sistema", () => {
       clienteId,
       produtoId: id,
       quantidade: 3,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:30",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -176,7 +200,7 @@ describe("quem soma é o sistema", () => {
       clienteId,
       produtoId: id,
       quantidade: 2,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "09:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -186,7 +210,7 @@ describe("quem soma é o sistema", () => {
 
     await bancoDeTeste.produto.update({ where: { id }, data: { preco: "15.00" } });
 
-    const depois = await listarConsumos({ de: hoje(), ate: hoje(), clienteId });
+    const depois = await listarConsumos({ de: diaDaFicha(), ate: diaDaFicha(), clienteId });
     const nosso = depois.find((c) => c.id === feito.dados.id);
 
     expect(nosso?.precoUnitario).toBe("7.50");
@@ -204,14 +228,14 @@ describe("a hora é a do PAPEL, não a do lançamento", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: ontem(),
+      dia: diaAnterior(),
       hora: "14:20",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
     });
 
     if (!feito.ok) throw new Error("deveria lançar");
-    expect(feito.dados.dia).toBe(ontem());
+    expect(feito.dados.dia).toBe(diaAnterior());
     expect(feito.dados.hora).toBe("14:20");
   });
 
@@ -240,7 +264,7 @@ describe("a hora é a do PAPEL, não a do lançamento", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "9h40",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -258,7 +282,7 @@ describe("o consumo dá baixa no estoque", () => {
       clienteId,
       produtoId: id,
       quantidade: 3,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -291,7 +315,7 @@ describe("o consumo dá baixa no estoque", () => {
       clienteId,
       produtoId: feito.dados.id,
       quantidade: 2,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "08:30",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -311,7 +335,7 @@ describe("o consumo dá baixa no estoque", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_HORA,
       usuarioId: operador,
@@ -332,7 +356,7 @@ describe("as duas formas de fechar, e só essas duas", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "11:00",
       momento: MomentoDoPagamento.NA_HORA,
       formaPagamentoId: pix.id,
@@ -355,7 +379,7 @@ describe("as duas formas de fechar, e só essas duas", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "11:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       formaPagamentoId: pix.id,
@@ -395,7 +419,7 @@ describe("as duas formas de fechar, e só essas duas", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "09:00",
       momento: MomentoDoPagamento.NA_HORA,
       formaPagamentoId: formas[0]!.id,
@@ -406,15 +430,15 @@ describe("as duas formas de fechar, e só essas duas", () => {
       clienteId,
       produtoId: id,
       quantidade: 2,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
     });
 
     const aCobrar = await listarConsumos({
-      de: hoje(),
-      ate: hoje(),
+      de: diaDaFicha(),
+      ate: diaDaFicha(),
       clienteId,
       momento: MomentoDoPagamento.NA_MENSALIDADE,
     });
@@ -433,7 +457,7 @@ describe("o que o lançamento recusa", () => {
         clienteId,
         produtoId: id,
         quantidade,
-        dia: hoje(),
+        dia: diaDaFicha(),
         hora: "10:00",
         momento: MomentoDoPagamento.NA_MENSALIDADE,
         usuarioId: operador,
@@ -450,7 +474,7 @@ describe("o que o lançamento recusa", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -472,7 +496,7 @@ describe("o que o lançamento recusa", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -507,7 +531,7 @@ describe("o que o lançamento recusa", () => {
 
 describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
   /** O período que cobre os lançamentos de hoje e ontem. */
-  const periodo = () => ({ de: ontem(), ate: hoje() });
+  const periodo = () => ({ de: diaAnterior(), ate: diaDaFicha() });
 
   it("o empório entra no controle de horas, SOMADO pelo sistema", async () => {
     // É isto que tira o "R$ 201,50" digitado à mão do documento.
@@ -518,7 +542,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: agua,
       quantidade: 12,
-      dia: ontem(),
+      dia: diaAnterior(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -528,7 +552,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: barrinha,
       quantidade: 7,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "11:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -558,7 +582,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
         clienteId,
         produtoId: agua,
         quantidade: 2,
-        dia: ontem(),
+        dia: diaAnterior(),
         hora,
         momento: MomentoDoPagamento.NA_MENSALIDADE,
         usuarioId: operador,
@@ -583,7 +607,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: id,
       quantidade: 4,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_HORA,
       formaPagamentoId: formas[0]!.id,
@@ -605,7 +629,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
         clienteId,
         produtoId: id,
         quantidade: 1,
-        dia: ontem(),
+        dia: diaAnterior(),
         hora,
         momento: MomentoDoPagamento.NA_MENSALIDADE,
         usuarioId: operador,
@@ -625,13 +649,13 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: id,
       quantidade: 1,
-      dia: ontem(),
+      dia: diaAnterior(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
     });
 
-    const feito = await montarDoPeriodo({ clienteId, de: hoje(), ate: hoje() });
+    const feito = await montarDoPeriodo({ clienteId, de: diaDaFicha(), ate: diaDaFicha() });
 
     if (!feito.ok) throw new Error("deveria montar");
     expect(feito.dados.emporio).toBeNull();
@@ -646,7 +670,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: id,
       quantidade: 2,
-      dia: ontem(),
+      dia: diaAnterior(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -668,7 +692,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: id,
       quantidade: 10,
-      dia: ontem(),
+      dia: diaAnterior(),
       hora: "16:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
@@ -689,7 +713,7 @@ describe("O CICLO FECHA: o consumo chega na cobrança sozinho", () => {
       clienteId,
       produtoId: id,
       quantidade: 2,
-      dia: hoje(),
+      dia: diaDaFicha(),
       hora: "10:00",
       momento: MomentoDoPagamento.NA_MENSALIDADE,
       usuarioId: operador,
