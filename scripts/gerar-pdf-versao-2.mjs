@@ -48,7 +48,12 @@ const estado = {
   numero: 0,
   normal: null,
   negrito: null,
-  logo: null,
+  /** A marca do cliente (arte preta: so vai em fundo claro). */
+  mult: null,
+  /** A marca da agencia, nas duas versoes — clara e escura. */
+  veritasEscura: null,
+  veritasClara: null,
+  prints: new Map(),
 };
 
 function larguraDe(texto, tamanho, negrito = false) {
@@ -108,9 +113,30 @@ function novaPagina(opcoes = {}) {
     color: SECUNDARIO,
   });
 
+  // A assinatura da agencia em toda pagina, discreta: quem le o documento
+  // sabe de quem ele veio sem a marca disputar espaco com a do cliente.
   const numero = String(estado.numero);
+  const assinatura = "VERITAS";
+  const larguraDoNumero = larguraDe(numero, 8, true);
+  const larguraDaAssinatura = larguraDe(assinatura, 8, true);
+  const separador = larguraDe("  ·  ", 8);
+
+  estado.pagina.drawText(assinatura, {
+    x: A4.largura - MARGEM - larguraDoNumero - separador - larguraDaAssinatura,
+    y: 30,
+    size: 8,
+    font: estado.negrito,
+    color: SECUNDARIO,
+  });
+  estado.pagina.drawText("  ·  ", {
+    x: A4.largura - MARGEM - larguraDoNumero - separador,
+    y: 30,
+    size: 8,
+    font: estado.normal,
+    color: BORDA,
+  });
   estado.pagina.drawText(numero, {
-    x: A4.largura - MARGEM - larguraDe(numero, 8, true),
+    x: A4.largura - MARGEM - larguraDoNumero,
     y: 30,
     size: 8,
     font: estado.negrito,
@@ -187,7 +213,7 @@ function capitulo(numero, titulo, resumo) {
     yTitulo -= 22;
   }
 
-  estado.y -= Math.max(56, linhas.length * 22 + 34);
+  estado.y -= Math.max(40, linhas.length * 22 + 24);
 
   if (resumo) {
     paragrafo(resumo, { tamanho: 11, cor: SECUNDARIO, depois: 14 });
@@ -297,74 +323,200 @@ function ondeFica(texto) {
 // O conteúdo
 // -----------------------------------------------------------------------------
 
+/**
+ * A CAPA.
+ *
+ * Duas marcas, e a hierarquia entre elas e o ponto: a do CLIENTE em cima,
+ * grande, porque o documento e sobre o sistema dele; a da AGENCIA no pe, na
+ * faixa preta, assinando o trabalho. As duas no mesmo tamanho brigariam, e o
+ * documento pareceria de um projeto em conjunto, que nao e o caso.
+ *
+ * A logo do Mult e arte PRETA: ela so pode ir em fundo claro. A da Veritas
+ * tem duas versoes, e no pe usamos a clara, que e a feita para fundo escuro.
+ */
 function capa() {
   novaPagina({ capa: true });
 
-  // Bloco amarelo do topo, com o logotipo preto em cima — a regra de contraste
-  // da própria marca.
-  const alturaDaFaixa = 300;
+  const ALTURA_DO_PE = 152;
+
+  // Fio amarelo na lateral esquerda: a marca aparece sem ocupar area.
   estado.pagina.drawRectangle({
     x: 0,
-    y: A4.altura - alturaDaFaixa,
-    width: A4.largura,
-    height: alturaDaFaixa,
+    y: ALTURA_DO_PE,
+    width: 12,
+    height: A4.altura - ALTURA_DO_PE,
     color: AMARELO,
   });
 
-  if (estado.logo) {
-    const alturaDaLogo = 52;
-    const largura = (estado.logo.width / estado.logo.height) * alturaDaLogo;
-    estado.pagina.drawImage(estado.logo, {
-      x: (A4.largura - largura) / 2,
-      y: A4.altura - alturaDaFaixa / 2 - alturaDaLogo / 2,
+  const x = MARGEM + 14;
+  const larguraUtil = A4.largura - x - MARGEM;
+
+  // --- A marca do cliente, no alto -----------------------------------------
+  if (estado.mult) {
+    const altura = 30;
+    const largura = (estado.mult.width / estado.mult.height) * altura;
+    estado.pagina.drawImage(estado.mult, {
+      x,
+      y: A4.altura - 92,
       width: largura,
-      height: alturaDaLogo,
+      height: altura,
     });
   } else {
-    const nome = "MULT COWORKING";
-    escrever(nome, (A4.largura - larguraDe(nome, 28, true)) / 2, A4.altura - 160, {
-      tamanho: 28,
+    escrever("MULT COWORKING", x, A4.altura - 82, {
+      tamanho: 18,
       negrito: true,
       cor: PRETO,
     });
   }
 
-  let y = A4.altura - alturaDaFaixa - 88;
+  estado.pagina.drawRectangle({
+    x,
+    y: A4.altura - 124,
+    width: larguraUtil,
+    height: 0.8,
+    color: BORDA,
+  });
 
-  const chapeu = "SISTEMA DE RESERVAS E GESTÃO";
-  escrever(chapeu, MARGEM, y, { tamanho: 10, negrito: true, cor: SECUNDARIO });
-  y -= 56;
+  // --- O titulo -------------------------------------------------------------
+  let y = A4.altura - 262;
 
-  escrever("Versão 2.0", MARGEM, y, { tamanho: 52, negrito: true, cor: PRETO });
-  y -= 34;
+  escrever("SISTEMA DE RESERVAS E GESTÃO", x, y, {
+    tamanho: 9.5,
+    negrito: true,
+    cor: SECUNDARIO,
+  });
+  y -= 62;
 
-  estado.pagina.drawRectangle({ x: MARGEM, y, width: 90, height: 5, color: PRETO });
-  y -= 44;
+  escrever("Versão 2.0", x, y, { tamanho: 54, negrito: true, cor: PRETO });
+  y -= 30;
+
+  estado.pagina.drawRectangle({ x, y, width: 84, height: 5, color: AMARELO });
+  y -= 46;
 
   for (const linha of emLinhas(
-    "O que o sistema passou a fazer: a cobrança do mensalista, o cadastro de clientes, o empório e o controle financeiro do coworking inteiro.",
-    UTIL - 60,
-    13,
+    "A cobrança do mensalista, o cadastro de clientes, o empório e o controle financeiro do coworking inteiro.",
+    larguraUtil - 70,
+    13.5,
   )) {
-    escrever(linha, MARGEM, y, { tamanho: 13, cor: TEXTO });
-    y -= 21;
+    escrever(linha, x, y, { tamanho: 13.5, cor: TEXTO });
+    y -= 22;
   }
 
-  y -= 30;
-  escrever("Documento preparado para os donos do Mult Coworking", MARGEM, y, {
+  y -= 38;
+  estado.pagina.drawRectangle({
+    x,
+    y: y + 14,
+    width: 40,
+    height: 2,
+    color: PRETO,
+  });
+  y -= 8;
+  escrever("Preparado para os donos do Mult Coworking", x, y, {
     tamanho: 10,
     cor: SECUNDARIO,
   });
-  y -= 16;
-  escrever("Novembro de 2026", MARGEM, y, { tamanho: 10, negrito: true, cor: TEXTO });
+  y -= 15;
+  escrever("Novembro de 2026", x, y, { tamanho: 10, negrito: true, cor: TEXTO });
 
-  // Faixa preta do pé da capa.
-  estado.pagina.drawRectangle({ x: 0, y: 0, width: A4.largura, height: 28, color: PRETO });
-  escrever("Sala CI  |  Sala de Reunião  |  Sala Container", MARGEM, 10, {
-    tamanho: 9,
-    negrito: true,
-    cor: BRANCO,
+  // --- O pe: a assinatura da agencia ---------------------------------------
+  estado.pagina.drawRectangle({
+    x: 0,
+    y: 0,
+    width: A4.largura,
+    height: ALTURA_DO_PE,
+    color: PRETO,
   });
+
+  if (estado.veritasClara) {
+    const altura = 80;
+    const largura = (estado.veritasClara.width / estado.veritasClara.height) * altura;
+    estado.pagina.drawImage(estado.veritasClara, {
+      x: MARGEM,
+      y: (ALTURA_DO_PE - altura) / 2,
+      width: largura,
+      height: altura,
+    });
+  } else {
+    escrever("VERITAS", MARGEM, ALTURA_DO_PE / 2, {
+      tamanho: 20,
+      negrito: true,
+      cor: BRANCO,
+    });
+  }
+
+  const direita = [
+    "Desenvolvimento e gestão do sistema",
+    "veritassdigital.com.br",
+  ];
+  let yDireita = ALTURA_DO_PE / 2 + 8;
+
+  for (const linha of direita) {
+    const largura = larguraDe(linha, 9.5, linha === direita[0]);
+    escrever(linha, A4.largura - MARGEM - largura, yDireita, {
+      tamanho: 9.5,
+      negrito: linha === direita[0],
+      cor: linha === direita[0] ? BRANCO : rgb(0.6, 0.6, 0.6),
+    });
+    yDireita -= 16;
+  }
+}
+
+/**
+ * UM PRINT DA TELA, com legenda.
+ *
+ * A largura se ajusta ao que sobrou na folha, para o capitulo nao quebrar em
+ * duas paginas com a imagem sozinha na segunda. Abaixo de um tamanho minimo
+ * nao compensa — ai a imagem vai para a proxima pagina inteira.
+ */
+function imagem(nome, legenda) {
+  const print = estado.prints.get(nome);
+
+  if (!print) {
+    return;
+  }
+
+  const proporcao = print.height / print.width;
+  const LARGURA_CHEIA = UTIL;
+  const LARGURA_MINIMA = 300;
+  const ALTURA_DA_LEGENDA = 26;
+
+  let largura = LARGURA_CHEIA;
+  let disponivel = estado.y - RODAPE - ALTURA_DA_LEGENDA;
+
+  if (largura * proporcao > disponivel) {
+    largura = disponivel / proporcao;
+  }
+
+  if (largura < LARGURA_MINIMA) {
+    novaPagina();
+    largura = LARGURA_CHEIA;
+    disponivel = estado.y - RODAPE - ALTURA_DA_LEGENDA;
+    if (largura * proporcao > disponivel) {
+      largura = disponivel / proporcao;
+    }
+  }
+
+  const altura = largura * proporcao;
+  const x = MARGEM + (UTIL - largura) / 2;
+
+  estado.pagina.drawImage(print, { x, y: estado.y - altura, width: largura, height: altura });
+  estado.pagina.drawRectangle({
+    x,
+    y: estado.y - altura,
+    width: largura,
+    height: altura,
+    borderColor: BORDA,
+    borderWidth: 1,
+  });
+
+  estado.y -= altura + 14;
+
+  for (const linha of emLinhas(legenda, UTIL, 8.5)) {
+    escrever(linha, MARGEM, estado.y, { tamanho: 8.5, cor: SECUNDARIO });
+    estado.y -= 12;
+  }
+
+  estado.y -= 6;
 }
 
 function numeros() {
@@ -483,6 +635,9 @@ const CAPITULOS = [
       "Depois de enviado, o documento não pode ser reescrito. Para corrigir, emite-se um novo — o antigo fica como registro do que foi mandado.",
     ],
     onde: "Cobrança > Controle de horas",
+    print: "01-controle-de-horas",
+    legenda:
+      "A tela do controle de horas: escolhe-se a empresa mensalista ou a pessoa, e o documento do período é montado pelo sistema. Os já emitidos ficam listados, com o período, as horas e o valor.",
   },
   {
     titulo: "Cada cliente virou um cadastro de verdade",
@@ -500,6 +655,9 @@ const CAPITULOS = [
       "Um telefone de balcão pode ser marcado como tal, e o sistema separa as pessoas que estavam presas nele.",
     ],
     onde: "Cadastros > Clientes",
+    print: "02-clientes",
+    legenda:
+      "O cadastro de clientes, com as horas de cada um no período. É daqui que a equipe junta dois cadastros da mesma pessoa, separa um telefone ou corrige um nome.",
   },
   {
     titulo: "As empresas mensalistas, com a conta somada",
@@ -516,6 +674,9 @@ const CAPITULOS = [
       "Empresa que sai do coworking é desligada, não apagada: ela some da lista do site e o histórico fica inteiro.",
     ],
     onde: "Cadastros > Empresas",
+    print: "03-empresas",
+    legenda:
+      "As empresas mensalistas. Ligar um cliente a uma delas faz as horas dele entrarem na conta da empresa — inclusive as reservas antigas.",
   },
   {
     titulo: "O empório entrou no sistema",
@@ -534,6 +695,9 @@ const CAPITULOS = [
       "A máquina de café tem contador, não estoque. O sistema lê o número acumulado e calcula o consumo do dia.",
     ],
     onde: "Empório > Lançar consumo, Contagem do dia, Produtos e Movimentos",
+    print: "04-emporio",
+    legenda:
+      "O lançamento do consumo do empório: o produto é escolhido na grade, e quem multiplica e soma é o servidor. A lista do dia embaixo é a conferência contra a ficha de papel.",
   },
   {
     titulo: "O financeiro do coworking inteiro",
@@ -552,6 +716,9 @@ const CAPITULOS = [
       "O painel mostra entrou, saiu, resultado, margem, inadimplência, os últimos seis meses e a projeção dos próximos três.",
     ],
     onde: "Financeiro > Painel, Contas, Mensalidades, Categorias e Fornecedores",
+    print: "05b-contas",
+    legenda:
+      "As contas do mês, com a situação de cada uma. As etiquetas “do empório” e “da agenda” marcam as linhas que o sistema criou sozinho — essas não se editam aqui, e sim na origem.",
   },
   {
     titulo: "A agenda ficou mais honesta",
@@ -569,6 +736,9 @@ const CAPITULOS = [
       "Lançar uma reserva de ontem, quando o cliente esqueceu de marcar, sempre funcionou — e agora está documentado.",
     ],
     onde: "Dia a dia > Agenda, e Sistema > Histórico de ações",
+    print: "06-agenda",
+    legenda:
+      "A agenda do dia, com as três salas lado a lado. É daqui que saem o “Ficou mais tempo”, o “Recebi no balcão” e a exclusão com motivo registrado.",
   },
   {
     titulo: "As mensagens pararam de incomodar o cliente",
@@ -587,6 +757,9 @@ const CAPITULOS = [
       "A confirmação da reserva e o código de verificação não esperam: a pessoa acabou de mexer no site.",
     ],
     onde: "Ajustes > Mensagens e Parâmetros",
+    print: "07-mensagens",
+    legenda:
+      "Os textos de todas as mensagens automáticas, editáveis pela equipe. O horário em que elas podem sair fica na aba Parâmetros, ao lado.",
   },
   {
     titulo: "O painel, o acesso e o aplicativo no celular",
@@ -603,6 +776,9 @@ const CAPITULOS = [
       "Relatórios com total do período, evolução, dias da semana, salas, horários, situação das reservas, área de atuação e horas por cliente.",
     ],
     onde: "Ajustes > Usuários, e a barra lateral de todo o painel",
+    print: "08-usuarios",
+    legenda:
+      "Os acessos do painel, com o nível de cada pessoa. A barra lateral à esquerda, presente em todas as telas, é a mesma que mostra ou esconde o Financeiro conforme esse nível.",
   },
 ];
 
@@ -677,11 +853,33 @@ async function principal() {
   estado.normal = await estado.pdf.embedFont(StandardFonts.Helvetica);
   estado.negrito = await estado.pdf.embedFont(StandardFonts.HelveticaBold);
 
-  try {
-    const caminho = join(process.cwd(), "public", "logotipo-multcoworking-recorte.png");
-    estado.logo = await estado.pdf.embedPng(await readFile(caminho));
-  } catch {
-    estado.logo = null;
+  /**
+   * As imagens sao OPCIONAIS, uma a uma.
+   *
+   * Um arquivo que sumiu nao pode impedir o documento de sair: a capa cai
+   * para o nome escrito, e o capitulo sem print continua tendo o texto, que
+   * e o que importa.
+   */
+  async function carregar(caminho) {
+    try {
+      return await estado.pdf.embedPng(await readFile(join(process.cwd(), caminho)));
+    } catch {
+      return null;
+    }
+  }
+
+  estado.mult = await carregar("public/logotipo-multcoworking-recorte.png");
+  estado.veritasEscura = await carregar("public/marca/veritas-escura.png");
+  estado.veritasClara = await carregar("public/marca/veritas-clara.png");
+
+  for (const capitulo of CAPITULOS) {
+    if (!capitulo.print) {
+      continue;
+    }
+    const imagem = await carregar(`docs/prints/${capitulo.print}.png`);
+    if (imagem) {
+      estado.prints.set(capitulo.print, imagem);
+    }
   }
 
   capa();
@@ -704,6 +902,11 @@ async function principal() {
 
     espaco(6);
     ondeFica(c.onde);
+
+    if (c.print) {
+      espaco(4);
+      imagem(c.print, c.legenda);
+    }
   });
 
   fechamento();
