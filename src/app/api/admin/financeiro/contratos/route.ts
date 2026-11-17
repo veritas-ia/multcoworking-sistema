@@ -10,7 +10,7 @@ import {
   listarEspacos,
 } from "@/lib/financeiro";
 
-import { operadorDaRequisicao } from "../../operador";
+import { porteiroDoFinanceiro } from "../../operador";
 import { statusDoFinanceiro } from "../status";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,10 @@ const DIA = /^\d{4}-\d{2}-\d{2}$/;
  * operador pode estar em outro.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   return NextResponse.json({
@@ -63,8 +65,10 @@ const Novo = z.object({
 
 /** POST /api/admin/financeiro/contratos — cadastra um contrato. */
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Novo.safeParse(await lerCorpo(requisicao));

@@ -5,7 +5,7 @@ import { respostaErro, lerCorpo } from "@/lib/api";
 import { criarFornecedor, listarFornecedores } from "@/lib/financeiro";
 import { z } from "zod";
 
-import { operadorDaRequisicao } from "../../operador";
+import { porteiroDoFinanceiro } from "../../operador";
 import { statusDoFinanceiro } from "../status";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +18,10 @@ export const dynamic = "force-dynamic";
  * como se fosse cliente.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   return NextResponse.json({
@@ -36,8 +38,10 @@ const Novo = z.object({
 
 /** POST /api/admin/financeiro/fornecedores — cadastra um fornecedor. */
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Novo.safeParse(await lerCorpo(requisicao));

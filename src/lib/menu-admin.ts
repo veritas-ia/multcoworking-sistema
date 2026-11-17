@@ -305,6 +305,92 @@ export function telasComAbas(): { tela: string; padrao: string }[] {
   return Object.entries(PADRAO_DA_TELA).map(([tela, padrao]) => ({ tela, padrao }));
 }
 
+// -----------------------------------------------------------------------------
+// O QUE CADA PESSOA VE (17/11/2026)
+// -----------------------------------------------------------------------------
+
+/**
+ * O que esta pessoa pode ver.
+ *
+ * Um eixo so, porque foi um so que os donos pediram: a parte financeira. Um
+ * objeto, e nao um booleano solto, para o dia em que houver um segundo eixo
+ * nao ser preciso mexer na assinatura de tudo.
+ */
+export type AcessosDoAdmin = { financeiro: boolean };
+
+/** A aba que administra os acessos — e por isso anda junto com o financeiro. */
+const ABA_DE_USUARIOS: AbaDeConfiguracao = "usuarios";
+
+/**
+ * Para quem NAO ve o financeiro, a aba "Usuários" vira "Minha senha".
+ *
+ * Ela continua existindo porque e dali que QUALQUER pessoa troca a propria
+ * senha. O que some de dentro dela e a lista de acessos e o formulario de
+ * criar conta — e quem recusa isso de verdade sao as rotas, nao a tela.
+ * Mantido o rotulo "Usuários", a pessoa clicaria esperando administrar
+ * usuarios e acharia a tela quebrada.
+ */
+const ROTULO_DA_MINHA_SENHA = "Minha senha";
+
+/**
+ * Este item, do jeito que ESTA PESSOA o ve — ou nulo, quando ela nao o ve.
+ *
+ * A regra sai da propria tela do item (`tela === TELA_FINANCEIRO`), e nao de
+ * uma lista escrita a mao: assim a proxima aba do Financeiro ja nasce
+ * escondida para quem nao tem acesso. Uma lista a mao deixaria a aba nova
+ * aparecendo, sem erro em lugar nenhum.
+ */
+function comoEstaPessoaVe(
+  item: ItemDoMenu,
+  acessos: AcessosDoAdmin,
+): ItemDoMenu | null {
+  if (acessos.financeiro) {
+    return item;
+  }
+
+  if (item.tela === TELA_FINANCEIRO) {
+    return null;
+  }
+
+  if (item.tela === TELA_CONFIGURACOES && item.aba === ABA_DE_USUARIOS) {
+    return { ...item, rotulo: ROTULO_DA_MINHA_SENHA };
+  }
+
+  return item;
+}
+
+/**
+ * O menu desta pessoa.
+ *
+ * Grupo que fica vazio SOME inteiro: um titulo "Financeiro" com nada embaixo
+ * anunciaria justamente o que ela nao pode abrir.
+ */
+export function menuVisivel(acessos: AcessosDoAdmin): GrupoDoMenu[] {
+  return MENU.map((grupo) => ({
+    titulo: grupo.titulo,
+    itens: grupo.itens
+      .map((item) => comoEstaPessoaVe(item, acessos))
+      .filter((item): item is ItemDoMenu => item !== null),
+  })).filter((grupo) => grupo.itens.length > 0);
+}
+
+/**
+ * As abas de Configuracoes desta pessoa, com o tipo da aba PRESERVADO.
+ *
+ * A tira de abas da tela sai DAQUI, e nao da lista completa: as duas
+ * discordando, a pessoa veria "Usuários" numa e "Minha senha" na outra para
+ * o mesmo lugar.
+ */
+export function abasDeConfiguracaoVisiveis(
+  acessos: AcessosDoAdmin,
+): ItemDeConfiguracao[] {
+  return menuVisivel(acessos)
+    .flatMap((grupo) => grupo.itens)
+    .filter(
+      (item): item is ItemDeConfiguracao => item.tela === TELA_CONFIGURACOES,
+    );
+}
+
 /** Todos os itens, sem os grupos. */
 export function todosOsItens(): ItemDoMenu[] {
   return MENU.flatMap((grupo) => grupo.itens);

@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { respostaErro } from "@/lib/api";
 import { desvincular } from "@/lib/financeiro";
 
-import { operadorDaRequisicao } from "../../../../operador";
+import { porteiroDoFinanceiro } from "../../../../operador";
 import { statusDoFinanceiro } from "../../../status";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,10 @@ export async function POST(
   requisicao: NextRequest,
   contexto: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const { id } = await contexto.params;

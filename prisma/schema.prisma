@@ -268,6 +268,19 @@ model Usuario {
   /// Desligado nao entra mais no painel, mas continua aparecendo como autor
   /// dos bloqueios e feriados que criou (Fase 11).
   ativo     Boolean @default(true)
+  /// VE A PARTE FINANCEIRA? (17/11/2026, pedido dos donos do coworking.)
+  ///
+  /// Dois niveis, e so dois: acesso total, ou tudo MENOS o Financeiro. Um
+  /// booleano, e nao uma lista de niveis, porque foi exatamente isso que foi
+  /// pedido — e um enum do Postgres aceita acrescentar valor mas nunca
+  /// remover.
+  ///
+  /// Nasce LIGADO: quem ja existia continua com tudo.
+  ///
+  /// Quem NAO ve o financeiro tambem nao administra usuarios. Sem isso o
+  /// filtro seria enfeite: a pessoa entraria em Configuracoes > Usuarios e se
+  /// promoveria sozinha, ou criaria uma conta com acesso total.
+  acessoFinanceiro Boolean @default(true) @map("acesso_financeiro")
 
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
 

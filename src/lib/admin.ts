@@ -7,7 +7,8 @@
  *
  * Decisoes do CLAUDE.md aplicadas aqui:
  *  - login por NOME DE USUARIO, nunca e-mail;
- *  - um unico nivel de acesso: quem entra e admin;
+ *  - DOIS niveis desde 17/11/2026: acesso total, ou tudo MENOS o Financeiro
+ *    (pedido dos donos do coworking). Ver "acessoFinanceiro";
  *  - sem recuperacao de senha por e-mail no MVP.
  */
 import bcrypt from "bcryptjs";
@@ -33,7 +34,20 @@ export type ResultadoLogin =
   | { autenticado: true; usuarioId: string; nome: string }
   | { autenticado: false; codigo: MotivoRecusa; motivo: string };
 
-export type AdminDaSessao = { id: string; nome: string; usuario: string };
+export type AdminDaSessao = {
+  id: string;
+  nome: string;
+  usuario: string;
+  /**
+   * Ve a parte financeira?
+   *
+   * Vem do BANCO a cada tela e a cada rota, junto do "ativo" — e nao de
+   * dentro do cookie. Guardado no cookie, tirar o acesso de alguem so valeria
+   * no proximo login dela, e ate la ela continuaria entrando no Financeiro
+   * sem ninguem perceber. E a mesma razao de "ativo" ser lido aqui.
+   */
+  acessoFinanceiro: boolean;
+};
 
 function inicioDaJanela(): Date {
   return new Date(Date.now() - MINUTOS_DA_JANELA * 60_000);
@@ -147,7 +161,7 @@ export async function adminDoToken(token: string | undefined): Promise<AdminDaSe
   // cookie vencer: toda pagina e rota do painel passa por aqui.
   const usuario = await prisma.usuario.findFirst({
     where: { id: conteudo.sub, ativo: true },
-    select: { id: true, nome: true, usuario: true },
+    select: { id: true, nome: true, usuario: true, acessoFinanceiro: true },
   });
 
   return usuario ?? null;
@@ -158,6 +172,12 @@ export async function criarUsuarioAdmin(entrada: {
   nome: string;
   usuario: string;
   senha: string;
+  /**
+   * Ve o financeiro? Em branco vale SIM — e o comando de instalacao, que cria
+   * o primeiro admin do sistema: ele precisa poder tudo, inclusive dar acesso
+   * aos outros.
+   */
+  acessoFinanceiro?: boolean;
 }): Promise<{ criado: true; id: string } | { criado: false; motivo: string }> {
   const usuario = entrada.usuario.trim().toLowerCase();
 
@@ -185,6 +205,7 @@ export async function criarUsuarioAdmin(entrada: {
       nome: entrada.nome.trim() || usuario,
       usuario,
       senhaHash: await bcrypt.hash(entrada.senha, CUSTO_DO_HASH),
+      acessoFinanceiro: entrada.acessoFinanceiro ?? true,
     },
     select: { id: true },
   });

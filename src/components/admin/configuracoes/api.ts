@@ -271,6 +271,8 @@ export type UsuarioDoPainel = {
   nome: string;
   usuario: string;
   ativo: boolean;
+  /** Vê a parte financeira? Falso = tudo menos o Financeiro. */
+  acessoFinanceiro: boolean;
   criadoEm: string;
   souEu: boolean;
 };
@@ -285,6 +287,7 @@ export function criarUsuario(dados: {
   nome: string;
   usuario: string;
   senha: string;
+  acessoFinanceiro: boolean;
 }): Promise<{ usuario: UsuarioDoPainel }> {
   return pedir("/api/admin/usuarios", { method: "POST", body: JSON.stringify(dados) });
 }
@@ -296,6 +299,16 @@ export function ligarOuDesligarUsuario(
   return pedir(`/api/admin/usuarios/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ ativo }),
+  });
+}
+
+export function definirAcessoFinanceiro(
+  id: string,
+  acessoFinanceiro: boolean,
+): Promise<{ usuario: UsuarioDoPainel }> {
+  return pedir(`/api/admin/usuarios/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ acessoFinanceiro }),
   });
 }
 

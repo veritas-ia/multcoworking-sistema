@@ -5,7 +5,7 @@ import { z } from "zod";
 import { lerCorpo, respostaErro } from "@/lib/api";
 import { gerarMensalidades } from "@/lib/financeiro";
 
-import { operadorDaRequisicao } from "../../../operador";
+import { porteiroDoFinanceiro } from "../../../operador";
 import { statusDoFinanceiro } from "../../status";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +34,13 @@ const Corpo = z.object({
  * recorrente — a equipe precisa saber o que NAO entrou.
  */
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
-  const operador = await operadorDaRequisicao(requisicao);
+  const porta = await porteiroDoFinanceiro(requisicao);
 
-  if (!operador) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
+
+  const operador = porta.eu;
 
   const corpo = Corpo.safeParse(await lerCorpo(requisicao));
 

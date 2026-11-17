@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  abasDeConfiguracaoVisiveis,
   ABA_PADRAO,
   ABA_PADRAO_EMPORIO,
   ABA_PADRAO_FINANCEIRO,
@@ -23,6 +24,7 @@ import {
   itensDoEmporio,
   itensDoFinanceiro,
   MENU,
+  menuVisivel,
   TELA_CONFIGURACOES,
   TELA_EMPORIO,
   TELA_FINANCEIRO,
@@ -246,5 +248,125 @@ describe("o nome da tela aberta", () => {
 
   it("é nulo na tela inicial, que não é um item do menu", () => {
     expect(telaAberta("/admin", null)).toBeNull();
+  });
+});
+
+/**
+ * QUEM NAO VE O FINANCEIRO (17/11/2026).
+ *
+ * POR QUE ISTO PRECISA DE TESTE: um item que vaza aqui nao da erro nenhum.
+ * A pessoa clica, a tela abre a recusa — e ela fica com a impressao de que o
+ * sistema esta escondendo coisa dela, ou pior, de que esta quebrado. E se a
+ * amarracao com "Usuários" se soltar, o filtro inteiro vira enfeite: ela
+ * entra la e libera o proprio acesso.
+ */
+describe("o menu de quem nao ve o financeiro", () => {
+  const TOTAL = menuVisivel({ financeiro: true });
+  const LIMITADO = menuVisivel({ financeiro: false });
+
+  function itensDe(menu: typeof TOTAL) {
+    return menu.flatMap((grupo) => grupo.itens);
+  }
+
+  it("quem tem acesso total ve o menu inteiro, sem nada mudado", () => {
+    expect(TOTAL).toEqual([...MENU]);
+  });
+
+  /**
+   * A regra sai da TELA do item, e nao de uma lista escrita a mao: assim a
+   * proxima aba do Financeiro ja nasce escondida.
+   */
+  it("nenhum item do Financeiro sobra", () => {
+    expect(
+      itensDe(LIMITADO).filter((item) => item.tela === TELA_FINANCEIRO),
+    ).toEqual([]);
+  });
+
+  /**
+   * "Espaços mensais" mora no grupo CADASTROS, mas abre a tela do Financeiro.
+   * E o item mais facil de esquecer — e ele guarda o valor dos contratos.
+   */
+  it("some tambem o que mora noutro grupo e abre o Financeiro", () => {
+    const rotulos = itensDe(LIMITADO).map((item) => item.rotulo);
+
+    expect(rotulos).not.toContain("Espaços mensais");
+    expect(rotulos).not.toContain("Mensalidades");
+    expect(rotulos).not.toContain("Painel");
+  });
+
+  it("o grupo Financeiro some inteiro, e nao fica um titulo vazio", () => {
+    expect(LIMITADO.map((grupo) => grupo.titulo)).not.toContain("Financeiro");
+    expect(LIMITADO.every((grupo) => grupo.itens.length > 0)).toBe(true);
+  });
+
+  /**
+   * A amarracao que faz o filtro valer: quem nao ve o financeiro nao
+   * administra usuarios. O item CONTINUA, porque e dali que todo mundo troca
+   * a propria senha — mas com o nome do que ele faz para ela.
+   */
+  it('"Usuários" vira "Minha senha", e nao desaparece', () => {
+    const rotulos = itensDe(LIMITADO).map((item) => item.rotulo);
+
+    expect(rotulos).not.toContain("Usuários");
+    expect(rotulos).toContain("Minha senha");
+  });
+
+  it("e continua levando para a MESMA aba", () => {
+    const minhaSenha = itensDe(LIMITADO).find(
+      (item) => item.rotulo === "Minha senha",
+    );
+    const usuarios = itensDe(TOTAL).find((item) => item.rotulo === "Usuários");
+
+    expect(minhaSenha?.href).toBe(usuarios?.href);
+  });
+
+  it("o resto do painel continua inteiro", () => {
+    const rotulos = itensDe(LIMITADO).map((item) => item.rotulo);
+
+    for (const esperado of [
+      "Agenda",
+      "Lançar consumo",
+      "Contagem do dia",
+      "Produtos",
+      "Movimentos",
+      "Controle de horas",
+      "Relatórios",
+      "Clientes",
+      "Empresas",
+      "Salas",
+      "Áreas de atuação",
+      "Telefones do balcão",
+      "Horários",
+      "Parâmetros",
+      "Políticas",
+      "Mensagens",
+      "Histórico de ações",
+    ]) {
+      expect(rotulos).toContain(esperado);
+    }
+  });
+
+  /**
+   * A tira de abas da tela de Configuracoes e a barra lateral saem da MESMA
+   * lista. Montadas separadamente, a pessoa veria "Usuários" numa e "Minha
+   * senha" na outra para o mesmo destino.
+   */
+  it("a tira de abas de Configuracoes concorda com a barra lateral", () => {
+    for (const acessos of [{ financeiro: true }, { financeiro: false }]) {
+      const naBarra = menuVisivel(acessos)
+        .flatMap((grupo) => grupo.itens)
+        .filter((item) => item.tela === TELA_CONFIGURACOES);
+
+      expect(abasDeConfiguracaoVisiveis(acessos)).toEqual(naBarra);
+    }
+  });
+
+  it("o item aceso continua funcionando no menu reduzido", () => {
+    const minhaSenha = abasDeConfiguracaoVisiveis({ financeiro: false }).find(
+      (item) => item.rotulo === "Minha senha",
+    );
+
+    expect(minhaSenha).toBeDefined();
+    expect(estaAceso(minhaSenha!, TELA_CONFIGURACOES, "usuarios")).toBe(true);
   });
 });

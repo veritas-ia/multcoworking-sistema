@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { Financeiro } from "@/components/admin/financeiro/financeiro";
-import { Carregando } from "@/components/ui/avisos";
+import { AvisoVazio, Carregando } from "@/components/ui/avisos";
 import { adminDoToken } from "@/lib/admin";
 import { metadadosDoPainel } from "@/lib/metadados";
 import { COOKIE_ADMIN } from "@/lib/sessao-admin";
@@ -21,6 +21,28 @@ export default async function PaginaDoFinanceiro() {
 
   if (!admin) {
     redirect("/admin/login");
+  }
+
+  /**
+   * A TRANCA DE VERDADE, junto com a das rotas.
+   *
+   * Esconder os itens na barra lateral nao para ninguem: basta digitar o
+   * endereco. E a recusa e uma TELA, e nao um redirecionamento calado — quem
+   * tem o endereco salvo acharia que o sistema quebrou.
+   */
+  if (!admin.acessoFinanceiro) {
+    return (
+      <div className="mx-auto w-full max-w-xl">
+        <h1 className="mb-3 text-xl font-bold tracking-tight text-text-primary">
+          Área restrita
+        </h1>
+        <AvisoVazio>
+          O seu acesso não inclui a parte financeira. Se você precisa entrar
+          aqui, peça a um administrador para liberar em Configurações →
+          Usuários.
+        </AvisoVazio>
+      </div>
+    );
   }
 
   return (

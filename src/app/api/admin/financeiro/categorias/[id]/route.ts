@@ -5,7 +5,7 @@ import { respostaErro, lerCorpo } from "@/lib/api";
 import { editarCategoria } from "@/lib/financeiro";
 import { z } from "zod";
 
-import { operadorDaRequisicao } from "../../../operador";
+import { porteiroDoFinanceiro } from "../../../operador";
 import { statusDoFinanceiro } from "../../status";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +35,10 @@ export async function PATCH(
   requisicao: NextRequest,
   contexto: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Mudanca.safeParse(await lerCorpo(requisicao));

@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 import { respostaErro } from "@/lib/api";
 import { hojeLocal, montarPainelFinanceiro } from "@/lib/financeiro";
 
-import { operadorDaRequisicao } from "../../operador";
+import { porteiroDoFinanceiro } from "../../operador";
 import { statusDoFinanceiro } from "../status";
 
 export const dynamic = "force-dynamic";
@@ -21,8 +21,10 @@ export const dynamic = "force-dynamic";
  * dois lugares, e o do operador pode estar em outro.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const p = requisicao.nextUrl.searchParams;

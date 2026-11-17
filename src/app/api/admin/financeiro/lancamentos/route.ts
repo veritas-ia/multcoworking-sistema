@@ -15,7 +15,7 @@ import {
 import { listarFormasDePagamento } from "@/lib/emporio";
 import { z } from "zod";
 
-import { operadorDaRequisicao } from "../../operador";
+import { porteiroDoFinanceiro } from "../../operador";
 import { statusDoFinanceiro } from "../status";
 
 export const dynamic = "force-dynamic";
@@ -42,8 +42,10 @@ const SITUACOES: readonly SituacaoDoLancamento[] = ["PAGO", "PENDENTE", "ATRASAD
  * uma segunda conta do mesmo numero, e um dia as duas discordariam.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const p = requisicao.nextUrl.searchParams;
@@ -126,11 +128,13 @@ const Novo = z.object({
 
 /** POST /api/admin/financeiro/lancamentos — lanca uma entrada ou uma saida. */
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
-  const operador = await operadorDaRequisicao(requisicao);
+  const porta = await porteiroDoFinanceiro(requisicao);
 
-  if (!operador) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
+
+  const operador = porta.eu;
 
   const corpo = Novo.safeParse(await lerCorpo(requisicao));
 

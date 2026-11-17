@@ -5,7 +5,7 @@ import { z } from "zod";
 import { lerCorpo, respostaErro } from "@/lib/api";
 import { criarEspaco, listarEspacos, reordenarEspacos } from "@/lib/financeiro";
 
-import { operadorDaRequisicao } from "../../operador";
+import { porteiroDoFinanceiro } from "../../operador";
 import { statusDoFinanceiro } from "../status";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +19,10 @@ export const dynamic = "force-dynamic";
  * aluga por mes.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   return NextResponse.json({
@@ -37,8 +39,10 @@ const Novo = z.object({
 
 /** POST /api/admin/financeiro/espacos — cadastra um espaco. */
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Novo.safeParse(await lerCorpo(requisicao));
@@ -64,8 +68,10 @@ const Ordem = z.object({
 
 /** PUT /api/admin/financeiro/espacos — grava a ordem da lista inteira. */
 export async function PUT(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Ordem.safeParse(await lerCorpo(requisicao));

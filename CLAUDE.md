@@ -2499,3 +2499,98 @@ de verdade.
 metadados precisam da ficha: deixada onde estava, as duas peças se importariam **em
 círculo**, que é justamente o jeito de uma delas chegar vazia na hora de rodar. Ela é
 texto de marca e o lugar certo sempre foi `marca.ts`.
+
+### Dois níveis de acesso ao painel (17/11/2026)
+
+> **ISTO SUBSTITUI a decisão "Um único nível de acesso (admin)"**, registrada na
+> Fase 11. Pedido dos donos do coworking depois de verem a prévia: *"usuários ter a
+> opção de limitar acesso... usuários que têm acesso total e alguns outros que têm
+> acesso a tudo menos à parte financeira"*.
+
+- **Dois níveis, e só dois:** acesso **total**, ou tudo **menos o Financeiro**. É uma
+  coluna booleana (`usuarios.acesso_financeiro`), e não uma lista de níveis: foi isso
+  que foi pedido, e um enum do Postgres aceita acrescentar valor mas **nunca remover**.
+- **A coluna nasce LIGADA.** Quem já existia continua com tudo — sem o padrão, o único
+  admin de produção perderia o financeiro no deploy e **não teria como se devolver** o
+  acesso, porque a tela de usuários também exige esse campo.
+- **No formulário de criar, nasce DESMARCADO** — o contrário do padrão do banco, de
+  propósito: ali quem decide é uma pessoa olhando a tela, e o acesso mais seguro é o
+  menor. No banco o padrão serve a quem já existia; na tela, a quem está nascendo.
+
+#### ONDE PASSA A FRONTEIRA (decisão do dono, entre três opções)
+**Só as telas do Financeiro.** O limitado continua com agenda, empório, clientes,
+empresas, salas, áreas de atuação, telefones do balcão, horários, parâmetros,
+políticas, mensagens, histórico, **controle de horas** e **relatórios** — inclusive o
+faturamento por cliente e por empresa, que o dono escolheu deixar aberto.
+
+- **"Espaços mensais" vai junto**, embora apareça no grupo Cadastros: ele abre a mesma
+  tela do Financeiro e guarda o valor dos contratos. É o item mais fácil de esquecer.
+- **"Recebi no balcão" continua liberado** (decisão do dono): é a recepcionista quem
+  recebe o dinheiro no balcão. Ela registra que recebeu **sem enxergar o caixa**.
+
+#### A AMARRAÇÃO QUE FAZ O FILTRO VALER: usuários anda junto com o financeiro
+Sem ela o controle seria **enfeite**. Qualquer admin podia criar e editar usuário,
+então a recepcionista entraria em Configurações → Usuários e **se promoveria sozinha** —
+ou criaria uma conta nova com acesso total e entraria com ela.
+
+- Quem não vê o Financeiro **não administra usuários**: não lista, não cria, não
+  redefine senha de ninguém, não liga/desliga acesso e não muda nível.
+- **Trocar a PRÓPRIA senha continua para todo mundo**, e isso não é concessão: sem
+  isso a pessoa ficaria presa na senha provisória que o chefe combinou com ela. Mora
+  noutra rota (`/api/admin/eu/senha`), que nunca passou pelo porteiro.
+- Na barra lateral, o item **"Usuários" vira "Minha senha"** para ela, e a aba mostra
+  só o formulário da própria senha. Mantido o rótulo antigo, ela clicaria esperando
+  administrar usuários e acharia a tela quebrada.
+
+#### A TRANCA É DO SERVIDOR — a tela só evita a batida na porta
+Três camadas, e **só a terceira vale**:
+1. a **barra lateral** esconde os itens (a pessoa não vê o que não pode);
+2. a **tela** `/admin/financeiro` recusa, lendo o banco — e a recusa é **uma tela que
+   explica**, não um redirecionamento calado: quem tem o endereço salvo acharia que o
+   sistema quebrou;
+3. as **15 rotas** `/api/admin/financeiro/*` e as **2** de `/api/admin/usuarios`
+   respondem **403**. Esconder o botão não para quem manda o pedido direto — mesma
+   lição já registrada no bloqueio do Jurídico. Há teste que lança uma conta pela rota
+   e confere que **nada foi gravado**: uma recusa que responde 403 depois de gravar
+   seria pior que nenhuma.
+
+- **403 e não 401**, de propósito: a pessoa **está** logada. Com 401 a tela a mandaria
+  para o login, ela entraria de novo e seria recusada de novo — um laço sem explicação.
+- **O nível é lido do BANCO a cada tela e a cada rota**, junto do `ativo`, nunca de
+  dentro do cookie. Guardado no cookie, tirar o acesso de alguém só valeria no próximo
+  login dela — e até lá ela continuaria entrando. Há teste que tira o acesso e prova
+  que o **mesmo cookie** já não serve.
+- **A regra sai da TELA do item** (`tela === TELA_FINANCEIRO`), e não de uma lista
+  escrita à mão: assim a próxima aba do Financeiro já nasce escondida para quem não
+  tem acesso. Uma lista à mão deixaria a aba nova aparecendo, sem erro nenhum.
+- A tira de abas de Configurações e a barra lateral saem da **mesma** função
+  (`abasDeConfiguracaoVisiveis`): montadas separadamente, a pessoa veria "Usuários"
+  numa e "Minha senha" na outra para o mesmo destino. Há teste comparando as duas.
+- **Grupo que fica vazio some inteiro**: um título "Financeiro" com nada embaixo
+  anunciaria justamente o que ela não pode abrir.
+
+#### AS DUAS TRAVAS QUE IMPEDEM A EQUIPE DE SE TRANCAR DO LADO DE FORA
+Elas existem porque **perder o financeiro é perder junto a tela de usuários** — e aí
+não há como voltar atrás pelo painel.
+
+- **Ninguém tira o PRÓPRIO acesso ao financeiro.** Quem se rebaixasse por engano não
+  teria como se devolver o acesso. O botão nem aparece na própria linha, e o servidor
+  recusa de todo jeito. Há teste comparando **a linha inteira** antes e depois.
+- **A última pessoa ativa com o acesso não o perde e não é desligada.** Sem isso, o
+  painel ficaria sem ninguém que abrisse o Financeiro **e** sem ninguém que
+  administrasse usuários — o jeito de voltar seria mexer no banco à mão. Há teste que
+  prova a recusa com uma pessoa e prova que **com duas a mesma ação passa**: a trava é
+  "não pode sobrar ninguém", não "ninguém perde o acesso".
+
+#### Detalhes que custaram atenção
+- `criarUsuario` **sem dizer nada cria com acesso total**, que é o que o sistema sempre
+  fez: nenhuma chamada antiga passa a criar gente sem acesso de um dia para o outro. É
+  a tela que manda `false` quando a caixa está desmarcada.
+- O **comando de instalação** (`criarUsuarioAdmin`) continua criando o primeiro admin
+  com acesso total — ele precisa poder dar acesso aos outros.
+- A aba de usuários **não chega a pedir a lista** quando quem abre não administra: a
+  rota responderia 403 e a tela mostraria um erro vermelho para quem só queria trocar a
+  própria senha.
+- O texto "Todo acesso é igual" saiu da tela — virou a explicação dos dois níveis, com
+  o aviso de que tirar o financeiro tira junto a administração de usuários.
+- **42 testes novos** (18 da regra + 24 do menu, que foi de 15 para 24).

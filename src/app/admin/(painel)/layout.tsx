@@ -52,7 +52,10 @@ export default async function LayoutDoPainel({
           segura a coluna no monitor para a pagina nao pular ao carregar.
         */}
         <Suspense fallback={<div className="hidden w-64 shrink-0 lg:block" />}>
-          <BarraLateral nomeDoAdmin={admin.nome} />
+          <BarraLateral
+            nomeDoAdmin={admin.nome}
+            acessoFinanceiro={admin.acessoFinanceiro}
+          />
         </Suspense>
 
         <div className="flex min-w-0 flex-1 flex-col">

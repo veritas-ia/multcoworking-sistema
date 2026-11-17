@@ -37,7 +37,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { estaAceso, MENU, type NomeDoIcone } from "@/lib/menu-admin";
+import { estaAceso, menuVisivel, type NomeDoIcone } from "@/lib/menu-admin";
 import { cn } from "@/lib/utils";
 
 /** Nome do ícone -> desenho. O mapa do menu não conhece React. */
@@ -136,7 +136,22 @@ export function BotaoDoMenu() {
  * trabalha no tablet: uma barra fixa de quinze itens comeria metade da tela
  * em pé.
  */
-export function BarraLateral({ nomeDoAdmin }: { nomeDoAdmin: string }) {
+export function BarraLateral({
+  nomeDoAdmin,
+  acessoFinanceiro,
+}: {
+  nomeDoAdmin: string;
+  /**
+   * Quem nao ve o financeiro nao ve os itens dele aqui.
+   *
+   * ESCONDER E SO EDUCACAO, nao a tranca: quem recusa de verdade sao a tela
+   * e as rotas, no servidor. Isto existe para a pessoa nao bater numa porta
+   * fechada — e para ela nao ficar com a impressao de que o sistema esta
+   * escondendo coisa dela.
+   */
+  acessoFinanceiro: boolean;
+}) {
+  const menu = menuVisivel({ financeiro: acessoFinanceiro });
   const { aberta, fechar } = useBarra();
   const caminho = usePathname();
   const aba = useSearchParams().get("aba");
@@ -191,7 +206,7 @@ export function BarraLateral({ nomeDoAdmin }: { nomeDoAdmin: string }) {
         </div>
 
         <div className="flex flex-1 flex-col gap-5 px-3 py-4">
-          {MENU.map((grupo) => (
+          {menu.map((grupo) => (
             <div key={grupo.titulo} className="flex flex-col gap-0.5">
               <h2 className="px-3 pb-1 text-xs font-semibold tracking-wide text-text-secondary uppercase">
                 {grupo.titulo}

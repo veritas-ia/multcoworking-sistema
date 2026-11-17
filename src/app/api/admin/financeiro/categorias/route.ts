@@ -10,7 +10,7 @@ import {
 } from "@/lib/financeiro";
 import { z } from "zod";
 
-import { operadorDaRequisicao } from "../../operador";
+import { porteiroDoFinanceiro } from "../../operador";
 import { statusDoFinanceiro } from "../status";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +22,10 @@ export const dynamic = "force-dynamic";
  * tela de lancamento pede "?ativas=1" — categoria desligada nao se escolhe.
  */
 export async function GET(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const parametros = requisicao.nextUrl.searchParams;
@@ -54,8 +56,10 @@ const Nova = z.object({
 
 /** POST /api/admin/financeiro/categorias — cadastra uma categoria. */
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Nova.safeParse(await lerCorpo(requisicao));
@@ -87,8 +91,10 @@ const Ordem = z.object({
  * motor: a ordem e por lado, e as duas listas aparecem separadas na tela.
  */
 export async function PUT(requisicao: NextRequest): Promise<NextResponse> {
-  if (!(await operadorDaRequisicao(requisicao))) {
-    return respostaErro(401, "Faça login no painel para continuar.", "SEM_SESSAO_ADMIN");
+  const porta = await porteiroDoFinanceiro(requisicao);
+
+  if ("recusa" in porta) {
+    return porta.recusa;
   }
 
   const corpo = Ordem.safeParse(await lerCorpo(requisicao));
