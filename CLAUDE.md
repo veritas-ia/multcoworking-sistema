@@ -2594,3 +2594,43 @@ não há como voltar atrás pelo painel.
 - O texto "Todo acesso é igual" saiu da tela — virou a explicação dos dois níveis, com
   o aviso de que tirar o financeiro tira junto a administração de usuários.
 - **42 testes novos** (18 da regra + 24 do menu, que foi de 15 para 24).
+
+### A versão 2.0 foi para o sistema oficial (24/11/2026)
+- **Decisão do dono:** *"vamos agora fazer a transferência oficial do que tá na prévia
+  para o projeto real que já tá funcionando"*. A branch `previa` (25 commits) entrou na
+  `main`.
+- **O que atravessou:** o empório inteiro (catálogo, estoque, contagem diária, consumo),
+  o financeiro inteiro (lançamentos, espaços mensais, mensalidades, painel), a cota de
+  horas no demonstrativo, o ícone na tela de início e os dois níveis de acesso.
+
+#### O ENSAIO DA MIGRAÇÃO, com os dados reais de produção
+Mesma prática da Fase 14, e ela continua valendo **sempre que o deploy levar migração**.
+Uma cópia de produção (224 reservas) foi restaurada num banco de ensaio e as **12
+migrações** rodaram nela antes de qualquer coisa ir para a `main`:
+
+| Conferência | Resultado |
+|---|---|
+| as 12 migrações | aplicadas, sem erro |
+| 224 reservas, hash do conteúdo | **idêntico** antes e depois |
+| 6 demonstrativos, hash do conteúdo | **idêntico** antes e depois |
+| 29 clientes, 3 empresas, 1 usuário | contagens iguais |
+| admin de hoje com acesso ao financeiro | sim — é o padrão da coluna |
+| catálogo, etiquetas, formas de pagamento | 30 / 9 / 3, criados pela migração |
+| categorias financeiras | 18, criadas pela migração |
+| lançamentos | 0 — a tabela nasce vazia |
+
+- **O hash do conteúdo vale mais que a contagem.** Contagem igual não prova que nenhuma
+  linha mudou de valor; o md5 das linhas ordenadas prova. Foi assim que se verificou que
+  `cota_horas` e `acesso_financeiro`, as duas colunas novas em tabelas que já existiam,
+  não encostaram em nada.
+- **Só três das 12 tocam em tabela existente**, e as três apenas ACRESCENTAM coluna:
+  duas em `demonstrativos` (empório e cota, as duas aceitando nulo) e uma em `usuarios`
+  (`acesso_financeiro`, com padrão ligado). Nenhuma religa linhas como a da Fase 14.
+- **O ensaio não é cerimônia:** a migração do empório falhou duas vezes no
+  desenvolvimento, e `migrate resolve --rolled-back` **não desfaz o que já rodou**. Em
+  produção isso deixaria o banco pela metade no meio do deploy.
+
+#### O que a prévia continua sendo
+A branch `previa` e o app dela **não foram desligados**: é onde a próxima coisa nasce
+antes de chegar no sistema de verdade. Depois da junção as duas branches ficam iguais;
+a prévia segue com banco próprio, `CRON_ATIVO="false"` e as credenciais vazias.
