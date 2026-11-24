@@ -482,6 +482,36 @@ serviço `banco`, procure **Backups** e configure:
 > Backup guardado **no mesmo VPS** não é backup. Se o servidor morrer, morre
 > junto. Configure um destino de fora.
 
+### Backup diário automático — JÁ ESTÁ LIGADO (24/11/2026)
+
+Existe uma rotina no próprio servidor, fora do Docker:
+
+| | |
+|---|---|
+| Script | `/opt/backups/multcoworking/backup-diario.sh` |
+| Agendador | `/etc/cron.d/backup-multcoworking` |
+| Quando | todo dia às **3h de São Paulo** (uma hora antes da faxina do sistema) |
+| Onde grava | `/opt/backups/multcoworking/producao-AAAA-MM-DD-HHMM.sql.gz` |
+| Quanto guarda | **30 dias** (cada arquivo tem ~70 KB) |
+| Registro | `/opt/backups/multcoworking/registro.log` |
+
+**Ele confere o arquivo antes de confiar nele**, com três provas: o gzip abre, a
+marca de fim do `pg_dump` está lá, e há pelo menos 10 tabelas com dados. Um
+arquivo cortado pesa pouco e *parece* um backup — só na hora de restaurar é que
+alguém descobriria. Se qualquer prova falhar, o arquivo é apagado, a falha vai
+para o registro e **os backups antigos NÃO são removidos**: apagando antes, uma
+falha deixaria o coworking sem backup nenhum.
+
+A senha do banco **não está escrita no script** — ele a lê do próprio sistema em
+execução. E os nomes dos contêineres são procurados na hora, porque o Docker
+muda o código do fim deles a cada deploy.
+
+> **ISTO NÃO RESOLVE O VPS MORRER.** O arquivo está no mesmo servidor que o
+> banco: se a máquina se perder, os dois se perdem juntos. Esta rotina protege
+> contra migração ruim, apagão de dados e erro humano — que são as falhas
+> comuns. A proteção contra perder o servidor é a seção acima, e **continua
+> pendente**.
+
 ### Backup manual (para fazer agora mesmo)
 
 No **Terminal** do serviço `banco`:
