@@ -3,7 +3,11 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { todosOsItens, type AbaDeConfiguracao } from "@/lib/menu-admin";
+import {
+  abasDeConfiguracaoVisiveis,
+  type AbaDeConfiguracao,
+  type AcessosDoAdmin,
+} from "@/lib/menu-admin";
 import { cn } from "@/lib/utils";
 
 import { AbaDeAcoes } from "./aba-acoes";
@@ -21,7 +25,7 @@ import { AbaDeUsuarios } from "./aba-usuarios";
 type Aba = {
   id: AbaDeConfiguracao;
   rotulo: string;
-  conteudo: () => ReactNode;
+  conteudo: (acessos: AcessosDoAdmin) => ReactNode;
 };
 
 /**
@@ -33,7 +37,7 @@ type Aba = {
  * aba e esquecer o menu (ou o contrario) daria um item que leva a lugar
  * nenhum, sem erro em lugar nenhum.
  */
-const CONTEUDOS: Record<AbaDeConfiguracao, () => ReactNode> = {
+const CONTEUDOS: Record<AbaDeConfiguracao, (acessos: AcessosDoAdmin) => ReactNode> = {
   salas: () => <AbaDeSalas />,
   horarios: () => <AbaDeHorarios />,
   parametros: () => <AbaDeParametros />,
@@ -43,28 +47,37 @@ const CONTEUDOS: Record<AbaDeConfiguracao, () => ReactNode> = {
   empresas: () => <AbaDeEmpresas />,
   profissoes: () => <AbaDeProfissoes />,
   "telefones-balcao": () => <AbaDeTelefonesDeBalcao />,
-  usuarios: () => <AbaDeUsuarios />,
+  // A UNICA aba que muda conforme quem esta olhando: quem nao ve o
+  // financeiro enxerga so "Minha senha". Ver "aba-usuarios.tsx".
+  usuarios: (acessos) => <AbaDeUsuarios podeAdministrar={acessos.financeiro} />,
   acoes: () => <AbaDeAcoes />,
 };
 
 /**
- * As abas de /admin/configuracoes.
+ * As abas de /admin/configuracoes, desta pessoa.
  *
  * A aba escolhida vai no endereco (?aba=parametros) e nao so na memoria da
  * tela: assim recarregar a pagina, ou mandar o link para uma colega, cai no
  * mesmo lugar.
+ *
+ * A lista sai do MESMO lugar que a barra lateral ("abasDeConfiguracaoVisiveis")
+ * — as duas montadas separadamente, a pessoa veria "Usuários" numa e "Minha
+ * senha" na outra para o mesmo destino.
  */
-const ABAS: readonly Aba[] = todosOsItens()
-  .filter((item) => item.aba !== null)
-  .map((item) => ({
-    id: item.aba!,
+function abasDe(acessos: AcessosDoAdmin): readonly Aba[] {
+  return abasDeConfiguracaoVisiveis(acessos).map((item) => ({
+    id: item.aba,
     rotulo: item.rotulo,
-    conteudo: CONTEUDOS[item.aba!],
+    conteudo: CONTEUDOS[item.aba],
   }));
+}
 
-export function Configuracoes() {
+export function Configuracoes({ acessoFinanceiro }: { acessoFinanceiro: boolean }) {
   const navegador = useRouter();
   const busca = useSearchParams();
+
+  const acessos: AcessosDoAdmin = { financeiro: acessoFinanceiro };
+  const ABAS = abasDe(acessos);
 
   const pedida = busca.get("aba");
   const atual = ABAS.find((aba) => aba.id === pedida) ?? ABAS[0];
@@ -109,7 +122,7 @@ export function Configuracoes() {
       </div>
 
       <div role="tabpanel" id={`painel-${atual.id}`} aria-labelledby={`aba-${atual.id}`}>
-        {atual.conteudo()}
+        {atual.conteudo(acessos)}
       </div>
     </div>
   );

@@ -366,3 +366,29 @@ export function buscarSerie(
 export function cancelarSerie(id: string): Promise<{ canceladas: number }> {
   return pedir(`/api/admin/recorrencias/${id}/cancelar`, { method: "POST" });
 }
+
+/**
+ * A recepcao RECEBEU o pagamento desta reserva no balcao.
+ *
+ * NAO E AUTOMATICO de proposito: o sistema nao tem como saber que alguem pagou
+ * R$ 40 no balcao. E o mensalista nao e marcado aqui — ele paga no fim do mes
+ * pelo demonstrativo, e marcar os dois contaria o mesmo dinheiro duas vezes.
+ *
+ * Chamar duas vezes nao cria duas linhas no caixa.
+ */
+export function registrarRecebimento(
+  reservaId: string,
+  entrada?: { formaPagamentoId?: string | null },
+): Promise<{ lancamento: { id: string; valor: string } }> {
+  return pedir(`/api/admin/reservas/${reservaId}/recebimento`, {
+    method: "POST",
+    body: JSON.stringify(entrada ?? {}),
+  });
+}
+
+/** Desfaz o recebimento. A acao fica registrada no historico. */
+export function desfazerRecebimento(reservaId: string): Promise<{ ok: true }> {
+  return pedir(`/api/admin/reservas/${reservaId}/recebimento`, {
+    method: "DELETE",
+  });
+}

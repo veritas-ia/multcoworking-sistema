@@ -11,6 +11,18 @@
 /** Nome do coworking, como o cliente conhece. */
 export const NOME_DA_MARCA = "Mult Coworking";
 
+/**
+ * A frase que descreve o site.
+ *
+ * Mora aqui, e nao em "metadados.ts", porque tres lugares a usam: o cartao
+ * do WhatsApp, a ficha do aplicativo ("manifesto.ts") e a aba. Se ela
+ * morasse nos metadados, o manifesto teria de importar de la, e os metadados
+ * do manifesto — duas pecas se importando em circulo, que e justamente o
+ * jeito de uma delas chegar vazia na hora de rodar.
+ */
+export const DESCRICAO_DO_SITE =
+  "Reserve a Sala CI, a Sala de Reunião ou a Sala Container em poucos toques.";
+
 /** O amarelo da marca (CLAUDE.md). Repetido aqui porque as imagens geradas
  *  nao passam pelo Tailwind e nao enxergam as variaveis do CSS. */
 export const AMARELO = "#FFC700";

@@ -15,10 +15,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  abasDeConfiguracaoVisiveis,
   ABA_PADRAO,
+  ABA_PADRAO_EMPORIO,
+  ABA_PADRAO_FINANCEIRO,
   estaAceso,
+  itensDeConfiguracao,
+  itensDoEmporio,
+  itensDoFinanceiro,
   MENU,
+  menuVisivel,
+  TELA_CONFIGURACOES,
+  TELA_EMPORIO,
+  TELA_FINANCEIRO,
   telaAberta,
+  telasComAbas,
   todosOsItens,
 } from "@/lib/menu-admin";
 
@@ -40,10 +51,53 @@ describe("o menu tem tudo que existe no painel", () => {
    * lugar nenhum, vira erro de compilacao — que aparece antes do commit, e
    * nao num teste que alguem pode marcar como pendente.
    */
-  it("todos os itens de Configurações apontam para a tela dela", () => {
+  /**
+   * Cada item com aba aponta para a tela DELE.
+   *
+   * Antes isto comparava com "/admin/configuracoes" escrito por extenso, e
+   * quando o emporio entrou — a segunda tela com abas — o teste acusou os
+   * itens dele como se fossem de configuracoes. O endereco tem de sair do
+   * proprio item: senao, um item do emporio apontando para configuracoes
+   * passaria batido e levaria a recepcao para uma aba que nao existe la.
+   */
+  it("todo item com aba aponta para a tela dele", () => {
     for (const item of todosOsItens()) {
-      if (item.aba !== null) {
-        expect(item.href).toBe(`/admin/configuracoes?aba=${item.aba}`);
+      if (item.tela !== null) {
+        expect(item.href).toBe(`${item.tela}?aba=${item.aba}`);
+      }
+    }
+  });
+
+  /**
+   * TODA tela com abas tem item, e todo item com aba aponta para uma delas.
+   *
+   * ESTE TESTE JA FALHOU POR DESATUALIZACAO, e por isso mudou de forma: ele
+   * listava "/admin/configuracoes" e "/admin/emporio" a mao, e a TERCEIRA
+   * tela com abas (o Financeiro) o derrubou sem haver defeito nenhum. Agora a
+   * lista sai de "telasComAbas()", e a regra vale tambem para a tela com abas
+   * que ainda nao existe.
+   */
+  it("toda tela com abas tem item, e nenhum item solto", () => {
+    const telas = telasComAbas().map((uma) => uma.tela);
+
+    expect(telas.length).toBeGreaterThanOrEqual(3);
+    expect(itensDeConfiguracao().length).toBeGreaterThan(0);
+    expect(itensDoEmporio().length).toBeGreaterThan(0);
+    expect(itensDoFinanceiro().length).toBeGreaterThan(0);
+
+    // Cada tela com abas precisa de ao menos um item apontando para ela:
+    // tela sem item e um destino que ninguem alcanca pelo menu.
+    for (const tela of telas) {
+      const quantos = todosOsItens().filter((i) => i.tela === tela).length;
+      expect(quantos).toBeGreaterThan(0);
+    }
+
+    // E todo item ou e de uma tela com abas, ou e um link direto.
+    for (const item of todosOsItens()) {
+      if (item.tela !== null) {
+        expect(telas).toContain(item.tela);
+      } else {
+        expect(item.href.startsWith("/admin/")).toBe(true);
       }
     }
   });
@@ -93,6 +147,73 @@ describe("qual item fica aceso", () => {
     expect(estaAceso(item("Clientes"), "/admin/agenda", "clientes")).toBe(false);
   });
 
+  /**
+   * A ARMADILHA NOVA, trazida pelo emporio: duas telas com abas.
+   *
+   * Nada impede duas abas de telas diferentes de se chamarem igual. Se a regra
+   * comparasse so o nome da aba, abrir "/admin/emporio?aba=produtos" acenderia
+   * tambem um item de configuracoes com a mesma aba — e a pessoa veria dois
+   * lugares acesos, sem saber em qual esta.
+   */
+  it("aba do Empório não acende item de Configurações, e vice-versa", () => {
+    const acesosNoEmporio = todosOsItens().filter((i) =>
+      estaAceso(i, TELA_EMPORIO, "produtos"),
+    );
+
+    expect(acesosNoEmporio.map((i) => i.rotulo)).toEqual(["Produtos"]);
+
+    // E o caminho inverso: na tela de configuracoes, item de emporio apagado.
+    for (const doEmporio of itensDoEmporio()) {
+      expect(estaAceso(doEmporio, TELA_CONFIGURACOES, doEmporio.aba)).toBe(false);
+    }
+  });
+
+  /**
+   * NENHUM ITEM ACENDE NA TELA DE OUTRA, qualquer que seja o par.
+   *
+   * Nada impede duas abas de telas diferentes de se chamarem igual — e o
+   * Financeiro tem "categorias", nome que uma aba de Configuracoes poderia ter
+   * amanha. Se a regra comparasse so o nome da aba, a pessoa veria dois itens
+   * acesos em telas diferentes e nao saberia onde esta.
+   */
+  it("item de uma tela nunca acende na tela de outra", () => {
+    for (const { tela } of telasComAbas()) {
+      for (const item of todosOsItens()) {
+        if (item.tela === null || item.tela === tela) continue;
+
+        expect(estaAceso(item, tela, item.aba)).toBe(false);
+      }
+    }
+  });
+
+  /**
+   * Sem aba no endereco, CADA tela acende a propria padrao — e exatamente uma.
+   *
+   * Vale para todas, derivado de "telasComAbas()": a tela cai na primeira aba
+   * da lista dela, e a barra precisa concordar, senao o item aceso e a aba
+   * aberta ficam diferentes.
+   */
+  it("sem aba, cada tela acende a padrão dela, e só uma", () => {
+    for (const { tela, padrao } of telasComAbas()) {
+      const acesos = todosOsItens().filter((i) => estaAceso(i, tela, null));
+
+      expect(acesos, `na tela ${tela}`).toHaveLength(1);
+      expect(acesos[0]?.aba, `na tela ${tela}`).toBe(padrao);
+    }
+
+    // As tres padroes sao nomes diferentes: igual, um teste de vazamento
+    // entre telas passaria por coincidencia.
+    expect(new Set([ABA_PADRAO, ABA_PADRAO_EMPORIO, ABA_PADRAO_FINANCEIRO]).size).toBe(3);
+  });
+
+  it("uma aba do Financeiro acende só o item dela", () => {
+    const acesos = todosOsItens().filter((i) =>
+      estaAceso(i, TELA_FINANCEIRO, "fornecedores"),
+    );
+
+    expect(acesos.map((i) => i.rotulo)).toEqual(["Fornecedores"]);
+  });
+
   it("em qualquer tela do painel, no máximo UM item acende", () => {
     const telas: [string, string | null][] = [
       ["/admin", null],
@@ -100,9 +221,12 @@ describe("qual item fica aceso", () => {
       ["/admin/relatorios", null],
       ["/admin/demonstrativos", null],
       ["/admin/configuracoes", null],
+      ["/admin/emporio", null],
+      ["/admin/financeiro", null],
+      // Cada aba na tela DELA: é assim que a pessoa realmente navega.
       ...todosOsItens()
-        .filter((i) => i.aba)
-        .map((i): [string, string | null] => ["/admin/configuracoes", i.aba]),
+        .filter((i) => i.tela !== null)
+        .map((i): [string, string | null] => [i.tela!, i.aba]),
     ];
 
     for (const [caminho, aba] of telas) {
@@ -124,5 +248,125 @@ describe("o nome da tela aberta", () => {
 
   it("é nulo na tela inicial, que não é um item do menu", () => {
     expect(telaAberta("/admin", null)).toBeNull();
+  });
+});
+
+/**
+ * QUEM NAO VE O FINANCEIRO (17/11/2026).
+ *
+ * POR QUE ISTO PRECISA DE TESTE: um item que vaza aqui nao da erro nenhum.
+ * A pessoa clica, a tela abre a recusa — e ela fica com a impressao de que o
+ * sistema esta escondendo coisa dela, ou pior, de que esta quebrado. E se a
+ * amarracao com "Usuários" se soltar, o filtro inteiro vira enfeite: ela
+ * entra la e libera o proprio acesso.
+ */
+describe("o menu de quem nao ve o financeiro", () => {
+  const TOTAL = menuVisivel({ financeiro: true });
+  const LIMITADO = menuVisivel({ financeiro: false });
+
+  function itensDe(menu: typeof TOTAL) {
+    return menu.flatMap((grupo) => grupo.itens);
+  }
+
+  it("quem tem acesso total ve o menu inteiro, sem nada mudado", () => {
+    expect(TOTAL).toEqual([...MENU]);
+  });
+
+  /**
+   * A regra sai da TELA do item, e nao de uma lista escrita a mao: assim a
+   * proxima aba do Financeiro ja nasce escondida.
+   */
+  it("nenhum item do Financeiro sobra", () => {
+    expect(
+      itensDe(LIMITADO).filter((item) => item.tela === TELA_FINANCEIRO),
+    ).toEqual([]);
+  });
+
+  /**
+   * "Espaços mensais" mora no grupo CADASTROS, mas abre a tela do Financeiro.
+   * E o item mais facil de esquecer — e ele guarda o valor dos contratos.
+   */
+  it("some tambem o que mora noutro grupo e abre o Financeiro", () => {
+    const rotulos = itensDe(LIMITADO).map((item) => item.rotulo);
+
+    expect(rotulos).not.toContain("Espaços mensais");
+    expect(rotulos).not.toContain("Mensalidades");
+    expect(rotulos).not.toContain("Painel");
+  });
+
+  it("o grupo Financeiro some inteiro, e nao fica um titulo vazio", () => {
+    expect(LIMITADO.map((grupo) => grupo.titulo)).not.toContain("Financeiro");
+    expect(LIMITADO.every((grupo) => grupo.itens.length > 0)).toBe(true);
+  });
+
+  /**
+   * A amarracao que faz o filtro valer: quem nao ve o financeiro nao
+   * administra usuarios. O item CONTINUA, porque e dali que todo mundo troca
+   * a propria senha — mas com o nome do que ele faz para ela.
+   */
+  it('"Usuários" vira "Minha senha", e nao desaparece', () => {
+    const rotulos = itensDe(LIMITADO).map((item) => item.rotulo);
+
+    expect(rotulos).not.toContain("Usuários");
+    expect(rotulos).toContain("Minha senha");
+  });
+
+  it("e continua levando para a MESMA aba", () => {
+    const minhaSenha = itensDe(LIMITADO).find(
+      (item) => item.rotulo === "Minha senha",
+    );
+    const usuarios = itensDe(TOTAL).find((item) => item.rotulo === "Usuários");
+
+    expect(minhaSenha?.href).toBe(usuarios?.href);
+  });
+
+  it("o resto do painel continua inteiro", () => {
+    const rotulos = itensDe(LIMITADO).map((item) => item.rotulo);
+
+    for (const esperado of [
+      "Agenda",
+      "Lançar consumo",
+      "Contagem do dia",
+      "Produtos",
+      "Movimentos",
+      "Controle de horas",
+      "Relatórios",
+      "Clientes",
+      "Empresas",
+      "Salas",
+      "Áreas de atuação",
+      "Telefones do balcão",
+      "Horários",
+      "Parâmetros",
+      "Políticas",
+      "Mensagens",
+      "Histórico de ações",
+    ]) {
+      expect(rotulos).toContain(esperado);
+    }
+  });
+
+  /**
+   * A tira de abas da tela de Configuracoes e a barra lateral saem da MESMA
+   * lista. Montadas separadamente, a pessoa veria "Usuários" numa e "Minha
+   * senha" na outra para o mesmo destino.
+   */
+  it("a tira de abas de Configuracoes concorda com a barra lateral", () => {
+    for (const acessos of [{ financeiro: true }, { financeiro: false }]) {
+      const naBarra = menuVisivel(acessos)
+        .flatMap((grupo) => grupo.itens)
+        .filter((item) => item.tela === TELA_CONFIGURACOES);
+
+      expect(abasDeConfiguracaoVisiveis(acessos)).toEqual(naBarra);
+    }
+  });
+
+  it("o item aceso continua funcionando no menu reduzido", () => {
+    const minhaSenha = abasDeConfiguracaoVisiveis({ financeiro: false }).find(
+      (item) => item.rotulo === "Minha senha",
+    );
+
+    expect(minhaSenha).toBeDefined();
+    expect(estaAceso(minhaSenha!, TELA_CONFIGURACOES, "usuarios")).toBe(true);
   });
 });

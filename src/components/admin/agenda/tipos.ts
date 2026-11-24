@@ -70,6 +70,19 @@ export type ReservaDetalhada = {
   recorrenciaId: string | null;
   /** Se o término já passou. Vem do SERVIDOR — a tela não refaz conta de fuso. */
   jaTerminou: boolean;
+  /**
+   * O recebimento no balcão, quando houve (Fase 16, Parte B).
+   *
+   * NULO é o normal, e não falta de informação: a maioria das reservas é de
+   * mensalista, que paga no fim do mês pelo demonstrativo. Marcar aqui também
+   * contaria o mesmo dinheiro duas vezes.
+   */
+  recebimento: {
+    lancamentoId: string;
+    valor: string;
+    pagoEm: string | null;
+    formaPagamento: string | null;
+  } | null;
   historico: EntradaDeHistorico[];
 };
 

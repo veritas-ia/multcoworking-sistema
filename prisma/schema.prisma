@@ -84,6 +84,66 @@ enum FrequenciaRecorrencia {
 }
 
 /// Usado apenas na tabela tecnica de ocupacao.
+/// POR QUE O ESTOQUE E UMA LISTA DE MOVIMENTOS, e nao um numero na linha do
+/// produto.
+///
+/// Um numero solto responde "o estoque esta em 3" e nada mais. Quando ele
+/// estiver errado — e vai estar, porque a reposicao e lancada a mao —, ninguem
+/// consegue dizer de onde veio o 3. Com uma linha por movimento, o estoque e a
+/// SOMA delas, e a pergunta "por que esta em 3?" tem resposta.
+/// As duas prateleiras do emporio, como a equipe ja pensa: comida e bebida.
+///
+/// FIXAS de proposito, diferente das TAGS. Sao as duas fichas fisicas que
+/// existem hoje ("CHOCOLATE" e "GELADEIRA"), e todo produto cai numa ou na
+/// outra. As tags e que sao editaveis e se acumulam.
+/// COMO o consumo daquele produto e medido. Sao duas coisas diferentes de
+/// verdade, descobertas nas fichas fisicas:
+///
+///   ESTOQUE  — a equipe CONTA quantas unidades estao na prateleira. E o
+///              chocolate e a geladeira.
+///   CONTADOR — a MAQUINA conta quantos ja fez na vida, e a equipe anota a
+///              leitura. E o cafe: o Expresso foi 10939 -> 10949 -> 10958 nos
+///              dias 3, 4 e 5. O vendido no dia e a DIFERENCA entre duas
+///              leituras, e "estoque de expresso" nao existe.
+///
+/// A ficha e preenchida igual nos dois casos (um numero por produto por dia).
+/// O que muda e a conta que o sistema faz com esse numero.
+/// QUANDO o consumo e pago. Sao as DUAS unicas formas que existem no
+/// coworking (palavra do dono: "nao existe comanda"):
+///
+///   NA_HORA        — a pessoa paga na hora, e acabou.
+///   NA_MENSALIDADE — o mensalista acumula e paga junto com a mensalidade,
+///                    no dia dele. E o que entra no controle de horas.
+///
+/// Isto NAO e a forma de pagamento (Pix, dinheiro): e o momento. A forma so
+/// faz sentido no NA_HORA.
+enum MomentoDoPagamento {
+  NA_HORA
+  NA_MENSALIDADE
+}
+
+enum TipoDeControle {
+  ESTOQUE
+  CONTADOR
+}
+
+enum CategoriaDoProduto {
+  COMIDA
+  BEBIDA
+}
+
+enum TipoMovimentoEstoque {
+  /// Chegou mercadoria. Quantidade positiva.
+  REPOSICAO
+  /// Saiu porque alguem consumiu. Quantidade negativa.
+  VENDA
+  /// Estragou, venceu, quebrou. Quantidade negativa.
+  PERDA
+  /// A contagem na prateleira nao bateu com o sistema. Pode ir para os dois
+  /// lados, e exige motivo escrito.
+  AJUSTE
+}
+
 /// O que foi feito. Cada valor e uma acao que MUDA o significado de um
 /// registro ou o destroi — nao e um registro de tudo que acontece no sistema.
 enum TipoDeAcao {
@@ -92,6 +152,11 @@ enum TipoDeAcao {
   RESERVA_EXCLUIDA
   /// A equipe mudou o status na mao (concluida, reaberta, descancelada).
   RESERVA_STATUS_ALTERADO
+
+  /// Um lancamento financeiro deixou de existir. Mesma razao da reserva: o
+  /// registro aqui e a unica prova de que ele existiu, e sem ela ninguem
+  /// explicaria por que o caixa de um mes fechado mudou.
+  LANCAMENTO_EXCLUIDO
 }
 
 enum TipoOcupacao {
@@ -104,53 +169,55 @@ enum TipoOcupacao {
 // -----------------------------------------------------------------------------
 
 model Sala {
-  id                   String  @id @default(uuid(7))
-  nome                 String  @unique
-  slug                 String  @unique
-  ativa                Boolean @default(true)
-  capacidade           Int?
+  id                       String   @id @default(uuid(7))
+  nome                     String   @unique
+  slug                     String   @unique
+  ativa                    Boolean  @default(true)
+  capacidade               Int?
   /// Preco por hora DE DIA (ate o inicio da faixa noturna), em reais.
   /// Usado so para calcular o valor estimado — nao ha pagamento online.
-  precoPorHora         Decimal @map("preco_por_hora") @db.Decimal(10, 2)
+  precoPorHora             Decimal  @map("preco_por_hora") @db.Decimal(10, 2)
   /// Preco por hora APOS o inicio da faixa noturna.
-  precoPorHoraNoturno  Decimal @map("preco_por_hora_noturno") @db.Decimal(10, 2)
+  precoPorHoraNoturno      Decimal  @map("preco_por_hora_noturno") @db.Decimal(10, 2)
   /// Preco por hora DE DIA quando o grupo passa de "pessoasParaGrupo".
   /// Nulo = esta sala nao cobra diferente por tamanho de grupo durante o dia.
-  precoPorHoraGrupo    Decimal? @map("preco_por_hora_grupo") @db.Decimal(10, 2)
+  precoPorHoraGrupo        Decimal? @map("preco_por_hora_grupo") @db.Decimal(10, 2)
   /// Preco por hora a noite quando o grupo passa de "pessoasParaGrupo".
   /// Nulo = esta sala nao cobra diferente por tamanho de grupo.
   precoPorHoraNoturnoGrupo Decimal? @map("preco_por_hora_noturno_grupo") @db.Decimal(10, 2)
   /// A partir de QUANTAS pessoas o preco de grupo POR HORA passa a valer
   /// (acima deste numero). Vale para o preco de dia e o de noite.
-  pessoasParaGrupo     Int?    @map("pessoas_para_grupo")
+  pessoasParaGrupo         Int?     @map("pessoas_para_grupo")
   /// Esta sala aceita reserva na categoria DIARIA?
-  aceitaDiaria         Boolean @default(false) @map("aceita_diaria")
+  aceitaDiaria             Boolean  @default(false) @map("aceita_diaria")
   /// Preco fechado da diaria. Nulo quando a sala nao aceita diaria.
-  precoDiaria          Decimal? @map("preco_diaria") @db.Decimal(10, 2)
+  precoDiaria              Decimal? @map("preco_diaria") @db.Decimal(10, 2)
   /// Preco da diaria para grupo grande. Nulo = diaria de valor unico.
-  precoDiariaGrupo     Decimal? @map("preco_diaria_grupo") @db.Decimal(10, 2)
+  precoDiariaGrupo         Decimal? @map("preco_diaria_grupo") @db.Decimal(10, 2)
   /// ACIMA de quantas pessoas vale o preco de diaria de grupo.
   ///
   /// E um numero PROPRIO, e nao "pessoasParaGrupo" reaproveitado: na Sala de
   /// Reuniao o pulo por hora e entre 4 e 5 pessoas, e o da diaria e entre 5 e
   /// 6. Unificar faria a diaria de 5 pessoas sair pelo preco de grupo.
-  pessoasParaGrupoDiaria Int?  @map("pessoas_para_grupo_diaria")
+  pessoasParaGrupoDiaria   Int?     @map("pessoas_para_grupo_diaria")
   /// Duracao maxima de uma reserva, em minutos. Nulo = ate o fechamento do dia.
-  duracaoMaximaMinutos Int?    @map("duracao_maxima_minutos")
+  duracaoMaximaMinutos     Int?     @map("duracao_maxima_minutos")
   /// Ordem de exibicao na tela.
-  ordem                Int
+  ordem                    Int
   /// Cor da sala na agenda do painel, em "#RRGGBB". Escolhida no cadastro,
   /// de uma paleta fechada — cor livre acabaria em texto ilegivel.
-  cor                  String  @default("#FFC700") @db.VarChar(7)
+  cor                      String   @default("#FFC700") @db.VarChar(7)
 
-  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
 
-  fotos       FotoDaSala[]
-  reservas    Reserva[]
-  bloqueios   Bloqueio[]
+  fotos        FotoDaSala[]
+  reservas     Reserva[]
+  bloqueios    Bloqueio[]
   recorrencias Recorrencia[]
-  ocupacoes   OcupacaoSala[]
+  ocupacoes    OcupacaoSala[]
+
+  consumosEmporio ConsumoDoEmporio[]
 
   @@map("salas")
 }
@@ -179,7 +246,7 @@ model FotoDaSala {
 }
 
 model HorarioFuncionamento {
-  id String @id @default(uuid(7))
+  id             String  @id @default(uuid(7))
   /// 0 = domingo, 1 = segunda ... 6 = sabado.
   diaDaSemana    Int     @unique @map("dia_da_semana")
   aberto         Boolean
@@ -193,21 +260,38 @@ model HorarioFuncionamento {
 }
 
 model Usuario {
-  id String @id @default(uuid(7))
-  nome String
+  id        String  @id @default(uuid(7))
+  nome      String
   /// Nome de login do painel. Sem e-mail no MVP (decisao do CLAUDE.md).
-  usuario   String @unique
-  senhaHash String @map("senha_hash")
+  usuario   String  @unique
+  senhaHash String  @map("senha_hash")
   /// Desligado nao entra mais no painel, mas continua aparecendo como autor
   /// dos bloqueios e feriados que criou (Fase 11).
   ativo     Boolean @default(true)
+  /// VE A PARTE FINANCEIRA? (17/11/2026, pedido dos donos do coworking.)
+  ///
+  /// Dois niveis, e so dois: acesso total, ou tudo MENOS o Financeiro. Um
+  /// booleano, e nao uma lista de niveis, porque foi exatamente isso que foi
+  /// pedido — e um enum do Postgres aceita acrescentar valor mas nunca
+  /// remover.
+  ///
+  /// Nasce LIGADO: quem ja existia continua com tudo.
+  ///
+  /// Quem NAO ve o financeiro tambem nao administra usuarios. Sem isso o
+  /// filtro seria enfeite: a pessoa entraria em Configuracoes > Usuarios e se
+  /// promoveria sozinha, ou criaria uma conta com acesso total.
+  acessoFinanceiro Boolean @default(true) @map("acesso_financeiro")
 
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
 
   bloqueiosCriados    Bloqueio[]
   recorrenciasCriadas Recorrencia[]
   telefonesDeBalcao   TelefoneDeBalcao[]
+  movimentosDeEstoque MovimentoDeEstoque[]
   acoesRegistradas    AcaoRegistrada[]
+  contagensDeEstoque  ContagemDeEstoque[]
+  consumosLancados    ConsumoDoEmporio[]
+  lancamentosFeitos   Lancamento[]
 
   @@map("usuarios")
 }
@@ -216,7 +300,7 @@ model Usuario {
 /// Guardadas no banco, e nao na memoria, para o limite sobreviver a um
 /// reinicio do servidor.
 model TentativaLogin {
-  id String @id @default(uuid(7))
+  id      String  @id @default(uuid(7))
   /// Nome de usuario TENTADO. Pode nem existir — e isso que se quer medir.
   usuario String
   /// Endereco de rede de quem tentou, para o limite por IP.
@@ -286,6 +370,8 @@ model Empresa {
   reservas       Reserva[]
   clientes       Cliente[]
   demonstrativos Demonstrativo[]
+  lancamentos    Lancamento[]
+  contratos      ContratoMensal[]
 
   @@map("empresas")
 }
@@ -320,8 +406,8 @@ model TelefoneDaEmpresa {
 /// reserva continua la, intocado: ele e a verdade daquele dia e e o que a
 /// agenda mostra.
 model Cliente {
-  id   String  @id @default(uuid(7))
-  nome String
+  id    String  @id @default(uuid(7))
+  nome  String
   /// Desligado some das telas de escolha; o historico fica inteiro, mesma
   /// regra das salas, das empresas e das areas de atuacao. Excluir nao existe.
   ativo Boolean @default(true)
@@ -352,9 +438,12 @@ model Cliente {
   /// digitar na hora.
   precoHoraAcordado Decimal? @map("preco_hora_acordado") @db.Decimal(10, 2)
 
-  telefones      TelefoneDoCliente[]
-  reservas       Reserva[]
-  demonstrativos Demonstrativo[]
+  telefones       TelefoneDoCliente[]
+  reservas        Reserva[]
+  demonstrativos  Demonstrativo[]
+  consumosEmporio ConsumoDoEmporio[]
+  lancamentos     Lancamento[]
+  contratos       ContratoMensal[]
 
   @@index([nome])
   @@index([empresaId])
@@ -405,9 +494,9 @@ model TelefoneDeBalcao {
   /// proxima pessoa entender a marcacao sem precisar perguntar.
   motivo String
 
-  criadoEm   DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
   /// Quem marcou. Nulo quando o usuario foi desligado depois.
-  criadoPorId String? @map("criado_por_id")
+  criadoPorId String?  @map("criado_por_id")
   criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id], onDelete: SetNull)
 
   @@map("telefones_balcao")
@@ -447,6 +536,19 @@ model Demonstrativo {
   /// so para quem paga um preco diferente da tabela da sala — a Toca paga
   /// R$ 30 numa sala de R$ 40.
   valorHora Decimal? @map("valor_hora") @db.Decimal(10, 2)
+
+  /// HORAS INCLUSAS NA MENSALIDADE, congeladas na emissao (Fase 16, Parte D).
+  ///
+  /// NULO = sem cota, toda hora e cobrada. E o caso de quem nao e mensalista,
+  /// e tambem o dos demonstrativos emitidos antes desta coluna existir — com
+  /// um padrao zero eles passariam a dizer "cota de 0 h", e a tela leria isso
+  /// como "tem plano" em vez de "nao tem".
+  ///
+  /// CONGELADA como o resto: o contrato pode ser reajustado depois, e o
+  /// documento que o cliente recebeu nao pode mudar sozinho. O desconto em si
+  /// e RECALCULADO na leitura, a partir desta cota e dos itens congelados —
+  /// duas fontes do mesmo numero e como comecam dois valores que discordam.
+  cotaHoras Int?    @map("cota_horas")
   /// Total de horas do periodo, somado pelo sistema.
   horas     Decimal @db.Decimal(10, 2)
 
@@ -457,9 +559,18 @@ model Demonstrativo {
   ///    "pessoa": "Matheus Vitullo" }]
   itens Json
 
-  /// As linhas que a gestao acrescenta a mao — posicoes, emporio, impressoes:
+  /// As linhas que a gestao acrescenta a mao — posicoes, impressoes:
   /// [{ "descricao": "2 posicoes", "valor": "940.00" }]
+  ///
+  /// O EMPORIO SAIU DAQUI em 16/11/2026: ele passou a ser somado pelo sistema
+  /// a partir dos consumos lancados, e tem coluna propria.
   linhasExtras Json @map("linhas_extras")
+
+  /// O EMPORIO, CONGELADO na emissao — mesma regra da tabela de horas.
+  ///
+  /// Recalculado na leitura, um lancamento feito depois mudaria um documento
+  /// que o cliente ja recebeu. Nulo = nao havia consumo no periodo.
+  emporio Json?
 
   /// Total escrito a mao, quando houve renegociacao. NULO e o normal: vale a
   /// soma que o sistema faz. Existe porque o dono pediu a saida de emergencia,
@@ -479,8 +590,8 @@ model Demonstrativo {
 
 /// Parametros gerais do sistema, editaveis no painel (Fase 11).
 model Configuracao {
-  chave String @id
-  valor String
+  chave     String @id
+  valor     String
   /// Explicacao curta, mostrada no painel.
   descricao String
 
@@ -511,16 +622,16 @@ model Reserva {
   /// Valor estimado, congelado no momento da criacao da reserva.
   valor          Decimal  @db.Decimal(10, 2)
 
-  status    StatusReserva    @default(CONFIRMADA)
-  origem    OrigemReserva
+  status      StatusReserva    @default(CONFIRMADA)
+  origem      OrigemReserva
   /// Por hora ou dia inteiro. Muda o preco e o horario ocupado.
-  categoria CategoriaReserva @default(HORA)
+  categoria   CategoriaReserva @default(HORA)
   /// Area de atuacao do cliente. NULO nas reservas anteriores ao campo — o
   /// relatorio trata essas como "nao informado". Para reserva NOVA e
   /// obrigatorio, e quem cobra isso e a aplicacao: a coluna precisa aceitar
   /// nulo por causa do passado.
-  profissaoId String?    @map("profissao_id")
-  profissao   Profissao? @relation(fields: [profissaoId], references: [id])
+  profissaoId String?          @map("profissao_id")
+  profissao   Profissao?       @relation(fields: [profissaoId], references: [id])
 
   /// A empresa que esta reserva pertence, respondida por quem reservou.
   ///
@@ -553,10 +664,10 @@ model Reserva {
   ///   data preenchida        -> ja foi enviado
   ///   nulo + naoAplicavel    -> nunca vai sair (o horario ja tinha passado)
   ///   nulo + nao aplicavel false -> ainda vai sair
-  lembrete13hEnviadoEm DateTime? @map("lembrete_13h_enviado_em") @db.Timestamptz(3)
-  lembrete3hEnviadoEm  DateTime? @map("lembrete_3h_enviado_em") @db.Timestamptz(3)
-  lembrete13hNaoAplicavel Boolean @default(false) @map("lembrete_13h_nao_aplicavel")
-  lembrete3hNaoAplicavel  Boolean @default(false) @map("lembrete_3h_nao_aplicavel")
+  lembrete13hEnviadoEm    DateTime? @map("lembrete_13h_enviado_em") @db.Timestamptz(3)
+  lembrete3hEnviadoEm     DateTime? @map("lembrete_3h_enviado_em") @db.Timestamptz(3)
+  lembrete13hNaoAplicavel Boolean   @default(false) @map("lembrete_13h_nao_aplicavel")
+  lembrete3hNaoAplicavel  Boolean   @default(false) @map("lembrete_3h_nao_aplicavel")
 
   /// Quando a confirmacao desta reserva foi tratada.
   ///
@@ -568,8 +679,8 @@ model Reserva {
   /// Convite para avaliar, 1 hora DEPOIS do termino. Mesma mecanica dos
   /// lembretes: data preenchida = ja foi; "nao aplicavel" = nunca vai sair
   /// (a reserva terminou ha tempo demais quando o sistema viu).
-  avaliacaoEnviadaEm   DateTime? @map("avaliacao_enviada_em") @db.Timestamptz(3)
-  avaliacaoNaoAplicavel Boolean  @default(false) @map("avaliacao_nao_aplicavel")
+  avaliacaoEnviadaEm    DateTime? @map("avaliacao_enviada_em") @db.Timestamptz(3)
+  avaliacaoNaoAplicavel Boolean   @default(false) @map("avaliacao_nao_aplicavel")
 
   /// Lista de alteracoes da reserva (reagendamentos, cancelamento).
   historicoAlteracoes Json @default("[]") @map("historico_alteracoes")
@@ -578,7 +689,9 @@ model Reserva {
   atualizadoEm DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(3)
   canceladoEm  DateTime? @map("cancelado_em") @db.Timestamptz(3)
 
-  mensagens LogMensagem[]
+  mensagens  LogMensagem[]
+  /// O lancamento do caixa, quando a recepcao marcou "Recebi".
+  lancamento Lancamento?
 
   @@index([salaId, inicio])
   @@index([telefone, status])
@@ -629,10 +742,10 @@ model Recorrencia {
   horaInicio   String @map("hora_inicio") @db.VarChar(5)
   horaFim      String @map("hora_fim") @db.VarChar(5)
 
-  frequencia FrequenciaRecorrencia
+  frequencia  FrequenciaRecorrencia
   /// So na frequencia MENSAL: 1, 2, 3 = primeira/segunda/terceira do mes;
   /// -1 = ultima. Nulo nas outras frequencias.
-  semanaDoMes Int? @map("semana_do_mes")
+  semanaDoMes Int?                  @map("semana_do_mes")
 
   dataInicio DateTime @map("data_inicio") @db.Date
   /// Obrigatoria: toda serie tem fim (decisao da Fase 9).
@@ -656,8 +769,8 @@ model Recorrencia {
 // -----------------------------------------------------------------------------
 
 model CodigoVerificacao {
-  id       String @id @default(uuid(7))
-  telefone String
+  id         String @id @default(uuid(7))
+  telefone   String
   /// Nunca guardamos o codigo em texto puro, so o embaralhado.
   codigoHash String @map("codigo_hash")
 
@@ -674,8 +787,8 @@ model CodigoVerificacao {
 }
 
 model SessaoCliente {
-  id       String @id @default(uuid(7))
-  telefone String
+  id        String @id @default(uuid(7))
+  telefone  String
   /// Embaralhado (SHA-256) do valor que vai no cookie httpOnly.
   /// O valor puro so existe no navegador do cliente; o banco nunca o ve.
   tokenHash String @unique @map("token_hash")
@@ -692,10 +805,10 @@ model SessaoCliente {
 // -----------------------------------------------------------------------------
 
 model TemplateMensagem {
-  id    String        @id @default(uuid(7))
-  chave ChaveTemplate @unique
+  id        String        @id @default(uuid(7))
+  chave     ChaveTemplate @unique
   /// Texto com variaveis: {{nome}} {{sala}} {{data}} {{inicio}} {{fim}} {{valor}} {{codigo}}
-  texto String
+  texto     String
   /// Explicacao curta, mostrada no painel.
   descricao String
 
@@ -709,12 +822,12 @@ model LogMensagem {
   reservaId String?  @map("reserva_id")
   reserva   Reserva? @relation(fields: [reservaId], references: [id], onDelete: SetNull)
 
-  telefone String
-  tipo     ChaveTemplate
-  status   StatusMensagem
+  telefone   String
+  tipo       ChaveTemplate
+  status     StatusMensagem
   /// Mensagem de erro devolvida pela Evolution API, quando falhou.
-  erro     String?
-  tentativas Int @default(1)
+  erro       String?
+  tentativas Int            @default(1)
 
   criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
 
@@ -747,6 +860,98 @@ model OcupacaoSala {
 
   @@index([salaId])
   @@map("ocupacao_salas")
+}
+
+// -----------------------------------------------------------------------------
+// EMPORIO (Fase 15)
+// -----------------------------------------------------------------------------
+
+/// Um item vendido no emporio: barrinha, energetico, cafe.
+///
+/// O emporio JA e cobrado hoje, digitado a mao nas "Outras linhas" do controle
+/// de horas. Este cadastro existe para o valor parar de ser digitado.
+model Produto {
+  id   String @id @default(uuid(7))
+  nome String @unique
+
+  /// COMIDA ou BEBIDA — as duas fichas fisicas que a equipe ja usa.
+  categoria CategoriaDoProduto
+
+  /// Contagem de prateleira ou leitura de maquina. Ver "TipoDeControle".
+  controle TipoDeControle @default(ESTOQUE)
+
+  /// Preco de venda, por unidade. NAO retroage: cada consumo congela o preco
+  /// que valia no dia, igual a reserva.
+  ///
+  /// ZERO E VALIDO E SIGNIFICA CORTESIA: quase todos os cafes da maquina sao
+  /// livres ("pode consumir a vontade"), e so dois sao cobrados. O sistema
+  /// precisa conhecer os gratuitos para contar o consumo deles.
+  preco Decimal @db.Decimal(10, 2)
+
+  /// A FOTO DO PRODUTO, como no iFood: e ela que a recepcionista reconhece de
+  /// relance na hora de lancar o que esta escrito na ficha.
+  ///
+  /// UMA foto, nao um carrossel: aqui ela serve para identificar o item, e nao
+  /// para vende-lo como as fotos das salas. Nulo e estado normal — produto sem
+  /// foto aparece com a inicial do nome, e nunca com um espaco vazio.
+  ///
+  /// O arquivo fica no Cloudinary, na pasta "mult-coworking/produtos". O
+  /// "public_id" e o que permite apagar o arquivo de la depois.
+  fotoPublicId String? @map("foto_public_id")
+  fotoUrl      String? @map("foto_url")
+
+  /// Desligado sai das telas de lancamento, mas o historico de consumo fica.
+  /// Produto NUNCA se exclui — mesma regra de salas, empresas e areas de
+  /// atuacao: apagar tiraria o historico de vendas em silencio.
+  ativo Boolean @default(true)
+
+  /// A ordem em que aparece para quem lanca. Definida no painel por botoes de
+  /// mover, como nas areas de atuacao.
+  ordem Int
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  movimentos MovimentoDeEstoque[]
+  tags       ProdutoComTag[]
+  contagens  ItemDaContagem[]
+  consumos   ConsumoDoEmporio[]
+
+  @@index([ativo, ordem])
+  @@index([categoria, ordem])
+  @@map("produtos")
+}
+
+/// Uma linha do estoque: o que entrou ou saiu, quando e por que.
+///
+/// O estoque atual de um produto e a SOMA das quantidades daqui. Nunca um
+/// campo editavel na linha do produto — ver o comentario de
+/// "TipoMovimentoEstoque".
+model MovimentoDeEstoque {
+  id        String  @id @default(uuid(7))
+  produtoId String  @map("produto_id")
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  tipo TipoMovimentoEstoque
+
+  /// COM SINAL: positiva entra, negativa sai. O banco confere que o sinal
+  /// combina com o tipo (ver a trava "movimento_sinal_do_tipo" na migracao) —
+  /// uma REPOSICAO negativa aumentaria o estoque ao ser somada, e o numero
+  /// continuaria parecendo certo.
+  quantidade Int
+
+  /// Obrigatorio no AJUSTE: daqui a seis meses ninguem lembra por que o
+  /// estoque foi corrigido, e sem explicacao a proxima pessoa corrige de novo.
+  motivo String?
+
+  /// Quem lancou. Nulo quando o usuario do painel foi desligado depois.
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([produtoId, criadoEm])
+  @@map("movimentos_estoque")
 }
 
 // -----------------------------------------------------------------------------
@@ -795,4 +1000,455 @@ model AcaoRegistrada {
   @@index([criadoEm])
   @@index([tipo, criadoEm])
   @@map("acoes_registradas")
+}
+
+/// Uma etiqueta colorida do emporio: chocolate, energetico, cerveja…
+///
+/// POR QUE E TABELA, e nao uma lista fixa no codigo: a equipe acrescenta e
+/// tira etiqueta sem programador, mesma decisao das areas de atuacao. Um enum
+/// do PostgreSQL aceita acrescentar valor mas nunca remover.
+///
+/// A COR E DO CADASTRO, e nao do codigo: e ela que separa as categorias de
+/// relance na tela, e quem escolhe e quem olha a prateleira todo dia.
+model TagDeProduto {
+  id   String @id @default(uuid(7))
+  nome String @unique
+  /// "#RRGGBB". A tela escreve por cima em preto ou branco conforme a cor,
+  /// para a etiqueta nunca ficar ilegivel.
+  cor  String @db.VarChar(7)
+
+  /// Desligada some das telas, mas os produtos continuam marcados: o
+  /// historico de venda nao pode mudar porque uma etiqueta saiu de moda.
+  ativa Boolean @default(true)
+  ordem Int
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  produtos ProdutoComTag[]
+
+  @@index([ativa, ordem])
+  @@map("tags_produto")
+}
+
+/// Liga produto e etiqueta. VARIAS por produto, de proposito: a Barrinha
+/// Proteina e barrinha E proteina, e obrigar a escolher uma so faria a equipe
+/// perder um dos dois jeitos de achar o item.
+model ProdutoComTag {
+  produtoId String       @map("produto_id")
+  produto   Produto      @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  tagId     String       @map("tag_id")
+  tag       TagDeProduto @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([produtoId, tagId])
+  @@index([tagId])
+  @@map("produtos_com_tag")
+}
+
+/// UMA CONTAGEM: a ficha da parede, passada para o sistema.
+///
+/// POR QUE A CONTAGEM E A ROTINA PRINCIPAL, e nao o lancamento de cada
+/// reposicao: e o que a equipe JA FAZ. E, mais importante, ela e
+/// AUTOCORRETIVA — o que alguem esqueceu de lancar aparece sozinho na conta do
+/// dia seguinte, porque a prateleira nao mente. O lancamento item a item e
+/// exato so se ninguem esquecer, e quando alguem esquece o sistema nunca
+/// descobre.
+///
+/// A CONTAGEM NAO SUBSTITUI OS MOVIMENTOS: ela os RECONCILIA. Gravar a
+/// contagem gera um movimento de AJUSTE com a diferenca, entao o estoque
+/// continua sendo a soma dos movimentos — uma fonte de verdade so — e o
+/// extrato continua respondendo "por que esta em 3?".
+model ContagemDeEstoque {
+  id String @id @default(uuid(7))
+
+  /// O dia contado, no relogio de Sao Paulo. E o dia da FICHA, nao o do
+  /// lancamento: a recepcionista le o papel no dia seguinte.
+  dia DateTime @db.Date
+
+  /// "09:40", como esta escrito na ficha. Opcional: nem toda linha tem.
+  horario String? @db.VarChar(5)
+
+  /// O campo "FALTOU" da ficha, escrito a mao ("1 cookies").
+  observacao String?
+
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id])
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  itens ItemDaContagem[]
+
+  @@index([dia])
+  @@map("contagens_estoque")
+}
+
+/// Um numero da ficha: quanto tinha daquele produto naquele dia.
+model ItemDaContagem {
+  contagemId String            @map("contagem_id")
+  contagem   ContagemDeEstoque @relation(fields: [contagemId], references: [id], onDelete: Cascade)
+  produtoId  String            @map("produto_id")
+  produto    Produto           @relation(fields: [produtoId], references: [id])
+
+  /// O que foi contado. Em ESTOQUE, quantas unidades havia; em CONTADOR, a
+  /// leitura acumulada da maquina.
+  quantidade Int
+
+  /// O que o sistema ESPERAVA, congelado no momento da contagem.
+  ///
+  /// Guardado, e nao recalculado: depois da contagem o estoque e ajustado, e
+  /// refazer a conta depois sempre daria diferenca zero — o relatorio do
+  /// "FALTOU" ficaria vazio justamente no caso que importa.
+  esperado Int
+
+  @@id([contagemId, produtoId])
+  @@index([produtoId])
+  @@map("itens_da_contagem")
+}
+
+/// Pix, dinheiro, cartao… A lista que a equipe usa no balcao.
+///
+/// TABELA e nao enum, mesma decisao das areas de atuacao e das etiquetas: um
+/// enum do PostgreSQL aceita acrescentar valor mas NUNCA remover, e a forma
+/// de pagamento e exatamente o tipo de lista que muda sem avisar programador.
+model FormaDePagamento {
+  id    String  @id @default(uuid(7))
+  nome  String  @unique
+  /// Desligada some da tela de lancamento; o historico fica.
+  ativa Boolean @default(true)
+  ordem Int
+
+  criadoEm DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  consumos    ConsumoDoEmporio[]
+  lancamentos Lancamento[]
+
+  @@index([ativa, ordem])
+  @@map("formas_pagamento")
+}
+
+/// UM CONSUMO DO EMPORIO: uma linha da ficha fisica, passada para o sistema.
+///
+/// POR QUE ISTO EXISTE: hoje a recepcionista le a ficha, SOMA DE CABECA por
+/// cliente e digita uma linha de texto no controle de horas, com um total
+/// escrito a mao ("EMPORIO 12 aguas... R$ 201,50"). E o mesmo numero digitado
+/// sem conferencia que gerou os R$ 70 cobrados a mais na planilha da Toca.
+///
+/// Aqui cada item vira uma linha, e QUEM SOMA E O SISTEMA.
+model ConsumoDoEmporio {
+  id String @id @default(uuid(7))
+
+  /// O CADASTRO da Fase 14, nunca um nome digitado. A recepcionista disse por
+  /// que sem ninguem perguntar: "pego o sobrenome para nao ficar tipo Matheus
+  /// da Toca, Matheus Vitullo". Nome solto aqui recriaria a bagunca dos 44
+  /// nomes dentro do emporio.
+  clienteId String  @map("cliente_id")
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  produtoId String  @map("produto_id")
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  quantidade Int
+
+  /// O preco de UMA unidade, CONGELADO no lancamento — igual a reserva.
+  /// Reajustar o produto no painel nao pode mudar o que ja foi consumido.
+  precoUnitario Decimal @map("preco_unitario") @db.Decimal(10, 2)
+  /// quantidade x precoUnitario, tambem congelado. Guardado, e nao
+  /// recalculado: e ele que entra na cobranca.
+  valor         Decimal @db.Decimal(10, 2)
+
+  /// QUANDO A PESSOA CONSUMIU, lido da ficha — nao quando foi lancado. A
+  /// recepcionista le o papel no dia seguinte; carimbar a hora do lancamento
+  /// faria o relatorio dizer que todo mundo consome no fim do dia.
+  consumidoEm DateTime @map("consumido_em") @db.Timestamptz(3)
+
+  /// A sala onde a pessoa estava, quando escrito na ficha. Opcional: nem
+  /// toda linha tem.
+  salaId String? @map("sala_id")
+  sala   Sala?   @relation(fields: [salaId], references: [id])
+
+  momento MomentoDoPagamento
+
+  /// So faz sentido no NA_HORA. No NA_MENSALIDADE fica nulo: ainda nao foi
+  /// pago, e inventar uma forma agora seria dizer algo que nao aconteceu.
+  formaPagamentoId String?           @map("forma_pagamento_id")
+  formaPagamento   FormaDePagamento? @relation(fields: [formaPagamentoId], references: [id])
+
+  criadoPorId String?  @map("criado_por_id")
+  criadoPor   Usuario? @relation(fields: [criadoPorId], references: [id])
+  criadoEm    DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+
+  @@index([clienteId, consumidoEm])
+  @@index([consumidoEm])
+  @@index([produtoId])
+  @@map("consumos_emporio")
+}
+
+// -----------------------------------------------------------------------------
+// FASE 16, PARTE A — O FINANCEIRO: lancamentos de entrada e saida
+// -----------------------------------------------------------------------------
+
+/// Entrada e saida de dinheiro.
+///
+/// O SINAL NUNCA E GRAVADO NO VALOR: o valor e sempre positivo e quem diz o
+/// lado e este tipo, que vem da CATEGORIA. Guardar um valor negativo abriria a
+/// porta para uma "entrada de -200", que subtrairia do caixa sem ninguem
+/// desconfiar do numero.
+enum TipoDeLancamento {
+  ENTRADA
+  SAIDA
+}
+
+/// Para onde o dinheiro foi, ou de onde veio.
+///
+/// E TABELA, e nao enum do Postgres, pela mesma razao das areas de atuacao e
+/// das etiquetas do emporio: a equipe acrescenta e tira categoria sem
+/// programador. Um enum aceita acrescentar valor, mas nunca remover.
+model CategoriaFinanceira {
+  id   String @id @default(uuid(7))
+  nome String
+
+  /// ENTRADA ou SAIDA. **NUNCA MUDA depois de criada**, e nao ha tela para
+  /// isso: virar o tipo de uma categoria inverteria o sinal de todo
+  /// lancamento que aponta para ela — meses de caixa mudariam de lado de uma
+  /// vez, e cada linha continuaria parecendo certa.
+  tipo TipoDeLancamento
+
+  /// O nome interno, que NUNCA muda. Renomear mexe so em "nome". E o slug que
+  /// amarra a categoria ao que ja esta gravado; mudando, um relatorio antigo
+  /// deixaria de bater com a lista. Mesma regra das profissoes.
+  slug String @unique
+
+  /// Desligada sai das telas de lancamento; o historico fica inteiro e ela
+  /// continua no relatorio. Excluir nao existe.
+  ativa Boolean @default(true)
+  ordem Int
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  lancamentos Lancamento[]
+
+  /// Duas categorias de mesmo nome DENTRO do mesmo lado sao erro; "Impostos"
+  /// como entrada e como saida, nao.
+  @@unique([tipo, nome])
+  @@index([tipo, ativa, ordem])
+  @@map("categorias_financeiras")
+}
+
+/// Quem recebe o dinheiro de uma saida.
+///
+/// Separado de Cliente de proposito: cliente e quem PAGA ao coworking, e
+/// misturar os dois faria o relatorio de clientes mostrar a empresa de limpeza
+/// como se fosse cliente. Nao se exclui, desliga-se.
+model Fornecedor {
+  id    String  @id @default(uuid(7))
+  nome  String  @unique
+  ativo Boolean @default(true)
+
+  /// Telefone, CNPJ, o que a equipe quiser anotar. Texto livre de proposito:
+  /// aqui nao ha regra de negocio nenhuma pendurada.
+  observacao String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  lancamentos Lancamento[]
+
+  @@index([ativo, nome])
+  @@map("fornecedores")
+}
+
+/// UM LANCAMENTO DE DINHEIRO.
+///
+/// NAO EXISTE COLUNA DE SITUACAO, e isso e decisao de desenho. Os tres estados
+/// que a equipe le — pendente, pago e atrasado — saem de DOIS fatos:
+///
+///   - pago       = "pago_em" preenchido;
+///   - pendente   = "pago_em" nulo;
+///   - atrasado   = "pago_em" nulo E vencimento ja passou.
+///
+/// Gravar "ATRASADO" numa coluna exigiria uma rotina virando o status todo
+/// dia. Com CRON_ATIVO="false" — como na previa — nada ficaria atrasado nunca,
+/// e isso pareceria defeito do sistema sem dar erro em lugar nenhum. Pior: a
+/// coluna poderia discordar da data de vencimento ao lado dela.
+///
+/// O TIPO (entrada ou saida) TAMBEM NAO E GRAVADO AQUI: ele vem da categoria.
+/// Guardado nos dois lugares, um dia os dois discordariam, e nao haveria como
+/// saber qual valia.
+model Lancamento {
+  id String @id @default(uuid(7))
+
+  descricao String
+
+  /// SEMPRE POSITIVO, com trava no banco. Quem diz o lado e a categoria.
+  valor Decimal @db.Decimal(10, 2)
+
+  categoriaId String              @map("categoria_id")
+  categoria   CategoriaFinanceira @relation(fields: [categoriaId], references: [id])
+
+  /// De quem veio (entrada) — o cadastro, nunca um nome digitado.
+  clienteId String?  @map("cliente_id")
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  /// A empresa, quando a conta e dela e nao de uma pessoa.
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  /// Para quem foi (saida).
+  fornecedorId String?     @map("fornecedor_id")
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  /// Opcional: um lancamento previsto ainda nao tem forma definida.
+  formaPagamentoId String?           @map("forma_pagamento_id")
+  formaPagamento   FormaDePagamento? @relation(fields: [formaPagamentoId], references: [id])
+
+  /// O dia combinado, no relogio de Sao Paulo. Sem hora de proposito: ninguem
+  /// vence as 14h32.
+  vencimento DateTime @db.Date
+
+  /// O dia em que entrou ou saiu de verdade. NULO = ainda nao aconteceu.
+  pagoEm DateTime? @map("pago_em") @db.Date
+
+  observacao String?
+
+  /// A RESERVA que este lancamento espelha, quando ele nasceu do "Recebi" da
+  /// agenda. NULO e o normal: lancamento digitado a mao.
+  ///
+  /// A chave e ON DELETE SET NULL, e nao RESTRICT: a reserva pode ser
+  /// excluida (com evidencia). Levando o lancamento junto, o dinheiro que
+  /// entrou no caixa desapareceria dele e o caixa de um mes fechado mudaria
+  /// sozinho. Solto, o lancamento fica de pe e vira manual.
+  reservaId String?  @unique @map("reserva_id")
+  reserva   Reserva? @relation(fields: [reservaId], references: [id])
+
+  /// O DIA do emporio que este lancamento resume, quando ele nasceu do
+  /// consumo pago na hora.
+  ///
+  /// E UM POR DIA E POR FORMA DE PAGAMENTO, nao um por consumo: uma barrinha
+  /// de R$ 6,50 por linha daria ~150 linhas de emporio por mes afogando as
+  /// ~20 contas de verdade — e o dinheiro tambem nao chega assim, chega como
+  /// UM comprovante de Pix do dia. O detalhe item a item fica na tela do
+  /// emporio. A unicidade esta no indice da migracao, com COALESCE na forma:
+  /// dois NULOs nao colidem num indice unico do Postgres.
+  emporioDia DateTime? @map("emporio_dia") @db.Date
+
+  /// O CONTRATO de mensalidade que esta cobranca atende, quando ela nasceu de
+  /// "gerar as mensalidades do mes". NULO e o normal.
+  contratoId String?         @map("contrato_id")
+  contrato   ContratoMensal? @relation(fields: [contratoId], references: [id])
+
+  /// O MES COBRADO, como "2026-12". Nao e o vencimento: o contrato que vence
+  /// dia 10 cobra dezembro em 10/12 e o que vence dia 5 cobra dezembro em
+  /// 05/12 — os dois sao a mensalidade DE dezembro.
+  ///
+  /// E ela, junto com o contrato, que forma a trava de "uma cobranca por mes":
+  /// sem isso, dois cliques em "gerar" dobrariam a receita do mes e cada linha
+  /// continuaria parecendo certa.
+  competencia String?
+
+  /// O nome vai GRAVADO junto com a chave: o usuario pode ser desligado, e
+  /// "alguem lancou isso" nao serve de explicacao seis meses depois.
+  criadoPorId   String?  @map("criado_por_id")
+  criadoPor     Usuario? @relation(fields: [criadoPorId], references: [id])
+  criadoPorNome String?  @map("criado_por_nome")
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  /// O caixa e sempre lido por periodo: estes dois indices sao os que o fluxo
+  /// de caixa e o painel usam.
+  @@index([vencimento])
+  @@index([pagoEm])
+  @@index([categoriaId])
+  @@index([clienteId])
+  @@index([empresaId])
+  @@index([fornecedorId])
+  @@map("lancamentos")
+}
+
+// -----------------------------------------------------------------------------
+// FASE 16, PARTE C — os espacos de locacao mensal e as mensalidades
+// -----------------------------------------------------------------------------
+
+/// Um espaco alugado por MES — as salas privativas do coworking.
+///
+/// POR QUE NAO ENTRA EM "Sala", e isto e o ponto: "salas" e a tabela da
+/// AGENDA. Uma linha ali aparece no site publico para qualquer um reservar,
+/// entra na grade de disponibilidade, nos relatorios de reserva e nas travas
+/// de sobreposicao. Pondo os espacos mensais la, um cliente poderia reservar
+/// por hora a sala que outro aluga por mes.
+///
+/// Nao se exclui, desliga-se — mesma regra de salas, empresas, areas de
+/// atuacao, clientes, categorias e fornecedores.
+model Espaco {
+  id    String  @id @default(uuid(7))
+  nome  String  @unique
+  ativo Boolean @default(true)
+  ordem Int
+
+  /// Metragem, andar, o que a equipe quiser anotar. Texto livre: aqui nao ha
+  /// regra de negocio nenhuma pendurada.
+  observacao String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  contratos ContratoMensal[]
+
+  @@index([ativo, ordem])
+  @@map("espacos")
+}
+
+/// O CONTRATO de um mensalista.
+///
+/// Ele e a resposta para a pergunta que o dono fez: *"como que o sistema iria
+/// saber que ta pago?"*. O contrato diz QUANTO e QUANDO; a cobranca do mes
+/// nasce dele, e alguem marca que recebeu — exatamente como o dinheiro chega,
+/// um Pix por mes.
+model ContratoMensal {
+  id String @id @default(uuid(7))
+
+  /// QUEM PAGA: uma pessoa ou uma empresa, nunca as duas (trava no banco). O
+  /// demonstrativo ja aceita os dois desde 11/11, e pela mesma razao: "Para:
+  /// Toca Imobiliaria" no cabecalho e a empresa, nao uma pessoa.
+  clienteId String?  @map("cliente_id")
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  empresaId String?  @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  /// O espaco ocupado. NULO e legitimo: ha mensalista que paga pelo acesso e
+  /// pelas horas inclusas, sem sala propria.
+  espacoId String? @map("espaco_id")
+  espaco   Espaco? @relation(fields: [espacoId], references: [id])
+
+  valorMensal Decimal @map("valor_mensal") @db.Decimal(10, 2)
+
+  /// O dia do mes, de 1 a 31. Mes que nao tem aquele dia (31 em fevereiro) cai
+  /// no ULTIMO dele, e quem faz essa conta e a aplicacao.
+  diaVencimento Int @map("dia_vencimento")
+
+  /// HORAS DE SALA INCLUSAS na mensalidade. NULO = sem cota, toda hora e
+  /// cobrada. Zero e recusado pelo banco: seria "tem plano com zero hora", que
+  /// e a mesma coisa que nao ter cota dita de um jeito que a tela leria
+  /// diferente.
+  cotaHoras Int? @map("cota_horas")
+
+  inicio DateTime  @db.Date
+  /// NULO = vigente. Preenchido = o contrato terminou naquele dia.
+  fim    DateTime? @db.Date
+
+  /// Desligado para de gerar cobranca; o historico fica inteiro.
+  ativo      Boolean @default(true)
+  observacao String?
+
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(3)
+  atualizadoEm DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(3)
+
+  /// As cobrancas geradas. A trava de "uma por mes" esta no indice da migracao.
+  cobrancas Lancamento[]
+
+  @@index([clienteId])
+  @@index([empresaId])
+  @@index([espacoId])
+  @@index([ativo])
+  @@map("contratos_mensais")
 }

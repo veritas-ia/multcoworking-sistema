@@ -681,6 +681,180 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
   que mexeram na agenda" sem abrir uma por uma).
 - 15 testes. **Foi para o `main`, e não para a prévia** — decisão do dono: *"é para
   atualizar isso de fato no sistema oficial que está rodando hoje."*
+### Versão 2.0 construída numa PRÉVIA (11/11/2026)
+- **Decisão do dono:** o financeiro e o empório nascem numa **cópia do sistema**, que
+  ele olha e aprova antes de qualquer coisa ir para o original. *"A gente posta no
+  original quando ele aprovar."*
+- **Branch `previa`** no mesmo repositório, e um segundo app no EasyPanel apontando
+  para ela. Aprovado, a branch entra na `main` e vai pelo deploy de sempre.
+- **O PERIGO é a prévia ser IDÊNTICA.** Com as duas abas abertas, alguém lança a
+  reserva de um cliente na prévia, ela nunca chega na agenda de verdade, e o cliente
+  aparece no dia sem sala. Três avisos impedem isso, todos ligados por `AMBIENTE="previa"`:
+  faixa preta em toda página (pública e do painel), **"PRÉVIA ·"** na frente do título
+  da aba — a barra de abas é onde a faixa não aparece — e o site inteiro fora do Google.
+- **Esquecer a variável NÃO DÁ ERRO:** a prévia sobe funcionando, só que
+  indistinguível do sistema real. Por isso há teste para os três avisos, e para o valor
+  errado cair no lado seguro (qualquer coisa que não seja "previa" é produção).
+- **Cinco travas, cada uma por um motivo diferente** (ver `docs/previa.md`):
+  - **banco próprio**, cópia de produção, em serviço separado — nenhum caminho leva a
+    prévia a escrever na agenda real;
+  - **`CRON_ATIVO="false"`**: os telefones na cópia são os **reais**, e as rotinas
+    mandariam lembrete e convite de avaliação para os clientes de verdade;
+  - **`EVOLUTION_*` vazias**: segunda camada da mesma proteção, pelo modo simulado;
+  - **`CLOUDINARY_*` vazias** — a que quase passou batido: com a mesma credencial,
+    apagar uma foto na prévia **apagaria o arquivo de verdade** e ela sumiria do site
+    real. Vazias, as fotos existentes continuam aparecendo;
+  - **`ADMIN_SESSAO_SEGREDO` diferente**: o login de um não vale no outro.
+- **A cópia dos dados é de produção**, e não inventada (decisão do dono): o dono
+  reconhece os próprios clientes e a demonstração convence. Fica atrás de login.
+
+### Fase 15 — o catálogo de verdade, categorias e etiquetas (14/11/2026)
+- **O catálogo veio das FICHAS FÍSICAS e das plaquinhas**, conferido um a um: a lista da
+  geladeira bateu com a tabela de preços colada na porta (**10 de 10**) e a do chocolate
+  com as etiquetas do expositor (**8 de 8**). Entra **pela migração, não pelo seed** — o
+  deploy roda `migrate deploy`, e catálogo só no seed deixaria a tela de lançamento
+  nascer vazia em produção.
+- **Duas categorias FIXAS** (`COMIDA` / `BEBIDA`), que são as duas fichas que a equipe já
+  usa — "CHOCOLATE" e "GELADEIRA". A coluna **não tem padrão**: um silencioso poria
+  bebida na ficha da comida.
+- **As etiquetas são TABELA, com cor** (`tags_produto`), editáveis sem programador, mesma
+  decisão das áreas de atuação. Nove de saída: Chocolate, Biscoito, Proteína, Água,
+  Refrigerante, Suco, Energético, Cerveja, Café. A cor tem trava de formato no banco —
+  cor torta não dá erro, a etiqueta só **some da tela** e ninguém liga uma coisa à outra.
+- **VÁRIAS etiquetas por produto**, de propósito: o Chocobiscuit é chocolate *e*
+  biscoito. Obrigar a escolher uma faria a equipe perder um dos dois jeitos de achar.
+
+#### A MÁQUINA DE CAFÉ NÃO TEM ESTOQUE — TEM CONTADOR
+- Descoberto na ficha: o Expresso vai **10939 → 10949 → 10958 → 10972 → 10975** nos dias
+  3 a 7. **Não é quanto tem, é quanto a máquina já fez na vida.** O vendido no dia é a
+  *diferença* entre duas leituras.
+- Os **12 botões entram como produto mesmo sendo GRÁTIS** (preço zero). Palavra do dono:
+  *"os outros que não aparece preço é porque realmente não é cobrado à parte, pode
+  consumir à vontade"*. Eles existem porque a máquina conta, e o coworking precisa do
+  consumo para repor leite, pó e copo.
+- **Em aberto:** a máquina tem duas plaquinhas de **R$ 10** (Mokaccino e Achocolatado) e
+  esses nomes **não batem** com os 12 da ficha. A equipe acerta o preço no painel — é
+  campo editável, não precisa de migração.
+
+#### A CONTAGEM DIÁRIA vai substituir a reposição item a item (aprovado, NÃO construído)
+- **A rotina real da equipe é CONTAR a prateleira**, não lançar cada venda. As fichas
+  mostram isso: um número por produto por dia, com as reposições anotadas na mão
+  ("3+1=4"), mais as linhas TOTAL e FALTOU.
+- **A contagem é AUTOCORRETIVA**, e é por isso que ela ganha: o que foi esquecido aparece
+  sozinho na conta do dia seguinte, porque a prateleira não mente. A reposição item a
+  item é exata **só se ninguém esquecer** — e quando alguém esquece, o sistema nunca
+  descobre.
+- **As duas fichas respondem perguntas diferentes, e as duas ficam:** a do cliente (nome,
+  sala, produto) diz **quem deve**; a contagem diz **o que saiu**. **A diferença entre as
+  duas é a coluna "FALTOU"** — o que sumiu sem ninguém pagar. Hoje ninguém calcula isso.
+- **A reposição continua sendo registrada**: sem ela a conta da contagem não fecha (não
+  dá para distinguir "vendeu 2" de "chegou 1 e vendeu 3").
+
+#### A CONTAGEM DIÁRIA, construída em 14/11/2026
+- **A contagem RECONCILIA os movimentos, não os substitui.** Gravar uma contagem gera um
+  movimento de **AJUSTE** com a diferença, e o estoque continua sendo a soma dos
+  movimentos. Isto é o ponto: duas fontes de verdade para o mesmo número são o começo de
+  dois números que discordam na mesma tela — a doença que este projeto já teve três vezes.
+- **O "esperado" fica CONGELADO em cada linha da ficha.** Recalculado depois daria sempre
+  zero, porque o ajuste já aconteceu — e o relatório do que faltou ficaria vazio
+  justamente no caso que importa. Mesma lógica do valor congelado na reserva.
+- **Diferença zero não gera movimento:** um movimento que não move nada só suja o extrato.
+- **Contar duas vezes no mesmo dia NÃO conta em dobro**, e isso sai de graça do desenho:
+  a segunda contagem reconcilia contra o estoque já ajustado e encontra zero. Por isso
+  não há trava de "uma contagem por dia" — ela seria uma regra artificial para um
+  problema que não existe. Há teste.
+- **A reposição continua sendo lançada**, e é o `3+1=4` escrito à mão na ficha: sem
+  registrar o que chegou, a contagem acusaria uma sobra que não existe. Há teste com a
+  reposição no meio de duas contagens.
+- **Sobra não compensa falta.** O número "faltaram" soma **só** o que sumiu; o que
+  apareceu a mais é outro problema (chegou mercadoria sem registro). Somar os dois
+  esconderia os dois.
+- A ficha guarda **o horário e a observação** como estão no papel ("09:40", "1 cookies"),
+  e o **dia é o da FICHA**, não o do lançamento — a recepcionista lê o papel no dia
+  seguinte. Formato de hora torto é recusado pelo banco: errado, ele não daria erro, só
+  apareceria estranho na tela.
+- **Dia no futuro é recusado:** a prateleira de amanhã ninguém viu.
+
+#### A MÁQUINA DE CAFÉ TEM CONTADOR, e isso virou um TIPO de produto
+- `TipoDeControle`: **ESTOQUE** (conta unidades na prateleira) ou **CONTADOR** (lê o
+  número acumulado da máquina). Os 12 cafés são CONTADOR; os outros 18, ESTOQUE.
+- **A ficha é preenchida igual nos dois casos** — um número por produto por dia. O que
+  muda é a conta que o sistema faz: na prateleira, `contado − esperado`; na máquina,
+  `leitura − leitura anterior`.
+- **Leitura de contador NÃO gera movimento de estoque.** "Estoque de expresso" não
+  existe, e tratar igual faria o estoque despencar para menos dez mil.
+- **Leitura menor que a anterior é RECUSADA.** O contador só cresce; uma leitura menor é
+  quase sempre erro de digitação, e aceitar faria o consumo do dia sair negativo — um
+  número que não bate com nada e que ninguém vai conferir. A mensagem mostra a leitura
+  anterior, para a pessoa achar o erro.
+- **Teste com os números reais da ficha:** Expresso 10939 → 10949 → 10958 → 10972 →
+  10975 nos dias 3 a 7, dando 10, 9, 14 e 3 cafés. A primeira leitura não tem anterior.
+
+#### O LANÇAMENTO DO CONSUMO, e o ciclo que ele fecha (16/11/2026)
+- **Confirmado pelo dono:** a recepcionista **já lança todo dia** na rotina normal, então
+  o volume de digitação não muda muito. **O que muda é quem soma.**
+- **Correção de linguagem minha:** eu disse que o empório "entraria sozinho" no controle
+  de horas, e o dono questionou — *"como vai entrar sozinho sendo que o admin que vai
+  inserir todo o consumo?"*. Ele estava certo: o lançamento continua sendo à mão. O que
+  passa a ser do sistema é **a soma e a transcrição para a cobrança**.
+- **O VALOR NUNCA VEM DA TELA.** A rota não aceita total: ela recebe produto e
+  quantidade, e o servidor multiplica. Aceitar o número de quem chama devolveria
+  exatamente o problema que isto veio resolver — a linha "EMPÓRIO ... R$ 201,50"
+  digitada sem conferência, que é da mesma família dos R$ 70 da planilha.
+- **Preço CONGELADO por lançamento**, igual à reserva: reajustar o produto no painel não
+  muda o que já foi consumido. Há teste que dobra o preço e confere.
+- **A hora é a do PAPEL**, não a do lançamento. Carimbar a hora de agora faria o
+  relatório dizer que todo mundo consome no fim do dia. Consumo no futuro é recusado.
+- **O consumo dá BAIXA no estoque** — e é isso que faz a contagem do dia seguinte poder
+  conferir. A diferença entre o que foi lançado e o que foi contado **é a coluna
+  "FALTOU"** da ficha. **Café não dá baixa**: é contador, não tem estoque.
+
+##### As duas formas de fechar, e a trava que as separa
+- `NA_HORA` (pagou) e `NA_MENSALIDADE` (acumula). *"Não existe comanda"* — palavra do
+  dono.
+- **A forma de pagamento SÓ existe no `NA_HORA`**, com trava no banco. No
+  `NA_MENSALIDADE` ainda não foi pago: gravar uma forma ali seria dizer que aconteceu
+  algo que não aconteceu, e o relatório de formas passaria a contar dinheiro que ninguém
+  recebeu. A aplicação **ignora** a forma nesse caso em vez de recusar — a tela pode
+  mandar o campo preenchido por descuido, e travar ali seria atrito sem ganho.
+- A forma de pagamento é **TABELA** (`formas_pagamento`), não enum: mesma decisão das
+  áreas de atuação e das etiquetas. Nasce com **Pix** (o único confirmado — a plaquinha
+  do empório diz "PAGAMENTO ... POR PIX" com o CNPJ), **Dinheiro** e **Cartão**.
+
+##### O empório no controle de horas
+- Virou **coluna própria** no demonstrativo, separada das "outras linhas". As extras a
+  gestão **digita**; o empório o sistema **soma**. Misturar deixaria a equipe editar por
+  cima de um número calculado, e ninguém saberia mais qual dos dois valia.
+- **Só o `NA_MENSALIDADE` entra.** Cobrar de novo o que foi pago na hora seria cobrar
+  duas vezes pela mesma barrinha, e o cliente não teria como perceber olhando o
+  documento.
+- **Agrupado por PRODUTO**, não linha a linha: a ficha diz "12 águas", não doze linhas de
+  uma água. Somado **em centavos** — há teste com três de R$ 33,33 dando R$ 99,99.
+- **SALVAR CONGELA**, igual à tabela de horas: um lançamento feito depois não muda o
+  documento que o cliente recebeu. Há teste que emite, lança mais e confere.
+- Numa **empresa**, entram os consumos de todos os clientes ligados a ela — mesma regra
+  das reservas.
+
+#### A TABELA NOVA QUEBROU A LIMPEZA DE SEIS ARQUIVOS DE TESTE
+- Seis testes apagam "clientes órfãos" globalmente (`reservas: none, telefones: none`) —
+  é a limpeza que a Fase 14 exigiu. `consumos_emporio` tem chave `ON DELETE RESTRICT`
+  no cliente, então ela passou a **estourar**.
+- **O estrago não foi o erro: foi o que veio depois.** Com a limpeza interrompida no
+  meio, o resto dela não rodava — num dos arquivos um contador de horas não era
+  zerado, e os testes começaram a pedir reserva às `24:00`. **179 testes vermelhos, e
+  nenhuma mensagem apontava para a causa.**
+- **A regra, para a próxima tabela que apontar para `clientes`:** o `none` da limpeza
+  precisa listar **todas** as relações. Órfão é quem não tem nada pendurado — e a
+  definição de "nada" muda a cada tabela nova.
+
+#### Migração que falha pode deixar PEDAÇO PARA TRÁS
+- Esta migração falhou duas vezes no desenvolvimento (erro meu de SQL), e **nas duas o
+  que já tinha rodado ficou gravado** — o tipo na primeira, os 30 produtos na segunda.
+  `migrate resolve --rolled-back` marca a migração como desfeita **mas não desfaz nada
+  no banco**.
+- **Consequência prática:** antes de tentar de novo é preciso limpar à mão o que a
+  tentativa anterior criou. E em produção isso seria pior — mais um motivo para o
+  ensaio numa cópia antes do deploy, como na Fase 14.
 
 ### Fase 17 — o painel ganhou barra lateral (16/11/2026)
 - **O que o dono viu:** o painel era um cabeçalho e quatro cartões. *"Está muito
@@ -739,10 +913,16 @@ mentira) e descancelar por cima de uma sala que outro cliente já pegou.
 
 ### Ao acrescentar tabela de cadastro nova
 - `scripts/preparar-banco-de-teste.sh` copia os dados de uma **lista fechada de
-  tabelas** (salas, horários, configurações, templates e profissões). Tabela de cadastro
+  tabelas** (salas, horários, configurações, templates, profissões, produtos,
+  etiquetas e **formas de pagamento**). Tabela de cadastro
   nova que fique fora dessa lista faz o banco de teste nascer sem ela, e **todo teste
   que cria reserva falha** por registro não encontrado — uma falha que não tem nada a
-  ver com a regra sendo testada. Foi o que aconteceu ao criar as profissões.
+  ver com a regra sendo testada. Foi o que aconteceu ao criar as profissões, e de novo
+  ao criar o catálogo do empório.
+- **A ordem das tabelas importa.** O `pg_dump` escreve em ordem alfabética, então
+  `produtos_com_tag` sairia ANTES de `tags_produto` e a chave estrangeira recusaria cada
+  linha — em silêncio, deixando o banco de teste sem as ligações. Por isso ela vai numa
+  **segunda passada** do script.
 
 ## Roteiro de construção — 13 fases
 Construir uma fase por vez. Não antecipar funcionalidade de fase futura. Cada fase termina com teste e commit.
@@ -1475,13 +1655,708 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
 - **O que fecha o ciclo:** o consumo acumulado do mensalista entra sozinho no controle
   de horas, em vez de alguém somar a ficha e digitar um valor.
 
-### Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)
+### Fase 15, Parte D — as telas do empório (17/11/2026)
+- **O motor estava pronto desde 16/11 e invisível.** Quem abrisse a prévia não via
+  empório nenhum: tudo existia por dentro, com rota e teste, e sem tela não existe para
+  quem precisa aprovar.
+- **Quatro telas, e cada uma é um item da barra lateral** (`/admin/emporio?aba=…`),
+  na ordem da frequência de uso: **Lançar consumo** (várias vezes por dia), **Contagem
+  do dia** (uma vez por dia), **Produtos** (quase nunca) e **Movimentos** (quando um
+  número não bate). Mesma decisão da Fase 17: o dono quis tudo visível na lateral, e
+  esconder quatro destinos atrás de um cartão foi exatamente o que ele reclamou.
+- **A garantia do compilador foi copiada de Configurações:** `Record<AbaDoEmporio, …>`.
+  **Conferido removendo a aba "contagem" de propósito:** `tsc` recusa com "Property
+  'contagem' is missing". Item de menu que leva a tela em branco não dá erro nenhum em
+  tempo de execução.
+
+#### A regra de "qual item acende" deixou de citar a tela por escrito
+- Até aqui `estaAceso` comparava com `"/admin/configuracoes"` escrito no código. Com a
+  **segunda** tela de abas, isso quebra de um jeito silencioso: nada impede duas abas
+  de telas diferentes de terem o mesmo nome, e a comparação por nome de aba acenderia
+  **duas** linhas do menu ao mesmo tempo.
+- Agora o endereço sai do **próprio item** (`item.tela`), e `ItemDoMenu` virou uma
+  **união de três formatos** — item simples, de Configurações, do Empório. Isso preserva
+  o tipo da aba de cada tela: com um `aba: string` genérico, a tela de Configurações
+  voltaria a aceitar uma aba que não existe nela.
+- **O teste que existia pegou a mudança na hora** (ele comparava com o endereço escrito
+  à mão) — foi por isso que ele existia. Três testes novos: aba do Empório não acende
+  item de Configurações e vice-versa, a aba padrão de cada tela, e o teto de um item
+  aceso por tela.
+
+#### As decisões de tela, e o motivo de cada uma
+- **O produto é escolhido numa grade com FOTO**, não num seletor de texto: foi pedido do
+  dono (*"tem ali a imagem do produto existente hoje aqui de cada produto"*), e a
+  recepcionista reconhece a embalagem mais rápido do que lê trinta nomes numa lista.
+  Produto sem foto mostra a inicial, nunca um buraco.
+- **Preço zero aparece como "cortesia"**, e não como "R$ 0,00": os doze botões da máquina
+  de café são de graça e existem porque a máquina conta o consumo. "R$ 0,00" pareceria
+  cadastro pela metade.
+- **A tela mostra a PRÉVIA do total (`3× Kit Kat = R$ 19,50`), e só prévia.** Quem
+  multiplica é o servidor — a rota não aceita total. A prévia existe para a
+  recepcionista comparar com o papel **antes** de salvar, que é justamente a conferência
+  que não existia quando alguém somava a ficha de cabeça.
+- **Toda conta de dinheiro na tela passa por CENTAVOS** (`centavosDe`, `totalVisivel`).
+  O total do dia soma dezenas de linhas; em ponto flutuante acumularia diferença, e a
+  tela discordaria do servidor, que já soma em centavos.
+- **Depois de lançar, o cliente e o dia FICAM; produto, hora e quantidade voltam ao
+  início.** A ficha costuma ter várias linhas da mesma pessoa no mesmo dia, e limpar
+  tudo obrigaria a procurar o cliente de novo a cada linha.
+- **A lista do dia fica embaixo do formulário**, com o total. É a conferência contra a
+  parede: o que está no papel e não está ali, falta lançar. A ficha de papel **não tem
+  total** — este é o número que ninguém calculava.
+- **O estoque é recarregado do servidor depois de cada lançamento**, em vez de recalculado
+  na tela. Dois lugares fazendo a mesma conta é como começam dois números que discordam.
+- **"hoje" VEM DO SERVIDOR** (`dataLocalDe` na página), nunca de `new Date()` no
+  navegador. É o valor inicial e o teto dos campos de data; com o navegador do operador
+  em outro fuso, a tela ofereceria um dia que o servidor recusa por estar no futuro — e
+  a pessoa não teria como entender o erro.
+- **Na contagem, a diferença aparece AO LADO do campo enquanto a pessoa digita**, e não
+  só depois de gravar: ela vê o "faltaram 3" com a ficha ainda na mão. Depois de fechar
+  a tela não há mais como conferir de onde veio.
+- **Leitura de contador menor que a anterior é avisada na TELA, antes de gravar.** O
+  servidor recusa de todo jeito, mas levar a recusa depois de preencher trinta linhas
+  faria a equipe perder o trabalho. A mensagem diz qual foi a leitura anterior.
+- **Campo em branco na contagem não é zero, é "não contei"** — e a tela diz isso por
+  escrito. Tratar branco como zero geraria um ajuste enorme e falso.
+- **Em Movimentos só entram REPOSIÇÃO e PERDA.** VENDA não tem botão: ela nasce do
+  lançamento do consumo, que grava de quem foi. Vender por ali criaria saída de estoque
+  sem dono, e o empório pararia de bater com o que foi cobrado.
+- **Estoque negativo é explicado na tela** ("falta lançar reposição"), não escondido.
+  Sem a explicação a equipe acharia que o número quebrou e pararia de confiar nele.
+- **Reordenar produto é por BOTÃO, não arrastando** — a recepção mexe no tablet, e
+  arrastar não funciona pelo teclado. Mesma decisão das fotos das salas.
+
+#### O defeito de teste que apareceu ao rodar a suíte (17/11/2026)
+- Dez testes de `tests/consumo-emporio.test.ts` ficaram vermelhos **sem ninguém ter
+  mexido neles**. A causa: eles lançavam consumo **"hoje às 10:00"**, e o motor recusa
+  consumo no futuro. Às **9h06 de São Paulo**, 10:00 de hoje É futuro.
+- **A suíte passava de tarde e falhava de manhã.** É a mesma família do defeito já
+  registrado aqui ("teste com data: nunca fixa no futuro"), um nível mais fino: não é a
+  data que fica no futuro, é a **hora dentro do dia de hoje**.
+- **A regra:** em teste de consumo e de reserva lançada pelo balcão, o dia de referência
+  é **ontem** — que é também a verdade do negócio (a ficha é lida no dia seguinte).
+  Nenhum teste deve depender da hora em que a suíte roda.
+- A contagem diária **não tem esse problema**: ali a conferência é por dia, não por
+  hora, e o horário é só texto guardado como está no papel.
+
+### Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO (17/11/2026)
+
+> **Isto substitui a decisão de 12/11/2026** ("só entradas, despesa depois"). O dono
+> reabriu de propósito, depois de eu reler com ele o chat que originou a versão 2.0.
+> Fica registrado como mudança de regra, e não como exceção aberta por engano.
+
+#### O que o chat original pedia, e o que dele se aproveita
+- O chat era sobre **onde hospedar** um sistema preso noutra plataforma: Google Drive,
+  Cloudflare, Supabase, VPS, Docker, "sem login". **Quase nada disso se aplica** — aqui
+  o código é do dono no GitHub, roda no VPS dele com Docker, e o painel **tem login**,
+  que é o certo para uma tela que a equipe toda usa.
+- **O que importa são os cinco módulos financeiros**: lançamentos, fluxo de caixa, DRE,
+  painel e relatórios. E a observação que o próprio dono fez naquele chat, que virou a
+  Fase 15: *"a parte financeira tem que ter, mas também o controle de bebidas e
+  comidas… quem pediu, quanto pagou, a forma de pagamento e o controle de estoque"*.
+- **A DIFERENÇA DE TAMANHO que ninguém tinha notado:** aquele chat falava de **16 salas
+  com mensalidade** e ~R$ 400 mil/ano. O sistema cuida de **3 salas por hora**. Os
+  espaços de locação mensal — de onde vem a maior parte do dinheiro — **o sistema nunca
+  viu**. É isso que muda o tamanho desta fase.
+
+#### As cinco decisões do dono (17/11/2026)
+| Pergunta | Resposta |
+|---|---|
+| Tamanho do financeiro | **o caixa INTEIRO** do coworking: entradas e saídas |
+| Mensalidades | **entram, com controle de atraso** (inadimplência) |
+| DRE | **fica para depois** — sem meses de despesa lançada sairia vazia |
+| Espaços mensais | **cadastrados um por um**, para ver receita e ocupação de cada |
+| Cota de horas do plano | **o sistema passa a controlar e avisar quando passar** |
+
+**Três decisões antigas caem com isso, e ficam registradas como substituídas:**
+- "Fase 16 = só entradas, despesa fica para depois" → **entra despesa agora**;
+- "a mensalidade fica fora do sistema, nem valor nem dia de vencimento" (motivo da
+  recepcionista: *"eles pagam automático, não precisa de cobrança"*) → **entra com
+  valor, vencimento e atraso**;
+- "o demonstrativo NÃO trata horas incluídas no plano" → **passa a descontar a cota e
+  cobrar só o excedente**, que é o que a gestão faz hoje de cabeça.
+
+#### O PRINCÍPIO DA EDIÇÃO MANUAL (pergunta do dono, vale para o sistema todo)
+> *"entrada e saída vão poder ser editáveis manualmente, né? Tudo vai poder ser
+> editável? Porque seria ideal."*
+
+**A regra, em uma linha: tudo que a equipe digita, a equipe corrige. O que o sistema
+calcula, corrige-se na origem. O que já foi entregue ao cliente, não se reescreve —
+refaz-se.**
+
+- **Livremente editável e apagável** (com motivo obrigatório e registro em Histórico de
+  ações, igual à exclusão de reserva): lançamento feito à mão, categorias, fornecedores,
+  espaços, contrato do mensalista, saldo inicial. Erro de digitação é normal, e travar
+  a correção só faria a equipe parar de usar.
+- **O que vem automático (reserva, consumo do empório) edita-se NA ORIGEM.** O
+  lançamento é um **espelho** da reserva; editar o espelho faria o financeiro mostrar um
+  valor e o relatório outro — exatamente a doença da planilha da Toca, onde o total
+  digitado dizia R$ 3.033 e as linhas somavam R$ 3.023. **Saída de emergência:
+  "desvincular"** — o lançamento solta da reserva, vira manual e fica editável, com
+  registro de quem desvinculou. Nada fica trancado para sempre; só não se solta sem
+  perceber.
+- **As duas exceções de verdade:** demonstrativo já **enviado** (pedido do dono, regra
+  de 12/11) e **valor congelado** em reserva antiga. Reajuste de preço vale para o
+  futuro; se retroagisse, o faturamento do mês passado mudaria sozinho e nenhum
+  relatório fechado seria confiável. **Vale igual para a mensalidade:** aumentar o
+  contrato vale do próximo mês; as cobranças já geradas ficam com o valor que era.
+
+#### O plano aprovado, em cinco partes
+- **A — a fundação do lançamento.** Categorias de receita e despesa (nascem pela
+  migração com as 13 que o chat listou: aluguel, energia, água, internet, limpeza,
+  manutenção, funcionários, contabilidade, impostos, marketing, material, taxa de
+  cartão), fornecedores, e o lançamento com data, descrição, quem, categoria, forma de
+  pagamento, valor, vencimento e status.
+  - **"ATRASADO" NÃO É GRAVADO, É CALCULADO** — é pendente cujo vencimento já passou.
+    Gravado, dependeria de uma rotina rodar, e na prévia `CRON_ATIVO="false"`: nada
+    ficaria atrasado e pareceria defeito.
+  - Valor em **centavos**, como em todo o resto.
+- **B — as entradas que o sistema já sabe.** Reserva e consumo do empório viram
+  lançamento sozinhos, apontando para a origem em vez de serem digitados de novo.
+- **C — espaços e mensalidades.** Os espaços mensais vão numa **lista própria, separada
+  da tabela `salas`**: entrando ali, apareceriam no site público para qualquer um
+  reservar, na agenda e nos relatórios de reserva — a Fase 16 estragaria o que já
+  funciona. Contrato com valor, dia de vencimento, cota de horas, início e fim. A
+  geração da cobrança do mês é **idempotente** (marcar primeiro, igual aos lembretes):
+  gerar duas vezes criaria cobrança dobrada.
+- **D — a cota de horas no demonstrativo.** Separa o que está dentro da mensalidade do
+  que é hora extra. Os documentos **já emitidos não mudam** — já são congelados.
+- **E — fluxo de caixa e painel.** Saldo inicial, realizado, saldo do mês, contas a
+  receber e a pagar, projeção, lucro, margem, inadimplência e comparação com o mês
+  anterior.
+
+#### O que fica FORA, de propósito
+- **DRE** — decisão do dono de 17/11.
+- **Documentos por cliente** (contrato, comprovante, nota fiscal) — o chat pedia, no
+  Google Drive. Não foi pedido agora; dá para fazer depois no Cloudinary que já existe.
+- **Backup automático em nuvem** — é configuração do EasyPanel, não código. Hoje está
+  documentado como passo manual em `docs/deploy.md`.
+- **Ícone na tela de início do celular** (abrir em tela cheia, sem barra de endereço).
+  O dono quis: *"eu também quero que você faça isso depois sim"*. **Fica para o fim da
+  Fase 16.** Serve iPhone **e Android** — no Android o Chrome oferece sozinho e a
+  notificação funciona, no iPhone não. **Sem funcionamento offline, de propósito:** o
+  sistema mostraria uma agenda velha guardada no aparelho e alguém reservaria em cima de
+  horário ocupado. Risco grande para ganho nenhum.
+
+### Fase 16, Parte A — construída em 17/11/2026
+- **O que entrou:** três tabelas (`categorias_financeiras`, `fornecedores`,
+  `lancamentos`), o motor `src/lib/financeiro.ts`, sete rotas e a tela
+  `/admin/financeiro` com três abas — **Contas**, **Categorias** e
+  **Fornecedores**, cada uma como item da barra lateral. O menu foi a **22 itens**.
+- **As 18 categorias entram pela MIGRAÇÃO** (14 de saída + 4 de entrada), não pelo
+  seed: o deploy roda `migrate deploy` e não roda o seed, e categoria só no seed
+  deixaria a tela de lançamento sem opção nenhuma em produção. Há teste conferindo
+  que as que o dono listou existem, pelo nome interno.
+- A migração **não religa nenhuma linha existente** — só cria tabelas vazias e enche
+  a de categorias. Por isso **não precisou do ensaio numa cópia de produção** que a
+  Fase 14 exigiu; a regra do ensaio continua valendo para migração que mexe no que
+  já está gravado.
+
+#### AS DUAS DECISÕES QUE EXPLICAM O RESTO
+1. **O SINAL NUNCA ESTÁ NO VALOR.** O valor é sempre positivo, com trava no banco
+   (`lancamento_valor_positivo`), e quem diz o lado é o **tipo da CATEGORIA**. Um
+   valor negativo gravado abriria a porta para uma "entrada de −200" subtraindo do
+   caixa, e a linha continuaria parecendo certa na lista. O sinal é escrito **na
+   leitura** (`− R$ 430,25`), nunca no dado.
+2. **NÃO EXISTE COLUNA DE SITUAÇÃO.** "Pago", "pendente" e "atrasado" saem de duas
+   datas: vencimento e pagamento. Uma coluna de status precisaria de rotina
+   virando-a todo dia, e com `CRON_ATIVO="false"` — como na prévia — **nada ficaria
+   atrasado nunca**, o que pareceria defeito sem dar erro em lugar nenhum. Pior: a
+   coluna poderia discordar da data de vencimento ao lado dela na mesma tela.
+
+#### Outras decisões, e o motivo de cada uma
+- **O TIPO DA CATEGORIA NUNCA MUDA**, e não há tela para isso: virar o lado
+  inverteria o sinal de todo lançamento que aponta para ela — meses de caixa
+  mudariam de lado de uma vez, e cada linha continuaria parecendo certa. Para trocar
+  o lado, cadastra-se outra.
+- **Renomear categoria troca o rótulo também nos lançamentos antigos**, e isso é o
+  desejado: eles apontam para a categoria e não guardam o texto. Há teste comparando
+  **a linha inteira** do lançamento antes e depois — renomear não é gancho para mexer
+  em lançamento nenhum.
+- **A última categoria ativa de um lado não se desliga.** Sem nenhuma escolhível,
+  ninguém consegue lançar daquele lado, e o erro apareceria como "escolha a
+  categoria" numa lista vazia. Mesma regra da última área de atuação. Há teste que
+  confere também que ela **continua ligada** depois da recusa.
+- **Categoria e fornecedor desligados recusam lançamento NOVO**, mas os antigos deles
+  continuam editáveis — sem essa ressalva, corrigir o valor de uma despesa antiga
+  ficaria impossível depois de a equipe desligar a categoria, e a mensagem falaria de
+  categoria, que não é o que a pessoa está tentando mudar. Há teste.
+- **Cliente e fornecedor juntos é recusado**, na aplicação e no banco: ou o dinheiro
+  veio de um cliente, ou foi para um fornecedor. A conferência olha o lançamento
+  **como ele ficaria**, não só o que veio na mudança — trocar só o cliente, numa linha
+  que já tem fornecedor, continua sendo os dois juntos.
+- **Fornecedor é separado de cliente** de propósito: cliente é quem PAGA ao coworking.
+  Misturar faria a empresa de limpeza aparecer no relatório de clientes.
+- **"Contas do mês" e "Caixa do mês" são duas visões, não um filtro.** Uma conta de
+  outubro paga em novembro é **despesa de outubro e caixa de novembro**; misturar daria
+  um número que não bate com nenhuma das duas e seria impossível explicar o saldo.
+  Na visão de caixa, o que nunca foi pago não entra. Há teste nos dois sentidos.
+- **O resumo é somado NO SERVIDOR, em centavos**, e a tela só formata. Duas somas do
+  mesmo número em lugares diferentes é como começam dois valores que discordam na
+  mesma tela. Há teste com três de R$ 33,33 dando R$ 99,99.
+- **"Já foi paga" é uma caixa de marcar, não um campo de data sempre visível.** A
+  maioria das contas é lançada ANTES de pagar; data sempre à vista faria a equipe
+  preenchê-la por reflexo, passando a dizer que pagou o que não pagou.
+- **"Paguei" é ação própria**, e não "editar a data": é o que a equipe faz dezenas de
+  vezes por mês. **Desmarcar existe** porque marcar errado acontece, e devolve a linha
+  a pendente (ou atrasada) sem tocar em mais nada.
+- **O vencimento é coluna DATE e lido em UTC, de propósito.** Lido com a regra de fuso
+  de São Paulo voltaria **um dia** (meia-noite UTC é 21h do dia anterior aqui), e todo
+  vencimento apareceria um dia mais cedo. Há teste de ida e volta.
+- **"hoje" vem do SERVIDOR**, no relógio de São Paulo: é ele que decide o que está
+  atrasado, qual mês abrir e que data propor no pagamento.
+- **Excluir exige MOTIVO** e grava o retrato da linha em `acoes_registradas`
+  (`LANCAMENTO_EXCLUIDO`), na mesma transação. O resumo é **congelado** — a linha não
+  existirá mais para ser consultada. O valor de enum novo foi numa **migração
+  separada**: o Postgres não deixa usar um valor de enum na mesma transação em que ele
+  nasce.
+- **Excluir não existe para categoria nem para fornecedor** — desliga-se, mesma regra
+  de salas, empresas, áreas de atuação e clientes. As chaves são `ON DELETE RESTRICT`,
+  e há teste provando que o banco recusa.
+
+#### O DEFEITO DO BUILD que isto revelou, e que já estava lá
+- O `next build` falhou com *"`statusDoEmporio` is not a valid Route export field"*.
+  Um `route.ts` do Next 15 **só pode exportar os métodos HTTP** e alguns campos de
+  configuração; qualquer outra exportação derruba o build.
+- **O erro já existia nas rotas do empório desde 16/11** — eu copiei o padrão para o
+  financeiro e ele apareceu. **Nem o `tsc` nem o lint acusam**: só o `next build`.
+- Os dois ajudantes foram para `status.ts` ao lado das rotas (mesmo lugar e mesma
+  razão de `operador.ts`). **A regra: `route.ts` não exporta nada além dos métodos
+  HTTP.**
+- **Honestidade sobre o porquê:** builds anteriores de hoje passaram com a exportação
+  do empório no lugar, e eu não sei explicar o que mudou. O que importa é que a
+  exportação é inválida pela mensagem do próprio Next, agora falha de forma
+  consistente, e o lugar novo é o certo de qualquer jeito.
+
+#### O teste do menu mudou de forma por desatualização, não por defeito
+- Ele listava `/admin/configuracoes` e `/admin/emporio` **escritos à mão**, e a
+  TERCEIRA tela com abas o derrubou sem haver defeito nenhum.
+- Agora a lista sai de **`telasComAbas()`**, e as regras (um item aceso por tela, a
+  aba padrão de cada uma, nenhum vazamento entre telas) valem também **para a tela
+  com abas que ainda não existe**. 15 testes.
+- A garantia do compilador foi conferida de novo: removendo a aba "fornecedores" de
+  propósito, `tsc` recusa com *"Property 'fornecedores' is missing"*.
+
+#### O QR code do empório ficou PARADO, e o visual da shark ficou sem destino
+- Palavra do dono (17/11): *"provavelmente a gente não vai usar aquela parte de QR
+  code para a pessoa fazer a compra ali. Vai ser ainda continuar no papel físico."*
+- Consequência que precisa ficar registrada: **a referência visual da shark22**
+  (elementos gráficos/3D dos produtos) era justificada pela **tela do cliente**. Sem
+  ela, aquele visual **não tem onde morar** — a tela da recepcionista é ferramenta de
+  trabalho, e enfeite ali atrapalharia quem lança trinta linhas.
+- **Fica em aberto, por decisão do dono**, com a pergunta não respondida: se um dia
+  voltar, é vitrine no site público ou tela do cliente? Registrado para não virar
+  tarefa órfã que alguém "conserta" sem saber para quê.
+
+### Fase 16, Parte B — o lançamento espelha a origem (17/11/2026)
+
+#### A PERGUNTA DO DONO QUE MUDOU O DESENHO
+Eu propus três caminhos para a reserva virar entrada no caixa. Ele respondeu:
+*"seria interessante a primeira opção, mas como que o sistema iria saber que tá
+pago? Aí seria fácil colocar um botão ali que é colocado manualmente quando
+recebeu, é isso?"*
+
+**Ele estava certo, e as duas primeiras opções não eram rivais — eram dois
+dinheiros diferentes:**
+
+| Quem | Como paga | Onde fica o botão |
+|---|---|---|
+| **Mensalista** | um Pix por mês, pelo demonstrativo | na mensalidade/demonstrativo (Parte C/D) |
+| **Cliente de passagem** | no balcão, na hora | na **reserva**, na agenda — "Recebi no balcão" |
+| **Empório pago na hora** | na hora, com forma de pagamento | **nenhum** — o sistema já sabe |
+
+#### O QUE ESTA PARTE RECUSA FAZER, e é o ponto mais importante dela
+- **A reserva NÃO vira lançamento por existir.** O mensalista paga as horas dele
+  no demonstrativo, no fim do ciclo. Se cada reserva virasse entrada, as mesmas
+  horas entrariam **duas vezes** no caixa — uma como reserva, outra como
+  mensalidade — e **cada linha continuaria parecendo certa**. Ninguém descobriria
+  olhando a tela. Há teste: criar reserva não cria linha nenhuma.
+- **O consumo `NA_MENSALIDADE` não vira lançamento:** ele vai no demonstrativo.
+  Cobrar no caixa também seria cobrar duas vezes pela mesma barrinha.
+- **Nada no sistema registra que uma reserva foi paga** — conferido: não há esse
+  campo na reserva nem no demonstrativo (ele só sabe que foi *enviado*). Então
+  qualquer automatismo aqui seria suposição minha, não informação.
+- O que entra sozinho é só o que o sistema **sabe** que foi pago: o consumo
+  `NA_HORA`, onde a própria recepcionista informou a forma de pagamento. Isso é
+  confirmação, não suposição.
+
+#### O EMPÓRIO É UMA LINHA POR DIA E POR FORMA, não uma por barrinha
+- Uma linha por consumo daria **~150 linhas de empório por mês**, afogando as ~20
+  contas de verdade. E o dinheiro não chega assim: chega como **um comprovante de
+  Pix do dia**. O detalhe item a item fica na tela do empório.
+- **Formas diferentes, linhas diferentes:** o Pix do dia é um comprovante, o
+  dinheiro da gaveta é outro, e juntar os dois esconderia de onde veio. A
+  unicidade é do índice, com `COALESCE` na forma — no Postgres dois NULOs não
+  colidem num índice único, e sem isso cada sincronização criaria mais uma linha
+  "sem forma".
+- **A sincronização RECALCULA o dia, não soma o que chegou agora.** Rodar duas
+  vezes não dobra nada, e lançar o quinto consumo dá o mesmo resultado que lançar
+  os cinco de uma vez. É a mesma escolha da contagem do estoque e pela mesma
+  razão: um acumulador erra para sempre se rodar duas vezes; um recálculo se
+  autocorrige. Há teste sincronizando duas vezes.
+- **Cortesia não gera linha** (os doze cafés de graça): uma linha de R$ 0,00 só
+  sujaria o caixa, e o banco recusaria pela trava de valor positivo.
+
+#### A FALHA DA SINCRONIZAÇÃO NÃO DERRUBA O CONSUMO
+- Ela roda **fora** da transação do consumo e a falha é **engolida**. O consumo é
+  a verdade (está escrito na ficha da parede) e a linha do caixa é derivada dele:
+  derrubar o lançamento porque a linha derivada falhou faria a recepcionista
+  perder o que digitou, com a ficha na mão.
+- **O risco que sobra, dito por inteiro:** um dia com UM consumo só cuja
+  sincronização falhou fica fora do caixa até alguém lançar outro consumo no
+  mesmo dia. Em troca, nenhum consumo é perdido — que é o lado certo de errar.
+  **Há dois testes:** um prova que o consumo sobrevive à falha; o outro prova que
+  o dia volta **inteiro** no próximo lançamento (os três consumos, não só o
+  último).
+
+#### As outras decisões
+- **Dois cliques em "Recebi" não dobram o dinheiro:** o índice único do banco
+  recusaria, mas a segunda chamada **devolve a linha que existe** — a
+  recepcionista clicou duas vezes e não precisa ver erro nenhum.
+- **Reserva cancelada é recusada:** o caixa passaria a mostrar dinheiro de algo
+  que não aconteceu. Se o cliente pagou e desmarcou, a equipe lança à mão
+  explicando o caso — a mensagem diz isso.
+- **O valor é o CONGELADO na reserva**, nunca um recálculo: o preço da sala pode
+  ter mudado, e o cliente pagou o que estava gravado.
+- **Vence no dia da reserva, pago no dia do recebimento.** É a verdade das duas
+  datas, e é o que faz a visão de caixa bater com o extrato.
+- **A chave da reserva é `ON DELETE SET NULL`, não RESTRICT.** A reserva pode ser
+  excluída (com evidência, desde 13/11); levando o lançamento junto, o dinheiro
+  que entrou no caixa desapareceria dele e **o caixa de um mês fechado mudaria
+  sozinho**. Solto, o lançamento fica de pé e vira manual. Há teste.
+- **A categoria automática é usada MESMO DESLIGADA.** "Desligar" é decisão sobre o
+  que a equipe *escolhe* num lançamento manual; a automática não é escolha.
+  Recusar o recebimento porque alguém desligou a categoria perderia o registro de
+  dinheiro que entrou — e o erro apareceria como "categoria desligada" na agenda,
+  onde ninguém ligaria uma coisa à outra.
+- **Desfazer o recebimento apaga a linha e REGISTRA a ação**, com motivo escrito
+  pelo próprio sistema ("recebimento desfeito na agenda"): aqui o "por quê" é a
+  ação em si, e pedir texto a cada clique faria a equipe escrever "a" para passar
+  da tela. A evidência continua existindo, que é o que importa.
+- **A tela não deixa editar linha automática**, e explica onde se corrige. Editar
+  o espelho faria o financeiro mostrar um valor e o relatório outro — a doença da
+  planilha da Toca. A etiqueta "da agenda" / "do empório" existe para a pessoa
+  não tentar.
+- **"Desvincular" existe só para a linha de RESERVA**, e isso não é preguiça: a do
+  empório é **recalculada** a cada consumo do dia, então soltá-la não a tornaria
+  editável de verdade — o próximo consumo criaria outra linha ao lado e **o
+  dinheiro do dia apareceria duas vezes**. A recusa explica isso. Há teste.
+- O lançamento espelha **uma origem, ou nenhuma**: trava no banco
+  (`lancamento_uma_origem_so`). As duas preenchidas não significam nada, e a tela
+  não saberia o que mostrar.
+- **18 testes**, e o último é o cenário completo de um dia: reserva recebida
+  (R$ 40) + empório na hora (R$ 13) + empório na mensalidade (R$ 20, fora) +
+  reserva de mensalista sem recebimento (R$ 40, fora). O caixa tem de dar
+  **R$ 53, e não R$ 113**.
+
+### Fase 16, Parte C — espaços mensais e mensalidades (17/11/2026)
+
+#### O QUE ELA TRAZ PARA DENTRO DO SISTEMA
+As **salas privativas alugadas por MÊS** — de onde vem a maior parte do dinheiro
+do coworking, e que o sistema nunca viu: ele cuidava das 3 salas alugadas por
+HORA. É a diferença de tamanho que eu só notei relendo o chat original com o
+dono (*16 salas, ~R$ 400 mil/ano*).
+
+E ela responde a pergunta dele — *"como que o sistema iria saber que tá
+pago?"* — do jeito que o dinheiro chega: **o contrato diz QUANTO e QUANDO, a
+cobrança do mês nasce dele PENDENTE, e alguém marca "Recebi" quando o Pix
+cai.** Um Pix por mês, uma linha por mês.
+
+#### OS ESPAÇOS NÃO ENTRAM NA TABELA `salas`, e isto é o ponto
+`salas` é a tabela da **AGENDA**. Uma linha ali aparece no site público para
+qualquer um reservar por hora, entra na grade de disponibilidade, nos
+relatórios de reserva e nas travas de sobreposição. Pondo as privativas lá,
+**um cliente poderia reservar por hora a sala que outro aluga por mês** — a
+Fase 16 estragaria o que já funciona. Há teste: criar espaço não cria sala, e
+as três salas continuam idênticas.
+
+- **"Ocupado" é sobre HOJE**, não sobre existir contrato: um espaço cujo
+  contrato terminou em março está **livre**, e mostrá-lo ocupado faria a equipe
+  deixar de alugá-lo. Quem decide é o servidor, no relógio de São Paulo.
+- **Espaço com contrato vigente não se desliga.** Desligado, ele sai da lista
+  de escolha — mas o contrato continuaria cobrando, e a equipe veria um espaço
+  "fora do ar" gerando dinheiro todo mês. Primeiro encerra-se o contrato.
+- **Excluir não existe**: desliga-se, mesma regra de salas, empresas, áreas de
+  atuação, clientes, categorias e fornecedores.
+- Na barra lateral, **"Espaços mensais" fica no grupo Cadastros** embora abra a
+  tela do Financeiro: é ao lado de Salas que a equipe procura por "onde cadastro
+  as privativas?". O grupo é leitura visual; quem manda é a tela que o item
+  carrega — mesmo padrão das abas de Configurações, que aparecem em grupos
+  diferentes.
+
+#### O CONTRATO
+- **UM pagador, e exatamente um** — pessoa ou empresa, com trava no banco.
+  Nenhum deixaria a cobrança sem dono (ela nasceria no caixa sem dizer de quem
+  é, e o relatório por cliente não a veria); os dois deixariam a tela sem saber
+  para quem emitir. Na **empresa**, as horas de todos os funcionários caem na
+  conta dela — é o caso da Toca, e a razão pela qual o demonstrativo aceita os
+  dois desde 11/11.
+- **O mesmo espaço não tem dois contratos ao mesmo tempo.** Dois mensalistas na
+  mesma privativa é problema **físico**, e ninguém descobriria pelo sistema: as
+  duas cobranças sairiam certas, todo mês, e o conflito apareceria na porta da
+  sala. A conferência é **por período** — contrato que terminou em março não
+  atrapalha outro que começa em abril —, e a recusa **diz de quem é o espaço**,
+  senão a equipe não sabe o que fazer.
+- **COTA DE HORAS ZERO É RECUSADA**, e não tratada como "sem cota". Quem não tem
+  horas inclusas deixa em **branco**. Um zero gravado diria "tem plano com zero
+  hora" — a mesma coisa, dita de um jeito que a tela leria como "tem plano" e
+  mostraria "0 de 0 usadas". Quem usa a cota para descontar é a **Parte D**;
+  aqui ela é só o dado do contrato.
+- **Encerrar é pôr data de fim**, não apagar: para de gerar cobrança, libera o
+  espaço, e as cobranças já geradas ficam no caixa.
+
+#### A GERAÇÃO DAS COBRANÇAS
+- **É AÇÃO DA EQUIPE (botão), e não rotina automática.** Razão prática: a prévia
+  roda com `CRON_ATIVO="false"` e uma rotina simplesmente **não aconteceria**
+  lá — pior, ninguém veria que não aconteceu. Um botão acontece quando a pessoa
+  clica, na frente dela, com o resultado na tela.
+- **GERAR DUAS VEZES NÃO COBRA EM DOBRO**, e esta é a trava mais importante da
+  parte: o índice único (`contrato_id`, `competencia`). Sem ele, dois cliques em
+  "gerar dezembro" dobrariam a receita do mês e **cada linha continuaria
+  parecendo certa** — o erro só apareceria no extrato do cliente, meses depois.
+  Há teste na aplicação **e** um que tenta inserir direto no banco.
+- **A COMPETÊNCIA NÃO É O VENCIMENTO.** O contrato que vence dia 10 cobra
+  dezembro em 10/12 e o que vence dia 5 cobra dezembro em 05/12 — os dois são a
+  mensalidade **de** dezembro. É a competência que forma a trava de "uma por
+  mês".
+- **A COBRANÇA NASCE PENDENTE**, nunca paga. O sistema não tem como saber que o
+  Pix caiu — quem sabe é quem olhou a conta. Mesmo princípio do "Recebi no
+  balcão".
+- **O VALOR CONGELA NA COBRANÇA.** Reajustar a mensalidade depois **não muda** o
+  que já foi gerado: mesma regra do valor da reserva e do preço do empório. Se
+  retroagisse, o faturamento de um mês fechado mudaria sozinho quando a equipe
+  reajustasse. Há teste comparando **a linha inteira** antes e depois, e outro
+  conferindo que o mês seguinte sai pelo valor novo.
+- **O CONTRATO PRECISA ESTAR VIGENTE DENTRO DAQUELE MÊS, e não hoje.** É isto
+  que permite **gerar um mês passado esquecido** e o que impede gerar dezembro
+  para um contrato que terminou em março. Comparar com "hoje" faria as duas
+  coisas erradas ao mesmo tempo. Há teste para os dois lados.
+- **O relatório diz o que NÃO entrou**, com o motivo — mesmo desenho do
+  relatório da série recorrente. Sem ele, um contrato pulado sumiria em silêncio
+  e a equipe só descobriria no fim do mês, ao faltar o dinheiro.
+- **Contrato desligado não entra nem na lista de pulados:** a equipe desligou de
+  propósito, não é um caso a explicar.
+- **Dia 31 em fevereiro cai no ÚLTIMO dia do mês** — não no 1º de março (que
+  mudaria a competência) nem no dia 28 fixo (que atrasaria o vencimento nos
+  meses de 30 e 31 dias). `vencimentoDaCompetencia` tem teste próprio, incluindo
+  ano bissexto.
+
+#### A TRAVA QUE EU ESCREVI ERRADO, e que o teste pegou
+- Eu pus um CHECK exigindo **contrato e competência juntos ou nenhum dos dois**.
+  A chave do contrato é `ON DELETE SET NULL`, e **o banco zera `contrato_id` sem
+  ter como zerar outra coluna junto** — então apagar um contrato virou
+  **impossível**, e o jeito de "consertar" seria apagar a cobrança junto,
+  **fazendo o dinheiro recebido desaparecer do caixa**.
+- A trava correta é de **uma direção**: contrato exige competência, o contrário
+  não. Competência sozinha não é lixo — ela guarda qual mês aquela linha cobriu,
+  que continua sendo verdade depois do contrato sumir.
+- A migração **ainda não estava publicada em lugar nenhum**, então ela foi
+  corrigida no lugar, com o banco de desenvolvimento e o de teste realinhados.
+  Produção vai receber **uma migração só, já correta**.
+- **Desvincular também vale para a mensalidade** (a cobrança é criada uma vez,
+  não recalculada como a do empório): é a renegociação de um mês específico —
+  solta, vira manual e editável, e o contrato segue intacto para os meses
+  seguintes. A competência sai junto, obrigatoriamente, pela trava acima.
+- **31 testes.** Entre eles: apagar o contrato deixa as cobranças de pé como
+  manuais, e a mensalidade vencida e não paga aparece com os dias de atraso
+  certos.
+
+### Fase 16, Parte D — a cota de horas no demonstrativo (17/11/2026)
+
+> **ISTO REABRE, COM AUTORIZAÇÃO DO DONO, a decisão de 12/11/2026** que dizia *"o
+> demonstrativo NÃO trata horas incluídas no plano"*. Aquela seção fica no arquivo,
+> para ninguém "consertar" isto depois achando que foi descuido.
+
+#### O QUE MUDOU
+Até aqui o demonstrativo cobrava **todas** as horas do período, e a gestão
+descontava a cota **de cabeça** — exatamente o tipo de conta manual que gerou os
+R$ 70 cobrados a mais na planilha da Toca. Agora o sistema desconta as horas que
+**já estão pagas na mensalidade** e cobra só o excedente.
+
+A cota vem do **contrato** (Parte C) e aparece preenchida na tela, sem ninguém
+precisar saber de cabeça o plano de cada cliente.
+
+#### AS HORAS DA COTA SÃO AS PRIMEIRAS, EM ORDEM CRONOLÓGICA
+Esta escolha precisa de justificativa porque as outras seriam arbitrárias:
+- pelas **mais caras**, o cliente pagaria menos e o coworking decidiria sozinho
+  presenteá-lo com as horas de pico;
+- pelas **mais baratas**, o cliente pagaria mais e acharia (com razão) que o
+  sistema escolheu contra ele;
+- **cronológica** é a única que se explica numa frase: *"suas 15 horas inclusas
+  foram as de 05/10 a 12/10; a partir dali é extra"*. E é assim que a pessoa usa
+  o espaço — em março ela não sabe quais horas serão as caras.
+
+Os itens já vêm em ordem cronológica da consulta (`orderBy: inicio asc`) e são
+congelados nessa ordem no documento salvo. Reordenar na leitura faria o documento
+guardado contar uma história diferente da prévia.
+
+#### UMA RESERVA PODE SER PARTIDA
+Restam 1 h de cota e a reserva tem 2 h: uma entra na cota, a outra é cobrada. Sem
+partir, ou a hora extra sairia de graça ou a cota seria perdida — as duas
+injustas, e nenhuma explicável.
+
+- **Com preço combinado**, o valor é `horas cobradas × preço`, arredondado uma vez
+  no fim.
+- **Sem preço combinado**, a parte cobrada sai **proporcional ao valor congelado**
+  da reserva: ela custou X, cobra-se `X × cobradas / horas`. Qualquer outra conta
+  (o preço de hoje, a média do período) criaria um número que não bate com a
+  reserva gravada.
+- **A reserva cobrada INTEIRA vale exatamente o valor gravado**, tratada à parte no
+  motor: a conta proporcional daria o mesmo número quase sempre, e "quase" num
+  valor congelado é o começo de um centavo de diferença que ninguém explica.
+
+#### O QUE NÃO MUDOU, e é o teste mais importante do arquivo
+**O caminho SEM cota é byte por byte o de antes.** Todo demonstrativo já emitido
+tem cota nula, e qualquer desvio ali mudaria uma cobrança que o cliente recebeu.
+Há três testes só disso: com preço combinado, sem preço combinado, e cota zero
+(que é tratada como "sem cota").
+
+- **Cota maior que o uso não gera crédito:** quem tem 15 h e usou 4 paga **zero**
+  de horas extras, nunca "menos 11 horas". Um valor negativo viraria desconto no
+  empório e nas linhas extras, e o total sairia menor que a mensalidade.
+- **A cota é das HORAS, não da conta:** empório e linhas extras ficam inteiros.
+
+#### A COTA É CONGELADA NA EMISSÃO
+- Gravada em `demonstrativos.cota_horas`, **opcional de propósito**: NULO = sem
+  cota. Com um padrão zero, cada documento antigo passaria a dizer "cota de 0 h", e
+  a tela leria isso como "tem plano" em vez de "não tem".
+- **Reajustar o contrato depois não mexe no documento salvo** — há teste comparando
+  **a linha inteira** antes e depois, e outro que reabre o documento e confere que
+  ele continua contando a mesma história.
+- **O desconto em si é RECALCULADO na leitura**, a partir da cota congelada e dos
+  itens congelados. Guardar a quebra também criaria duas fontes do mesmo número, e
+  um dia as duas discordariam — a doença que este projeto já teve várias vezes.
+- Zero é recusado no banco (`demonstrativo_cota_positiva`): quem não tem cota deixa
+  nulo.
+
+#### A COTA É APLICADA UMA VEZ POR DOCUMENTO, e isto precisa ficar dito
+Ela é **mensal**, e o período do demonstrativo é **livre** (o ciclo da Toca vai de
+10/09 a 10/10). Para o uso normal — um documento por ciclo — uma vez é exatamente
+certo. **Num período de três meses seria uma cota só**, e a gestão corrige o número
+na tela, que é onde ela está olhando o documento.
+
+Multiplicar por "meses do período" exigiria decidir se 10/09–10/10 são um mês ou
+dois, e qualquer resposta estaria errada metade das vezes.
+
+Por isso o campo tem a **mesma mecânica de três estados** do preço combinado:
+ausente = a cota do contrato; **vazio = a gestão apagou de propósito** e tudo é
+cobrado; um número = manda ele. Juntar os dois primeiros faria o campo se preencher
+de novo sozinho a cada vez que ela o apagasse. Há teste.
+
+#### A COTA APARECE NO DOCUMENTO, não só no total
+Linha própria no PDF e na tela: *"Horas inclusas na mensalidade · 15 h de 15 h ·
+já pagas"*, e a linha seguinte vira **"Horas extras"**. Sem isso o cliente somaria
+as horas da tabela, multiplicaria pelo preço e acharia que a conta está errada — ou,
+pior, que o coworking cobrou menos do que devia.
+
+**O número da linha é o das horas COBRADAS**, o mesmo que multiplica o valor ao
+lado: se a linha dissesse o total e o valor fosse do excedente, a conta não
+fecharia na vista de quem lê.
+
+#### A tabela nova quebrou a limpeza de NOVE arquivos de teste — pela quinta vez
+`contratos_mensais` aponta para `clientes` com `ON DELETE RESTRICT`, então o `none`
+da limpeza de "clientes órfãos" passou a precisar de `contratos: { none: {} }`.
+**Corrigido preventivamente nos nove arquivos, antes de quebrar.**
+
+Aconteceu agora com `consumos_emporio`, `demonstrativos`, `lancamentos` e
+`contratos_mensais`. **A regra continua a mesma, e vale repetir:** "órfão" é quem
+não tem **nada** pendurado, e a definição de "nada" muda a cada tabela nova que
+aponta para `clientes`.
+
+### Fase 16, Parte E — o painel do financeiro (17/11/2026)
+
+#### O QUE ELE MOSTRA
+Entrou, saiu, resultado e margem do mês, com a **variação contra o mês
+anterior**; a **inadimplência**; a evolução dos **últimos seis meses**; de onde
+entrou e para onde saiu **por categoria**; e a **projeção** dos próximos três
+meses. Abre como a **primeira aba** do Financeiro: quem entra ali quer saber
+"como foi o mês" antes de mexer em conta nenhuma.
+
+**É SÓ LEITURA**, mesma regra do dashboard de relatórios: a rota não tem método
+de escrita, e nada ali altera lançamento, contrato ou configuração. **Há teste
+comparando todas as linhas antes e depois de montar o painel** — sem ele,
+bastaria alguém acrescentar um "marcar como atrasado" na montagem para a tela de
+leitura passar a escrever, e ninguém notaria até um número mudar sozinho.
+
+#### O SALDO INICIAL FICOU DE FORA, e isto é decisão, não esquecimento
+O plano aprovado listava "saldo inicial". **Não entrou**, e a razão é que ele
+mentiria: **o sistema não conhece o dinheiro que já estava no banco** antes dele
+existir. Um "saldo acumulado" somaria só o que foi lançado aqui e apareceria na
+tela como se fosse o saldo da conta — errado, e do jeito que ninguém desconfia.
+
+O painel mostra **o resultado do período**, e a tela diz isso por escrito, em
+uma nota fixa. Quem quiser um saldo de partida **lança uma entrada normal** — não
+precisou de conceito novo, tabela nova nem parâmetro.
+
+**DRE continua fora** (decisão do dono de 17/11). É por isso que o número se
+chama **"resultado"** e não "lucro": lucro contábil tem depreciação, provisão e
+competência, que o sistema não tem. Chamá-lo de lucro seria prometer uma coisa e
+entregar outra.
+
+#### O CAIXA É PELA DATA DE PAGAMENTO
+Uma conta de outubro paga em novembro **saiu do caixa em novembro** — é ali que o
+dinheiro se mexeu. O que **nunca foi pago não entra**: somar o pendente diria que
+o dinheiro já entrou, e a equipe decidiria em cima de um saldo que não existe.
+
+- A janela do mês é **fechada nas duas pontas**, e o último dia entra. Há teste
+  nas bordas (01/12, 31/12, 01/01) e em **fevereiro**, que tem 28 dias.
+- A série de meses é buscada **mês a mês**, e não num agrupamento do banco:
+  agrupar lá faria o corte acontecer no fuso **dele**, e um pagamento de 30/11 às
+  22h é 1º de dezembro em UTC — cairia no mês errado e discordaria da lista de
+  lançamentos ao lado. Mesma razão do relatório de reservas. São poucas consultas,
+  todas por índice.
+- **Mês sem movimento aparece com ZERO**, e não some da lista: um buraco no meio
+  do gráfico faria o olho ler a tendência errada. Há teste, e outro na virada do
+  ano.
+
+#### MARGEM E VARIAÇÃO SÃO NULAS SEM BASE, nunca zero nem 100%
+- **Margem nula** quando não entrou nada: "margem de 0%" é uma informação
+  diferente de "não há o que dividir", e a conta daria `Infinity`. A tela escreve
+  "—" e explica.
+- **Variação nula** quando o mês anterior foi zero: escrever "+100%" inventaria
+  uma comparação que não existe. A tela escreve "sem comparação com o mês
+  anterior".
+- **Em despesa, subir é RUIM.** A seta de "Saiu" usa o sentido invertido — uma
+  seta verde para cima numa despesa pareceria boa notícia.
+
+#### A INADIMPLÊNCIA OLHA TODO O PASSADO
+**É o número mais perigoso de se errar nesta tela.** Uma conta de agosto que
+ninguém pagou continua em atraso em dezembro; limitá-la ao mês escolhido faria a
+dívida **desaparecer sozinha com o tempo**, e o painel diria "nada em atraso" com
+o cliente devendo há meses.
+
+**Quem vence hoje não está atrasado** — a conta é `vencimento < hoje`, e não
+`<=`: quem vence hoje tem o dia todo para pagar. Mesma regra da situação do
+lançamento, e há teste.
+
+#### A PROJEÇÃO COMEÇA NO MÊS SEGUINTE
+Ela é do que **vence** à frente e **ainda não foi pago**. O que já foi pago sai
+dela: uma conta de janeiro paga em dezembro já está no caixa, e contá-la nos dois
+lugares faria o mesmo dinheiro aparecer duas vezes na mesma tela. Há teste.
+
+#### Os gráficos
+SVG e CSS, **sem biblioteca** — a stack do projeto não tem nenhuma e as formas são
+simples. E **todo gráfico escreve o número ao lado**: num mês de R$ 20 e outro de
+R$ 20.000 as barras pequenas ficam invisíveis, e a informação não pode depender de
+o olho conseguir medir. Mesma regra dos relatórios de reserva.
+
+**24 testes.** Entre eles: três contas de R$ 33,33 dando R$ 99,99 em **todos** os
+números do painel (total, categoria e evolução), e a prova de que o lado de cada
+linha vem da categoria, nunca do sinal do valor.
+
+### ~~Fase 16 — Financeiro: só ENTRADAS (decidido em 12/11/2026)~~ — SUBSTITUÍDA
+> **Esta decisão foi reaberta pelo dono em 17/11/2026.** Vale agora o que está em
+> "Fase 16 — Financeiro: ESCOPO REABERTO E AMPLIADO". Fica registrada para quem
+> procurar por que o escopo cresceu, e para ninguém "restaurar" o escopo menor achando
+> que a ampliação foi descuido.
+
 - Reservas, empório e o que mais entrar, por período e por forma de pagamento.
 - **Despesas ficam para depois**, mas o banco já nasce com elas previstas — lançamentos
   com tipo (entrada/saída), só sem a tela de saída. Sem isso a fase seguinte obrigaria
-  a refazer.
+  a refazer. → **MUDOU: a despesa entra agora.**
 - **DRE não entra**, e o motivo é de escopo: *"DRE é balanço, é parte de contábeis"*. A
-  decisão de ir até lá é do dono do coworking, depois de ver a prévia.
+  decisão de ir até lá é do dono do coworking, depois de ver a prévia. → **CONTINUA
+  valendo:** o dono manteve a DRE fora em 17/11.
 
 ### O cliente pertence a uma EMPRESA (11/11/2026)
 - **O que o dono viu, depois do deploy:** procurou "Toca" no controle de horas e achou
@@ -1546,3 +2421,216 @@ teste que emite, muda a reserva de 2 h para 5 h e confere que o documento contin
   junta de volta**, e tem um efeito ruim: o número volta a aceitar vínculo, e a próxima
   reserva lançada nele cria mais um cadastro e prende o número a ele. Para um número que
   é da casa mesmo, **a marcação deve ficar**.
+
+### O ícone na tela de início do celular (17/11/2026) — último item da Fase 16
+- **Pedido do dono**, depois de descobrir que dá para fazer sem loja de aplicativos:
+  *"Cara, nem sabia que dava para fazer isso sem precisar virar um app oficial da App
+  Store. Tem como fazer isso também para Android ou não? De qualquer forma, eu também
+  quero que você faça isso depois sim!"*
+- **O que é:** o próprio site, com uma ficha (`manifest`) que diz ao celular como ele se
+  chama, de que cor é e qual tela abrir. Salvo na tela de início, abre **em tela cheia,
+  sem a barra de endereço**. Não é aplicativo de loja e não precisa de nenhuma.
+- **Serve iPhone E Android.** No Android o Chrome **oferece a instalação sozinho** por
+  causa da ficha; no iPhone é "Compartilhar → Adicionar à Tela de Início", que já
+  funcionava, mas abria **com** a barra de endereço e com o nome da página do momento
+  embaixo do ícone.
+
+#### SÃO DUAS FICHAS, e esse é o ponto
+- A **pública** abre o site (`/`); a **do painel** abre o painel (`/admin`).
+- Com uma ficha só, o ícone da recepcionista abriria **a tela de reservar do cliente**, e
+  ela teria de navegar até o painel toda vez — o contrário do ganho. É no painel que está
+  o uso real: a recepção no tablet e o dono conferindo relatório no celular.
+- A do painel é amarrada em **`metadadosDoPainel`**, e não em cada página: assim a
+  próxima tela nova do painel já nasce com ela. Mesma razão do "não me indexe" que já
+  morava ali.
+- Ela é servida **fora de `/admin`** (`/manifest-painel.webmanifest`): o middleware exige
+  login em tudo que começa com `/admin`, e o navegador lê a ficha **antes** de alguém
+  entrar. Lá dentro ela viraria um redirecionamento para o login, e o celular diria
+  apenas que não conseguiu instalar — sem explicar por quê. Não há nada sigiloso nela.
+- `start_url` do painel é **`/admin`**, e não `/admin/agenda`: aquela página é a porta de
+  entrada feita para o celular, que cumprimenta e mostra os quatro atalhos mais usados
+  justamente porque ali o menu fica escondido atrás do botão.
+
+#### SEM FUNCIONAMENTO OFFLINE, de propósito
+Um sistema que guardasse a agenda no aparelho mostraria uma agenda **velha**, e alguém
+lançaria reserva em cima de horário que acabou de ser ocupado. Risco grande para ganho
+nenhum. **Não existe service worker neste projeto, e não deve existir** sem que esse
+problema seja resolvido antes.
+
+#### A PRÉVIA PRECISOU APARECER AQUI TAMBÉM
+Com os dois sistemas salvos no mesmo celular, a lista de aplicativos é **outra moldura
+onde a faixa preta não aparece** — como a barra de abas. Então: o nome curto da prévia é
+**"PRÉVIA"** sozinho (em vez de "Mult"/"Painel"), o nome completo leva **"PRÉVIA ·"** na
+frente, e a **cor da barra de cima é PRETA**, igual à faixa — a de verdade abre amarela.
+Dois ícones com o mesmo nome na mesma tela seria o acidente das duas abas, de novo.
+
+As duas fichas são geradas **a cada pedido** (`dynamic = "force-dynamic"`), pelo mesmo
+motivo do `robots.txt`: a variável `AMBIENTE` só existe quando o container **sobe**, e
+congelada na construção da imagem a ficha da prévia sairia com o nome e a cor do sistema
+de verdade.
+
+#### TODA FALHA AQUI É SILENCIOSA — por isso tem 22 testes
+- **Faltando o ícone de 192 pixels, o Android simplesmente nunca OFERECE a instalação.**
+  Não dá erro, não escreve nada: o convite só não aparece. Os ícones de 64 (abinha) e 180
+  (iPhone) que já existiam não atendem — por isso a rota nova `/icone/[tamanho]`.
+- **A ficha e a rota do ícone leem a MESMA lista** (`TAMANHOS_DE_ICONE`). Escritos em dois
+  lugares, bastaria a ficha pedir um tamanho que a rota não desenha para o ícone sumir,
+  calado. Há teste conferindo que todo tamanho pedido é um que a rota desenha.
+- **A lista é fechada**: sem isso, um estranho pediria `/icone/20000` e ocuparia o
+  servidor desenhando a imagem.
+- **`display: "standalone"`** é o que tira a barra de endereço; com `"browser"` o
+  aplicativo abre igual a uma aba comum e o ganho desaparece sem erro.
+- **No iPhone, duas etiquetas próprias** (`appleWebApp`): `capable` é o que faz abrir sem
+  a barra de endereço no iOS antigo, e `title` é o nome embaixo do ícone — sem ele o
+  iPhone usa o título da página do momento, cortado ("Agenda | Mult Cowo..."). Há teste de
+  que esse nome é **o mesmo** que a ficha do Android usa: aparelhos diferentes mostrando
+  nomes diferentes para o mesmo ícone seria defeito que só aparece na mão de quem usa.
+- **Cada tamanho aparece duas vezes na ficha**, como `any` e como `maskable`: o Android
+  recorta o ícone em círculo ou em quadrado arredondado conforme o aparelho, e sem o aviso
+  ele desenha o nosso quadrado amarelo **dentro** de outro quadrado branco, com moldura em
+  volta. A letra ocupa **metade** do quadrado justamente para nenhum recorte comê-la — ao
+  contrário do ícone da abinha, que ninguém recorta.
+- A regra do tamanho mora em **`src/lib/manifesto.ts`**, e não dentro da rota: a rota
+  desenha imagem e por isso é `.tsx`, que **o Vitest não consegue abrir** (o Next exige
+  `jsx: "preserve"`). Mesma razão de `metadados.ts` existir.
+
+#### Efeito colateral arrumado no caminho
+`DESCRICAO_DO_SITE` **mudou de `metadados.ts` para `marca.ts`**. A ficha precisa dela e os
+metadados precisam da ficha: deixada onde estava, as duas peças se importariam **em
+círculo**, que é justamente o jeito de uma delas chegar vazia na hora de rodar. Ela é
+texto de marca e o lugar certo sempre foi `marca.ts`.
+
+### Dois níveis de acesso ao painel (17/11/2026)
+
+> **ISTO SUBSTITUI a decisão "Um único nível de acesso (admin)"**, registrada na
+> Fase 11. Pedido dos donos do coworking depois de verem a prévia: *"usuários ter a
+> opção de limitar acesso... usuários que têm acesso total e alguns outros que têm
+> acesso a tudo menos à parte financeira"*.
+
+- **Dois níveis, e só dois:** acesso **total**, ou tudo **menos o Financeiro**. É uma
+  coluna booleana (`usuarios.acesso_financeiro`), e não uma lista de níveis: foi isso
+  que foi pedido, e um enum do Postgres aceita acrescentar valor mas **nunca remover**.
+- **A coluna nasce LIGADA.** Quem já existia continua com tudo — sem o padrão, o único
+  admin de produção perderia o financeiro no deploy e **não teria como se devolver** o
+  acesso, porque a tela de usuários também exige esse campo.
+- **No formulário de criar, nasce DESMARCADO** — o contrário do padrão do banco, de
+  propósito: ali quem decide é uma pessoa olhando a tela, e o acesso mais seguro é o
+  menor. No banco o padrão serve a quem já existia; na tela, a quem está nascendo.
+
+#### ONDE PASSA A FRONTEIRA (decisão do dono, entre três opções)
+**Só as telas do Financeiro.** O limitado continua com agenda, empório, clientes,
+empresas, salas, áreas de atuação, telefones do balcão, horários, parâmetros,
+políticas, mensagens, histórico, **controle de horas** e **relatórios** — inclusive o
+faturamento por cliente e por empresa, que o dono escolheu deixar aberto.
+
+- **"Espaços mensais" vai junto**, embora apareça no grupo Cadastros: ele abre a mesma
+  tela do Financeiro e guarda o valor dos contratos. É o item mais fácil de esquecer.
+- **"Recebi no balcão" continua liberado** (decisão do dono): é a recepcionista quem
+  recebe o dinheiro no balcão. Ela registra que recebeu **sem enxergar o caixa**.
+
+#### A AMARRAÇÃO QUE FAZ O FILTRO VALER: usuários anda junto com o financeiro
+Sem ela o controle seria **enfeite**. Qualquer admin podia criar e editar usuário,
+então a recepcionista entraria em Configurações → Usuários e **se promoveria sozinha** —
+ou criaria uma conta nova com acesso total e entraria com ela.
+
+- Quem não vê o Financeiro **não administra usuários**: não lista, não cria, não
+  redefine senha de ninguém, não liga/desliga acesso e não muda nível.
+- **Trocar a PRÓPRIA senha continua para todo mundo**, e isso não é concessão: sem
+  isso a pessoa ficaria presa na senha provisória que o chefe combinou com ela. Mora
+  noutra rota (`/api/admin/eu/senha`), que nunca passou pelo porteiro.
+- Na barra lateral, o item **"Usuários" vira "Minha senha"** para ela, e a aba mostra
+  só o formulário da própria senha. Mantido o rótulo antigo, ela clicaria esperando
+  administrar usuários e acharia a tela quebrada.
+
+#### A TRANCA É DO SERVIDOR — a tela só evita a batida na porta
+Três camadas, e **só a terceira vale**:
+1. a **barra lateral** esconde os itens (a pessoa não vê o que não pode);
+2. a **tela** `/admin/financeiro` recusa, lendo o banco — e a recusa é **uma tela que
+   explica**, não um redirecionamento calado: quem tem o endereço salvo acharia que o
+   sistema quebrou;
+3. as **15 rotas** `/api/admin/financeiro/*` e as **2** de `/api/admin/usuarios`
+   respondem **403**. Esconder o botão não para quem manda o pedido direto — mesma
+   lição já registrada no bloqueio do Jurídico. Há teste que lança uma conta pela rota
+   e confere que **nada foi gravado**: uma recusa que responde 403 depois de gravar
+   seria pior que nenhuma.
+
+- **403 e não 401**, de propósito: a pessoa **está** logada. Com 401 a tela a mandaria
+  para o login, ela entraria de novo e seria recusada de novo — um laço sem explicação.
+- **O nível é lido do BANCO a cada tela e a cada rota**, junto do `ativo`, nunca de
+  dentro do cookie. Guardado no cookie, tirar o acesso de alguém só valeria no próximo
+  login dela — e até lá ela continuaria entrando. Há teste que tira o acesso e prova
+  que o **mesmo cookie** já não serve.
+- **A regra sai da TELA do item** (`tela === TELA_FINANCEIRO`), e não de uma lista
+  escrita à mão: assim a próxima aba do Financeiro já nasce escondida para quem não
+  tem acesso. Uma lista à mão deixaria a aba nova aparecendo, sem erro nenhum.
+- A tira de abas de Configurações e a barra lateral saem da **mesma** função
+  (`abasDeConfiguracaoVisiveis`): montadas separadamente, a pessoa veria "Usuários"
+  numa e "Minha senha" na outra para o mesmo destino. Há teste comparando as duas.
+- **Grupo que fica vazio some inteiro**: um título "Financeiro" com nada embaixo
+  anunciaria justamente o que ela não pode abrir.
+
+#### AS DUAS TRAVAS QUE IMPEDEM A EQUIPE DE SE TRANCAR DO LADO DE FORA
+Elas existem porque **perder o financeiro é perder junto a tela de usuários** — e aí
+não há como voltar atrás pelo painel.
+
+- **Ninguém tira o PRÓPRIO acesso ao financeiro.** Quem se rebaixasse por engano não
+  teria como se devolver o acesso. O botão nem aparece na própria linha, e o servidor
+  recusa de todo jeito. Há teste comparando **a linha inteira** antes e depois.
+- **A última pessoa ativa com o acesso não o perde e não é desligada.** Sem isso, o
+  painel ficaria sem ninguém que abrisse o Financeiro **e** sem ninguém que
+  administrasse usuários — o jeito de voltar seria mexer no banco à mão. Há teste que
+  prova a recusa com uma pessoa e prova que **com duas a mesma ação passa**: a trava é
+  "não pode sobrar ninguém", não "ninguém perde o acesso".
+
+#### Detalhes que custaram atenção
+- `criarUsuario` **sem dizer nada cria com acesso total**, que é o que o sistema sempre
+  fez: nenhuma chamada antiga passa a criar gente sem acesso de um dia para o outro. É
+  a tela que manda `false` quando a caixa está desmarcada.
+- O **comando de instalação** (`criarUsuarioAdmin`) continua criando o primeiro admin
+  com acesso total — ele precisa poder dar acesso aos outros.
+- A aba de usuários **não chega a pedir a lista** quando quem abre não administra: a
+  rota responderia 403 e a tela mostraria um erro vermelho para quem só queria trocar a
+  própria senha.
+- O texto "Todo acesso é igual" saiu da tela — virou a explicação dos dois níveis, com
+  o aviso de que tirar o financeiro tira junto a administração de usuários.
+- **42 testes novos** (18 da regra + 24 do menu, que foi de 15 para 24).
+
+### A versão 2.0 foi para o sistema oficial (24/11/2026)
+- **Decisão do dono:** *"vamos agora fazer a transferência oficial do que tá na prévia
+  para o projeto real que já tá funcionando"*. A branch `previa` (25 commits) entrou na
+  `main`.
+- **O que atravessou:** o empório inteiro (catálogo, estoque, contagem diária, consumo),
+  o financeiro inteiro (lançamentos, espaços mensais, mensalidades, painel), a cota de
+  horas no demonstrativo, o ícone na tela de início e os dois níveis de acesso.
+
+#### O ENSAIO DA MIGRAÇÃO, com os dados reais de produção
+Mesma prática da Fase 14, e ela continua valendo **sempre que o deploy levar migração**.
+Uma cópia de produção (224 reservas) foi restaurada num banco de ensaio e as **12
+migrações** rodaram nela antes de qualquer coisa ir para a `main`:
+
+| Conferência | Resultado |
+|---|---|
+| as 12 migrações | aplicadas, sem erro |
+| 224 reservas, hash do conteúdo | **idêntico** antes e depois |
+| 6 demonstrativos, hash do conteúdo | **idêntico** antes e depois |
+| 29 clientes, 3 empresas, 1 usuário | contagens iguais |
+| admin de hoje com acesso ao financeiro | sim — é o padrão da coluna |
+| catálogo, etiquetas, formas de pagamento | 30 / 9 / 3, criados pela migração |
+| categorias financeiras | 18, criadas pela migração |
+| lançamentos | 0 — a tabela nasce vazia |
+
+- **O hash do conteúdo vale mais que a contagem.** Contagem igual não prova que nenhuma
+  linha mudou de valor; o md5 das linhas ordenadas prova. Foi assim que se verificou que
+  `cota_horas` e `acesso_financeiro`, as duas colunas novas em tabelas que já existiam,
+  não encostaram em nada.
+- **Só três das 12 tocam em tabela existente**, e as três apenas ACRESCENTAM coluna:
+  duas em `demonstrativos` (empório e cota, as duas aceitando nulo) e uma em `usuarios`
+  (`acesso_financeiro`, com padrão ligado). Nenhuma religa linhas como a da Fase 14.
+- **O ensaio não é cerimônia:** a migração do empório falhou duas vezes no
+  desenvolvimento, e `migrate resolve --rolled-back` **não desfaz o que já rodou**. Em
+  produção isso deixaria o banco pela metade no meio do deploy.
+
+#### O que a prévia continua sendo
+A branch `previa` e o app dela **não foram desligados**: é onde a próxima coisa nasce
+antes de chegar no sistema de verdade. Depois da junção as duas branches ficam iguais;
+a prévia segue com banco próprio, `CRON_ATIVO="false"` e as credenciais vazias.

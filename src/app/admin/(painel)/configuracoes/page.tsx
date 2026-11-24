@@ -34,7 +34,7 @@ export default async function PaginaDeConfiguracoes() {
 
       {/* useSearchParams precisa de Suspense para o Next poder gerar a pagina. */}
       <Suspense fallback={<Carregando texto="Abrindo as configurações…" />}>
-        <Configuracoes />
+        <Configuracoes acessoFinanceiro={admin.acessoFinanceiro} />
       </Suspense>
     </div>
   );

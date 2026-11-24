@@ -21,6 +21,12 @@ export type Demonstrativo = {
   de: string;
   ate: string;
   valorHora: string | null;
+  /** Horas inclusas na mensalidade. NULA = sem cota, tudo cobrado. */
+  cotaHoras: number | null;
+  /** Quantas horas couberam na cota — já pagas na mensalidade. */
+  horasNaCota: number;
+  /** Quantas sobraram para cobrar. Sem cota, é igual ao total. */
+  horasCobradas: number;
   itens: ItemDoDemonstrativo[];
   porSala: { sala: string; horas: number }[];
   horas: number;
@@ -54,6 +60,8 @@ export function previsualizar(
     de: string;
     ate: string;
     valorHora?: string;
+    /** Vazio = a gestão apagou de propósito; ausente = vale a do contrato. */
+    cotaHoras?: string;
   },
   sinal?: AbortSignal,
 ): Promise<{ demonstrativo: Demonstrativo }> {
@@ -71,6 +79,13 @@ export function previsualizar(
   // gestao apagou o campo de proposito.
   if (entrada.valorHora !== undefined) {
     busca.set("valorHora", entrada.valorHora);
+  }
+
+  // A COTA SEGUE A MESMA MECÂNICA de três estados do preço, e pela mesma
+  // razão: sem ela, apagar o campo não teria efeito — ele se preencheria de
+  // novo sozinho com a cota do contrato a cada atualização da prévia.
+  if (entrada.cotaHoras !== undefined) {
+    busca.set("cotaHoras", entrada.cotaHoras);
   }
 
   return pedir(`/api/admin/demonstrativos?${busca}`, { signal: sinal });
@@ -99,6 +114,7 @@ export function salvarDemonstrativo(entrada: {
   de: string;
   ate: string;
   valorHora: string | null;
+  cotaHoras: number | null;
   linhasExtras: LinhaExtra[];
   totalAjustado: string | null;
   lembrarPreco: boolean;

@@ -39,6 +39,24 @@ docker exec "$CONTAINER" sh -c \
      --table=salas --table=horarios_funcionamento \
      --table=configuracoes --table=templates_mensagem \
      --table=profissoes \
+     --table=produtos --table=tags_produto \
+     --table=formas_pagamento \
+     --table=categorias_financeiras \
+     $ORIGEM | psql -U coworking -d $DESTINO -q"
+
+# FORNECEDORES NAO ENTRA nesta lista, de proposito: a tabela nasce VAZIA e
+# cada teste cria o fornecedor de que precisa. Copiar os de producao faria o
+# resultado dos testes mudar conforme a equipe cadastrasse fornecedor no
+# painel. Mesma razao de "telefones_balcao" ficar de fora.
+
+# A LIGACAO produto-etiqueta vai NUMA SEGUNDA PASSADA, de proposito.
+#
+# O pg_dump escreve as tabelas em ordem alfabetica, e "produtos_com_tag" sairia
+# ANTES de "tags_produto" — a chave estrangeira recusaria cada linha. Juntar
+# tudo numa chamada so funciona ate alguem acrescentar uma tabela cujo nome
+# caia no meio, e ai o banco de teste nasce sem as ligacoes sem dizer nada.
+docker exec "$CONTAINER" sh -c \
+  "pg_dump -U coworking --data-only --table=produtos_com_tag \
      $ORIGEM | psql -U coworking -d $DESTINO -q"
 
 echo "Pronto. Agora \`npm test\` usa o $DESTINO e nao encosta nos seus dados."

@@ -399,16 +399,42 @@ export async function gerarPdfDoDemonstrativo(
   });
   caneta.y -= 20;
 
+  /*
+   * A COTA DA MENSALIDADE, quando existe (Fase 16, Parte D).
+   *
+   * ELA PRECISA APARECER NO DOCUMENTO, e nao so no total: o cliente tem de ver
+   * que as horas inclusas foram descontadas. Sem esta linha ele somaria as
+   * horas da tabela acima, multiplicaria pelo preco e acharia que o coworking
+   * cobrou menos do que devia — ou, pior, que a conta esta errada.
+   */
+  if (dados.cotaHoras) {
+    escrever(
+      caneta,
+      `Horas inclusas na mensalidade · ${horasPorExtenso(dados.horasNaCota)} de ${horasPorExtenso(dados.cotaHoras)}`,
+      COL_DIA,
+      { cor: SECUNDARIO },
+    );
+    escreverADireita(caneta, "já pagas", COL_HORAS, { cor: SECUNDARIO });
+    caneta.y -= 18;
+  }
+
   // Com preco combinado, a linha mostra a conta ("50 h x R$ 30,00"). Sem
   // ele, mostra de onde o valor veio — o preco de cada reserva no dia —, para
   // o cliente nao procurar uma multiplicacao que nao existe.
+  //
+  // COM COTA, as horas da linha sao as COBRADAS, e o texto diz "extras": o
+  // numero aqui tem de ser o mesmo que multiplica o valor ao lado, senao a
+  // conta nao fecha na vista de quem le.
+  const horasDaLinha = dados.cotaHoras ? dados.horasCobradas : dados.horas;
+  const rotuloDasHoras = dados.cotaHoras ? "Horas extras" : "Horas";
+
   escrever(
     caneta,
     dados.valorHora
-      ? `Horas · ${horasPorExtenso(dados.horas)} × ${comoDinheiro(
+      ? `${rotuloDasHoras} · ${horasPorExtenso(horasDaLinha)} × ${comoDinheiro(
           Math.round(Number(dados.valorHora) * 100),
         )}`
-      : `Horas · ${horasPorExtenso(dados.horas)} · valor de cada reserva`,
+      : `${rotuloDasHoras} · ${horasPorExtenso(horasDaLinha)} · valor de cada reserva`,
     COL_DIA,
   );
   escreverADireita(caneta, comoDinheiro(dados.valorDasHorasCentavos), COL_HORAS);
@@ -424,6 +450,38 @@ export async function gerarPdfDoDemonstrativo(
   // texto desce quantas linhas forem necessarias. O VALOR FICA NA PRIMEIRA,
   // alinhado com o comeco da descricao, para a leitura continuar sendo
   // "isto custa aquilo".
+  // O EMPÓRIO, somado pelo sistema a partir dos lançamentos.
+  //
+  // Vem ANTES das linhas digitadas, logo depois das horas: as duas coisas que
+  // o sistema calcula ficam juntas, e o que foi escrito à mão vem depois.
+  // A descrição é longa por natureza ("12 Água sem gás · 7 Barrinha...") e
+  // usa a mesma quebra de linha das extras.
+  if (dados.emporio) {
+    const valor = comoDinheiro(dados.emporio.valorCentavos);
+    const medir = (trecho: string): number =>
+      caneta.normal.widthOfTextAtSize(trecho, 10);
+
+    const disponivel = LARGURA_UTIL - medir(valor) - 16;
+    const texto = quebrarTexto(
+      `Empório · ${dados.emporio.descricao}`,
+      disponivel,
+      medir,
+    );
+
+    garantirEspaco(caneta, 18 + 13 * (texto.length - 1));
+    escreverADireita(caneta, valor, COL_HORAS);
+
+    texto.forEach((parte, indice) => {
+      escrever(caneta, parte, COL_DIA);
+
+      if (indice < texto.length - 1) {
+        caneta.y -= 13;
+      }
+    });
+
+    caneta.y -= 18;
+  }
+
   for (const linha of dados.linhasExtras) {
     const valor = comoDinheiro(Math.round(Number(linha.valor || "0") * 100));
     const medir = (trecho: string): number =>

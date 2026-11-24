@@ -1,0 +1,18 @@
+-- O EMPORIO ENTRA NO CONTROLE DE HORAS, somado pelo sistema.
+--
+-- Ate aqui ele era uma das "outras linhas" digitadas a mao, com o total
+-- escrito por uma pessoa: "EMPORIO 12 aguas sem gas/10 aguas com gas/...
+-- R$ 201,50". Agora sai dos consumos lancados.
+--
+-- COLUNA PROPRIA, e nao mais uma linha extra: as linhas extras a gestao
+-- DIGITA, e esta o sistema SOMA. Misturar as duas deixaria a equipe editar
+-- por cima de um numero calculado, e ninguem saberia mais qual dos dois
+-- valia.
+--
+-- CONGELADO NA EMISSAO, como a tabela de horas: recalculado na leitura, um
+-- lancamento feito depois mudaria um documento que o cliente ja recebeu.
+--
+-- NULO e o estado normal de quem nao consumiu nada no periodo, e tambem de
+-- todos os demonstrativos JA EMITIDOS — eles continuam com o emporio dentro
+-- das linhas digitadas, exatamente como foram enviados.
+ALTER TABLE "demonstrativos" ADD COLUMN "emporio" JSONB;
